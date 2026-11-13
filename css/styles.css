@@ -657,3 +657,21 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
   .trow .av { width: 34px; height: 34px; font-size: 13px; }
   .done-btn { width: 42px; }
 }
+
+/* ---------- резервная копия ---------- */
+.hero-note { width: 100%; position: relative; z-index: 1; font-size: 14px; color: var(--muted); padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.hero-note button, .hero-bdays button { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--accent); }
+.hero-note + .hero-bdays { border-top: 0; padding-top: 0; }
+.bk-last { margin: -4px 0 14px; color: var(--muted); }
+.bk-last.due { color: var(--high); }
+.bk-opts { display: grid; gap: 10px; margin-bottom: 12px; }
+.bk-opt { display: flex; gap: 14px; align-items: center; text-align: left; width: 100%; padding: 14px 16px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--bg); transition: border-color .15s, transform .15s var(--ease); }
+.bk-opt:hover { border-color: var(--accent); transform: translateY(-1px); }
+.bk-opt:disabled { opacity: .55; cursor: default; transform: none; }
+.bk-opt.loading { opacity: 1; border-color: var(--accent); }
+.bk-opt.loading .bk-ico { animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+.bk-ico { font-size: 26px; flex: none; }
+.bk-opt b { display: block; font-size: 16px; }
+.bk-opt small { color: var(--muted); font-size: 13px; }

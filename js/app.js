@@ -3,6 +3,7 @@ import { esc, $, toast, closeModal } from './ui.js';
 import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js';
 import { ui, render } from './router.js';
 import { editRequest, editClient, editPartner } from './forms.js';
+import { openBackup, setLastBackupFromSession } from './backup.js';
 import './views/requests.js';
 import './views/clients.js';
 import './views/partners.js';
@@ -70,6 +71,7 @@ function renderLogin() {
 // ---------- приложение ----------
 function renderShell(session) {
   shown = 'app';
+  setLastBackupFromSession(session);
   root.innerHTML = `
     <header class="top">
       <div class="brand">Wellness Concierge<small>клиенты · запросы · партнёры</small></div>
@@ -85,6 +87,7 @@ function renderShell(session) {
           <button class="icon-btn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Меню">⋯</button>
           <div class="menu-list" id="menuList" hidden>
             <div class="menu-who">${esc(session.user.email)}</div>
+            <button type="button" id="backupBtn">💾 Резервная копия…</button>
             <button type="button" id="setPass">Задать пароль</button>
             <button type="button" id="logout">Выйти</button>
           </div>
@@ -103,7 +106,7 @@ function renderShell(session) {
 onChange(() => { if (shown === 'app' && state.loaded) render(); });
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout');
+  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup]');
   const menu = $('#menuList');
   if (menu && !menu.hidden && !e.target.closest('.menu')) { menu.hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); }
   if (!t) return;
@@ -129,6 +132,9 @@ document.addEventListener('click', (e) => {
     if (!p) return;
     if (p.length < 8) { toast('Пароль слишком короткий.', 'err'); return; }
     sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? authError(error) : 'Пароль сохранён. Теперь можно входить по паролю.', error ? 'err' : ''));
+  } else if (t.id === 'backupBtn' || t.dataset.backup != null) {
+    if (menu) menu.hidden = true;
+    openBackup(render);
   } else if (t.id === 'logout') {
     sb.auth.signOut();
   }

@@ -1,6 +1,7 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
+import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
@@ -152,6 +153,7 @@ function summary(today) {
       <div class="stat s-today"><b data-count="${todayN}">${todayN}</b><span>на сегодня</span></div>
       <div class="stat s-done"><b data-count="${done}">${done}</b><span>сделано</span></div>
     </div>
+    ${backupDue() ? `<div class="hero-note">💾 ${daysSinceBackup() == null ? 'Резервной копии ещё не было' : `Резервной копии не было ${daysSinceBackup()} дн.`} · <button type="button" data-backup>Сохранить копию</button></div>` : ''}
     ${bdays.length ? `<div class="hero-bdays">🎂 ${bdays.map(({ c, b }) =>
       `<button type="button" data-cl-open="${c.id}">${esc(c.name.replace(/\s*\(.*?\)/g, ''))} — ${b.days === 0 ? 'сегодня' : b.days === 1 ? 'завтра' : esc(b.day + ' ' + b.text.split(' ')[1])}</button>`).join(', ')}</div>` : ''}
   </section>`;
