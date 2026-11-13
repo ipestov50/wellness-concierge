@@ -24,7 +24,10 @@ export function editRequest(id, presetClient) {
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
-    field('client_id', 'Клиент', select('client_id', options(clients, r.client_id, '— выберите —'))) +
+    field('client_id', 'Гость', select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'))) +
+    `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
+    field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
+    field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
     field('summary', 'Что нужно', input('summary', r.summary, 'type="text" required placeholder="Массаж на двоих в пятницу вечером"')) +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(STATUSES, r.status))) + '</div>' +
@@ -41,8 +44,19 @@ export function editRequest(id, presetClient) {
     title: id ? 'Запрос' : 'Новый запрос',
     body,
     onSave: async (v) => {
+      let clientId = nul(v.client_id);
+      if (clientId === '__new') {
+        const name = v.new_name.trim();
+        const same = state.clients.find((c) => c.name.trim().toLowerCase() === name.toLowerCase());
+        if (same) clientId = same.id;
+        else {
+          const created = await save('clients', null, { name, language: v.new_language, allergies: toList(v.new_allergies) });
+          clientId = created.id;
+          toast(`Гость «${name}» добавлен в клиенты`);
+        }
+      }
       await save('requests', id, {
-        client_id: nul(v.client_id), summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
+        client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
@@ -52,7 +66,13 @@ export function editRequest(id, presetClient) {
     },
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
-  m.form.client_id.addEventListener('change', (e) => { m.form.querySelector('#req-restr').innerHTML = restrictionsBlock(byId('clients', e.target.value)); });
+  m.form.client_id.addEventListener('change', (e) => {
+    const isNew = e.target.value === '__new';
+    m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));
+    m.form.querySelector('#newguest').hidden = !isNew;
+    m.form.new_name.required = isNew;
+    if (isNew) m.form.new_name.focus();
+  });
 }
 
 export function editClient(id) {

@@ -120,11 +120,17 @@ export const closeModal = () => { const h = $('#modal'); if (h) h.innerHTML = ''
 
 // ---------- короткое уведомление ----------
 let toastTimer;
-export function toast(msg, kind = '') {
+export function toast(msg, kind = '', action = null) {
   let t = $('#toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.append(t); }
-  t.className = 'toast show ' + kind;
-  t.textContent = msg;
+  t.className = 'toast show ' + kind + (action ? ' has-action' : '');
+  t.innerHTML = `<span>${esc(msg)}</span>`;
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = action.label;
+    b.onclick = () => { t.classList.remove('show'); action.fn(); };
+    t.append(b);
+  }
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), kind === 'err' ? 6000 : 3500);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 7000 : kind === 'err' ? 6000 : 3500);
 }

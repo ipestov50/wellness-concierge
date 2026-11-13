@@ -259,3 +259,24 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .twhen { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tstatus { font-size: 12px; color: var(--muted); }
 .empty.calm { text-align: center; padding: 60px 16px; font-family: var(--f-head); font-size: 20px; }
+
+/* ---------- «Сделано» ---------- */
+.trow-wrap { display: flex; align-items: stretch; border-top: 1px solid var(--line); border-left: 3px solid transparent; transition: opacity .25s, transform .25s; }
+.trow-wrap:first-child { border-top: 0; }
+.trow-wrap .trow { border-top: 0; }
+.trow-wrap.leaving { opacity: 0; transform: translateX(16px); }
+.done-btn {
+  flex: none; width: 48px; border: 0; background: none; display: grid; place-items: center; padding: 0;
+}
+.done-btn::before {
+  content: ""; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--muted); opacity: .7;
+  transition: background .15s, border-color .15s;
+}
+.done-btn:hover::before { border-color: var(--accent); opacity: 1; }
+.done-btn.checked::before { background: var(--accent); border-color: var(--accent); opacity: 1;
+  box-shadow: inset 0 0 0 3px var(--surface); }
+.trow-wrap .trow { padding-left: 4px; border-left: 0; }
+.trow-wrap:hover { background: var(--soft); }
+.toast.has-action { pointer-events: auto; display: flex; align-items: center; gap: 14px; }
+.toast button { border: 0; background: none; color: inherit; font-weight: 600; text-decoration: underline; padding: 4px 2px; }
+.newguest { background: var(--soft); border-radius: 12px; padding: 12px 12px 2px; margin: -4px 0 12px; }

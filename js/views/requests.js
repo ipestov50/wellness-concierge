@@ -49,13 +49,14 @@ function rowHtml(r, group) {
   const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
   const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
     ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : fmtDeadline(r.deadline);
-  return `<button class="trow u-line-${esc(r.urgency)}" data-req="${r.id}" type="button">
+  return `<div class="trow-wrap u-line-${esc(r.urgency)}"><button class="done-btn" data-done="${r.id}" type="button" aria-label="Отметить «${esc(r.summary)}» выполненным" title="Сделано"></button>
+  <button class="trow" data-req="${r.id}" type="button">
     <span class="cat">${CATEGORIES[r.category] || '📌'}</span>
     <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
       <span class="tsum">${esc(r.summary)}</span></span>
     <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
       <span class="tstatus">${esc(STATUS_LABEL[r.status] || '')}</span></span>
-  </button>`;
+  </button></div>`;
 }
 
 function todayView(list) {
@@ -107,6 +108,27 @@ function view(app) {
   });
   app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
+  app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
+}
+
+// «Сделано»: статус «Выполнено», строка уходит, в уведомлении можно отменить
+async function markDone(id, btn) {
+  const r = byId('requests', id);
+  if (!r) return;
+  const before = r.status;
+  btn.classList.add('checked');
+  btn.closest('.trow-wrap')?.classList.add('leaving');
+  await new Promise((ok) => setTimeout(ok, 280));
+  try {
+    await save('requests', id, { status: 'done' });
+    toast(`Выполнено: ${r.summary}`, '', { label: 'Отменить', fn: async () => {
+      try { await save('requests', id, { status: before }); toast('Вернул в работу'); }
+      catch (err) { toast('Не удалось отменить: ' + (err.message || err), 'err'); }
+    } });
+  } catch (err) {
+    render();
+    toast('Не удалось отметить: ' + (err.message || err), 'err');
+  }
 }
 registerView('requests', view);
 
