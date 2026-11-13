@@ -5,6 +5,7 @@
 //   info/test — с сайта (токен входа владельца): имя бота, статус, тестовое сообщение
 //   setup    — один раз (x-cron-secret): регистрирует вебхук и команды бота
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { generateSuggestions } from './suggest.ts';
 
 const TZ = 'Europe/Paris';
 const SITE = Deno.env.get('SITE_URL') || 'https://wellness-concierge-desk.vercel.app';
@@ -125,6 +126,9 @@ function card(r: any, D: any) {
 
 // ---------- проверка по расписанию ----------
 async function runCron() {
+  // поводы Jarvis — для всех владельцев, даже без Telegram
+  const { data: all } = await db.from('app_settings').select('owner_id');
+  for (const o of all || []) { try { await generateSuggestions(db, o.owner_id, await loadOwner(o.owner_id)); } catch (e) { console.error('suggest', e); } }
   const { data: owners } = await db.from('app_settings').select('*').not('tg_chat_id', 'is', null).eq('notify_on', true);
   const now = Date.now();
   const report: Record<string, number> = {};
@@ -177,7 +181,7 @@ async function runCron() {
     // утренний бриф
     const today = parisDay(new Date(now));
     if (hour === s.brief_hour && !(await logged(s.owner_id, `brief:${today}`))) {
-      await send(s.tg_chat_id, brief(D, now));
+      await send(s.tg_chat_id, brief(D, now, await openSuggestions(s.owner_id)));
       await log(s.owner_id, `brief:${today}`); sent++;
     }
     report[s.owner_id] = sent;
@@ -185,7 +189,12 @@ async function runCron() {
   return report;
 }
 
-function brief(D: any, now: number) {
+async function openSuggestions(owner: string) {
+  const { data } = await db.from('suggestions').select('title,status,snooze_until,due_at').eq('owner_id', owner).in('status', ['new', 'snoozed']).order('due_at');
+  return (data || []).filter((x: any) => x.status === 'new' || (x.snooze_until && new Date(x.snooze_until) < new Date()));
+}
+
+function brief(D: any, now: number, sugg: any[] = []) {
   const today = parisDay(new Date(now));
   const open = D.requests.filter((r: any) => D.activeKeys.has(r.status) || !D.label.has(r.status));
   const late = open.filter((r: any) => r.deadline && effectiveDeadline(r.deadline) < now);
@@ -225,7 +234,8 @@ function brief(D: any, now: number) {
   if (arrivals.length || departures.length) out.push('', '✈️ <b>Прилёты и вылеты сегодня</b>', ...arrivals, ...departures);
   if (tomorrowArr.length) out.push('', '🗓 <b>Завтра прилетают</b>', ...tomorrowArr);
   if (bdays.length) out.push('', '🎂 <b>Даты на неделе</b>', ...bdays.map((x: any) => `${x.what} ${x.name} — ${x.days === 0 ? '<b>сегодня</b>' : x.days === 1 ? 'завтра' : `${x.d} ${MON[x.m - 1]}`}`));
-  if (!late.length && !risk.length && !todays.length && !arrivals.length && !departures.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
+  if (sugg.length) out.push('', `✨ <b>Jarvis предлагает: ${sugg.length}</b>`, ...sugg.slice(0, 4).map((x: any) => esc(x.title)), '<i>Планы готовы на сайте — откройте «Сегодня».</i>');
+  if (!late.length && !risk.length && !todays.length && !arrivals.length && !departures.length && !sugg.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
   return out.join('\n');
 }
 
@@ -248,7 +258,7 @@ async function onTelegram(u: any) {
     if (!me) { await tg('sendMessage', { chat_id: chat, text: 'Это личный бот. Подключение — только с сайта владельца.' }); return; }
     if (cmd === '/brief' || cmd === '/today') {
       const D = await loadOwner(me.owner_id);
-      await send(chat, brief(D, Date.now()));
+      await send(chat, brief(D, Date.now(), await openSuggestions(me.owner_id)));
     } else {
       await tg('sendMessage', { chat_id: chat, text: 'Команды: /brief — бриф на сегодня.' });
     }
@@ -308,11 +318,15 @@ Deno.serve(async (req) => {
     }
     return json({ bot: me.result.username, configured: true });
   }
+  if (body.mode === 'suggest') {
+    await db.from('app_settings').upsert({ owner_id: u.user.id }, { onConflict: 'owner_id', ignoreDuplicates: true });
+    return json(await generateSuggestions(db, u.user.id, await loadOwner(u.user.id)));
+  }
   if (body.mode === 'test') {
     const { data: s } = await db.from('app_settings').select('*').eq('owner_id', u.user.id).maybeSingle();
     if (!s?.tg_chat_id) return json({ error: 'not_linked' }, 400);
     const D = await loadOwner(u.user.id);
-    const r = await send(s.tg_chat_id, brief(D, Date.now()));
+    const r = await send(s.tg_chat_id, brief(D, Date.now(), await openSuggestions(u.user.id)));
     return json({ ok: !!r.ok });
   }
   return json({ error: 'bad_request' }, 400);

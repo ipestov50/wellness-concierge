@@ -5,6 +5,7 @@ import { restrictionsBlock } from '../forms.js';
 import { isClosed } from '../statuses.js';
 import { birthdayLine, birthdayInfo } from '../birthday.js';
 import { requestCard } from './requests.js';
+import { clientSuggestions } from '../suggest.js';
 import { tripState, tripCard, fmtRange, parisToday, upcomingDates, chipEditor, bindChipEditors, personCard, editTrip, editPerson, editDate } from '../dossier.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
@@ -41,7 +42,7 @@ function teaser(c) {
 
 function tabOverview(c) {
   const prefs = [['🍽', 'Еда', c.pref_food], ['💆', 'Спа', c.pref_spa], ['🚗', 'Транспорт', c.pref_transport], ['🏨', 'Отели', c.pref_hotels]].filter(([, , v]) => v);
-  return `${teaser(c)}
+  return `${clientSuggestions(c.id)}${teaser(c)}
     <section class="psec">
       ${chipEditor(c, 'likes', { title: 'Любит', cls: 'likes', placeholder: 'пионы, столик у окна…' })}
       ${chipEditor(c, 'dislikes', { title: 'Избегает', cls: 'dislikes', placeholder: 'лилии, шумные места…' })}

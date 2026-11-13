@@ -26,7 +26,7 @@ export function render() {
   if (key !== lastKey) {
     lastKey = key;
     app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
-    app.querySelectorAll('.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel, .trip, .ev, .ag-day, .mg-cell').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
+    app.querySelectorAll('.hero, .sg, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel, .trip, .ev, .ag-day, .mg-cell').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
     clearTimeout(enterTimer); enterTimer = setTimeout(() => app.classList.remove('enter'), 900);
     countUp(app);
   }

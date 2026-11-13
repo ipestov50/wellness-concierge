@@ -1,6 +1,7 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
+import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
 import { calendarView, bindCalendar } from './calendar.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
@@ -296,7 +297,8 @@ function view(app) {
     ? `<div class="board-top">${smartBar()}${toolbar}</div>${calendarView(list)}`
     : board
     ? `<div class="board-top">${smartBar()}${toolbar}</div>${boardView(list)}`
-    : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${smartBar()}${toolbar}${todayView(list)}</div>`;
+    : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${ui.q ? '' : suggestionsBlock()}${smartBar()}${toolbar}${todayView(list)}</div>`;
+  if (!board && !cal) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}

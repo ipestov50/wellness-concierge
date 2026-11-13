@@ -117,7 +117,7 @@ async function saveRaw(text, reason) {
 }
 
 // ---------- превью ----------
-function preview(drafts, text) {
+export function preview(drafts, text, onCreated) {
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const card = (d, i) => {
     const sel = byId('clients', d.client_id);
@@ -160,7 +160,8 @@ function preview(drafts, text) {
         approval_needed: !!v[`approval_${i}`], needs_review: !!v[`review_${i}`],
       }));
       if (!items.length) throw new Error('все запросы отмечены «Не создавать»');
-      await createAll(items, text);
+      await createAll(items, text, !!onCreated);
+      await onCreated?.(items);
     },
   });
   // текст остаётся в поле, пока карточки не созданы — отмена ничего не теряет
@@ -215,7 +216,7 @@ const fmtWhen = (iso) => {
 };
 const SHORT = { 'Spa & Wellness': 'Spa', 'Health & Fitness': 'Health', 'Gifts & Events': 'Gifts' };
 
-async function createAll(items, text) {
+async function createAll(items, text, keepText = false) {
   const lines = [];
   for (const d of items) {
     let client = d.client_id && d.client_id !== '__new' ? byId('clients', d.client_id) : null;
@@ -239,7 +240,7 @@ async function createAll(items, text) {
     const deadline = d.deadline_local ? (d.deadline_local.length > 16 || d.deadline_local.endsWith('Z') ? d.deadline_local : fromParisInput(d.deadline_local)) : null;
     await save('requests', null, {
       client_id: client?.id || null, summary: d.summary, original_message: text, category: d.category, urgency: d.urgency,
-      status: firstKey(), deadline, budget_amount: d.budget_amount, currency: d.budget_amount != null ? d.currency || 'EUR' : null,
+      status: firstKey(), deadline, partner_id: d.partner_id || null, budget_amount: d.budget_amount, currency: d.budget_amount != null ? d.currency || 'EUR' : null,
       clarifying_questions: d.missing_questions.join('\n') || null, needs_approval: !!d.approval_needed, needs_review: !!d.needs_review,
     });
     const restr = add.filter((a) => a.kind in LABELS);
@@ -247,7 +248,7 @@ async function createAll(items, text) {
       (createdGuest ? ' Добавлен новый гость.' : '') +
       (restr.length ? ` ${restr.map((a) => ({ allergies: 'Добавлена аллергия', diet: 'Добавлена диета', health: 'Добавлено о здоровье', likes: 'Любит', dislikes: 'Избегает' }[a.kind]) + `: <b>${esc(a.value)}</b>`).join('. ')}.` : ''));
   }
-  clearText();
+  if (!keepText) clearText();
   smart.result = { kind: 'ok', lines };
   render();
   toast(items.length > 1 ? `Создано запросов: ${items.length}` : 'Запрос создан');
