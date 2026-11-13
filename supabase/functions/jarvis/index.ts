@@ -85,11 +85,14 @@ const send = (chat: number, text: string, id?: string) =>
 
 // ---------- данные ----------
 async function loadOwner(owner: string) {
-  const [req, cli, par, st] = await Promise.all([
+  const [req, cli, par, st, tr, pe, dt] = await Promise.all([
     db.from('requests').select('*').eq('owner_id', owner),
     db.from('clients').select('*').eq('owner_id', owner),
     db.from('partners').select('id,name').eq('owner_id', owner),
     db.from('statuses').select('*').eq('owner_id', owner).order('position'),
+    db.from('trips').select('*').eq('owner_id', owner),
+    db.from('people').select('*').eq('owner_id', owner),
+    db.from('client_dates').select('*').eq('owner_id', owner),
   ]);
   const statuses = st.data || [];
   const active = statuses.filter((s: any) => s.kind === 'active');
@@ -101,7 +104,7 @@ async function loadOwner(owner: string) {
     requests: req.data || [], clients: new Map((cli.data || []).map((c: any) => [c.id, c])), partners: new Map((par.data || []).map((p: any) => [p.id, p])),
     activeKeys: new Set(active.map((s: any) => s.key)), earlyKeys: new Set(active.slice(0, cut).map((s: any) => s.key)),
     label: new Map(statuses.map((s: any) => [s.key, s.label])), doneKey: statuses.find((s: any) => s.kind === 'done')?.key || null,
-    clientsList: cli.data || [],
+    clientsList: cli.data || [], trips: tr.data || [], people: pe.data || [], dates: dt.data || [],
   };
 }
 const logged = async (owner: string, key: string) =>
@@ -189,7 +192,15 @@ function brief(D: any, now: number) {
   const todays = open.filter((r: any) => r.deadline && parisDay(new Date(r.deadline)) === today && effectiveDeadline(r.deadline) >= now)
     .sort((a: any, b: any) => a.deadline.localeCompare(b.deadline));
   const risk = open.filter((r: any) => r.deadline && D.earlyKeys.has(r.status) && effectiveDeadline(r.deadline) >= now && effectiveDeadline(r.deadline) - now <= 24 * H);
-  const arrivals = todays.filter((r: any) => r.category === 'Transport' || r.category === 'Accommodation');
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  const guest = (t: any) => esc(D.clients.get(t.client_id)?.name || '');
+  const arrivals = D.trips.filter((t: any) => (t.flight_in_at && parisDay(new Date(t.flight_in_at)) === today) || (!t.flight_in_at && t.start_date === today))
+    .map((t: any) => `${t.flight_in_at ? hm(t.flight_in_at) : '—'} 🛬 ${guest(t)} — ${esc(t.city)}${t.flight_in ? ', ' + esc(t.flight_in) : ''}${t.hotel ? ' · ' + esc(t.hotel) : ''}`);
+  const departures = D.trips.filter((t: any) => (t.flight_out_at && parisDay(new Date(t.flight_out_at)) === today) || (!t.flight_out_at && t.end_date === today && t.end_date !== t.start_date))
+    .map((t: any) => `${t.flight_out_at ? hm(t.flight_out_at) : '—'} 🛫 ${guest(t)} — из ${esc(t.city)}${t.flight_out ? ', ' + esc(t.flight_out) : ''}`);
+  const tomorrowDay = parisDay(new Date(now + 24 * H));
+  const tomorrowArr = D.trips.filter((t: any) => (t.flight_in_at && parisDay(new Date(t.flight_in_at)) === tomorrowDay) || (!t.flight_in_at && t.start_date === tomorrowDay))
+    .map((t: any) => `${t.flight_in_at ? hm(t.flight_in_at) : '—'} 🛬 ${guest(t)} — ${esc(t.city)}${t.flight_in ? ', ' + esc(t.flight_in) : ''}`);
   const line = (r: any) => {
     const c = D.clients.get(r.client_id);
     const t = new Date(r.deadline).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
@@ -198,11 +209,12 @@ function brief(D: any, now: number) {
   // дни рождения на неделе
   const [ty, tm, td] = today.split('-').map(Number);
   const t0 = Date.UTC(ty, tm - 1, td);
-  const bdays = D.clientsList.filter((c: any) => c.birthday).map((c: any) => {
-    const [, m, d] = c.birthday.split('-').map(Number);
-    let next = Date.UTC(ty, m - 1, d); if (next < t0) next = Date.UTC(ty + 1, m - 1, d);
-    return { c, days: Math.round((next - t0) / 864e5), d, m };
-  }).filter((x: any) => x.days <= 7).sort((a: any, b: any) => a.days - b.days);
+  const nextOf = (date: string) => { const [, m, d] = date.split('-').map(Number); let n = Date.UTC(ty, m - 1, d); if (n < t0) n = Date.UTC(ty + 1, m - 1, d); return { days: Math.round((n - t0) / 864e5), d, m }; };
+  const bdays = [
+    ...D.clientsList.filter((c: any) => c.birthday).map((c: any) => ({ name: esc(c.name), what: '🎂', ...nextOf(c.birthday) })),
+    ...D.people.filter((p: any) => p.birthday).map((p: any) => ({ name: `${esc(p.name)}${p.role ? ' (' + esc(p.role.toLowerCase()) + ')' : ''} — гость ${esc(D.clients.get(p.client_id)?.name || '')}`, what: '🎂', ...nextOf(p.birthday) })),
+    ...D.dates.map((x: any) => ({ name: `${esc(x.title)} — ${esc(D.clients.get(x.client_id)?.name || '')}`, what: '📅', ...nextOf(x.date) })),
+  ].filter((x: any) => x.days <= 7).sort((a: any, b: any) => a.days - b.days);
   const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   const date = new Date(now).toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
   const out = [`☀️ <b>Bonjour! Бриф на ${esc(date)}</b>`];
@@ -210,9 +222,10 @@ function brief(D: any, now: number) {
   if (late.length) out.push('', '❗ <b>Просрочено</b>', ...late.slice(0, 5).map(line));
   if (risk.length) out.push('', '⚠️ <b>Не забронировано, срок меньше суток</b>', ...risk.slice(0, 5).map(line));
   if (todays.length) out.push('', '📋 <b>План на день</b>', ...todays.slice(0, 12).map(line));
-  if (arrivals.length) out.push('', '✈️ <b>Прилёты и заезды</b>', ...arrivals.map(line));
-  if (bdays.length) out.push('', '🎂 <b>Дни рождения</b>', ...bdays.map((x: any) => `${esc(x.c.name)} — ${x.days === 0 ? '<b>сегодня</b>' : x.days === 1 ? 'завтра' : `${x.d} ${MON[x.m - 1]}`}`));
-  if (!late.length && !risk.length && !todays.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
+  if (arrivals.length || departures.length) out.push('', '✈️ <b>Прилёты и вылеты сегодня</b>', ...arrivals, ...departures);
+  if (tomorrowArr.length) out.push('', '🗓 <b>Завтра прилетают</b>', ...tomorrowArr);
+  if (bdays.length) out.push('', '🎂 <b>Даты на неделе</b>', ...bdays.map((x: any) => `${x.what} ${x.name} — ${x.days === 0 ? '<b>сегодня</b>' : x.days === 1 ? 'завтра' : `${x.d} ${MON[x.m - 1]}`}`));
+  if (!late.length && !risk.length && !todays.length && !arrivals.length && !departures.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
   return out.join('\n');
 }
 

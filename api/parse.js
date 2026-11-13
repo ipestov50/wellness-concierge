@@ -70,6 +70,8 @@ const SCHEMA = {
               hotels: { type: 'STRING', nullable: true },
             },
           },
+          likes: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Что гость любит (цветы, места, мелочи), по-русски, коротко' },
+          dislikes: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Чего гость не любит или чего избегать, по-русски, коротко' },
           approval_needed: { type: 'BOOLEAN' },
           needs_review: { type: 'BOOLEAN' },
         },
@@ -96,6 +98,7 @@ ${lines}
 - summary: суть по-русски, коротко, без имени гостя и без даты.
 - new_restrictions: только то, что сказано в тексте. allergies — на что аллергия (например "масло миндаля"); diet — веганство, без глютена, халяль и т.п.; health — беременность, травмы, давление и т.п. Пиши по-русски, коротко, строчными.
 - preferences: устойчивые вкусы гостя, если они названы (еда, спа, транспорт, отели). Иначе null.
+- likes / dislikes: устойчивые вкусы, которые не являются аллергией: «обожает пионы» → likes ["пионы"]; «не любит лилии», «без шумных мест» → dislikes ["лилии", "шумные места"]. Только то, что сказано.
 - missing_questions: 0–3 коротких вопроса, без которых нельзя выполнить запрос.
 - approval_needed: true, если нужно согласовать с гостем варианты или цену.
 - needs_review: true, если текст неоднозначный и ты не уверен в разборе.
@@ -164,6 +167,8 @@ export default async function handler(req, res) {
         food: x.preferences?.food || null, spa: x.preferences?.spa || null,
         transport: x.preferences?.transport || null, hotels: x.preferences?.hotels || null,
       },
+      likes: (x.likes || []).filter((v) => typeof v === 'string').slice(0, 10),
+      dislikes: (x.dislikes || []).filter((v) => typeof v === 'string').slice(0, 10),
       approval_needed: !!x.approval_needed,
       needs_review: !!x.needs_review,
     }));

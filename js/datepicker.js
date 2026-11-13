@@ -12,8 +12,8 @@ const parisToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 
 const addDays = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const weekday = (ymd) => (new Date(ymd + 'T12:00:00Z').getUTCDay() + 6) % 7; // 0 = пн
 
-function label(st) {
-  if (!st.date) return 'Без срока';
+function label(st, empty = 'Без срока') {
+  if (!st.date) return empty;
   const today = parisToday();
   const rel = st.date === today ? 'Сегодня' : st.date === addDays(today, 1) ? 'Завтра' : null;
   const d = new Date(st.date + 'T12:00:00Z').toLocaleDateString('ru-RU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'long' });
@@ -21,14 +21,15 @@ function label(st) {
   return (rel ? `${rel}, ${d.replace(/^[^,]+,\s*/, '')}` : d) + time;
 }
 
-export function deadlinePicker(iso, name = 'deadline') {
+export function deadlinePicker(iso, name = 'deadline', opt = {}) {
   const v = toParisInput(iso); // 'YYYY-MM-DDTHH:MM' или ''
   const [date, time] = v ? v.split('T') : [null, null];
   const hasTime = time && time !== '00:00';
-  const st = { date, hour: hasTime ? +time.slice(0, 2) : null, minute: hasTime ? +time.slice(3, 5) : 0 };
-  return `<div class="dp" data-dp data-date="${esc(st.date || '')}" data-hour="${st.hour ?? ''}" data-minute="${st.minute}">
+  const st = { date, hour: hasTime && !opt.dateOnly ? +time.slice(0, 2) : null, minute: hasTime && !opt.dateOnly ? +time.slice(3, 5) : 0 };
+  const empty = opt.empty || 'Без срока';
+  return `<div class="dp${opt.dateOnly ? ' date-only' : ''}" data-dp data-date="${esc(st.date || '')}" data-hour="${st.hour ?? ''}" data-minute="${st.minute}" data-empty="${esc(empty)}"${opt.dateOnly ? ' data-dateonly="1"' : ''}${opt.quick === false ? ' data-noquick="1"' : ''}>
     <input type="hidden" name="${esc(name)}" id="f-${esc(name)}" value="${esc(v)}">
-    <button type="button" class="dp-display" aria-expanded="false"><span class="dp-ico">🗓</span><span class="dp-text">${esc(label(st))}</span><span class="dp-chev">▾</span></button>
+    <button type="button" class="dp-display" aria-expanded="false"><span class="dp-ico">🗓</span><span class="dp-text">${esc(label(st, empty))}</span><span class="dp-chev">▾</span></button>
     <div class="dp-quick"></div>
     <div class="dp-panel" hidden>
       <div class="dp-cal"></div>
@@ -51,7 +52,7 @@ function bindOne(el) {
 
   const commit = () => {
     input.value = st.date ? `${st.date}T${st.hour == null ? '00:00' : pad(st.hour) + ':' + pad(st.minute)}` : '';
-    el.querySelector('.dp-text').textContent = label(st);
+    el.querySelector('.dp-text').textContent = label(st, el.dataset.empty);
     el.classList.toggle('empty', !st.date);
     draw();
   };
@@ -61,7 +62,8 @@ function bindOne(el) {
     const toFri = (4 - weekday(t) + 7) % 7 || 7;
     const toSat = (5 - weekday(t) + 7) % 7 || 7;
     const opts = [['Сегодня', t], ['Завтра', addDays(t, 1)], [weekday(t) === 4 ? 'След. пятница' : 'Пятница', addDays(t, toFri)],
-      ['Выходные', addDays(t, toSat)], ['Через неделю', addDays(t, 7)], ['Без срока', '']];
+      ['Выходные', addDays(t, toSat)], ['Через неделю', addDays(t, 7)], [el.dataset.empty || 'Без срока', '']];
+    if (el.dataset.noquick) { el.querySelector('.dp-quick').innerHTML = ''; return; }
     el.querySelector('.dp-quick').innerHTML = opts.map(([l, d]) =>
       `<button type="button" class="chip-btn${(st.date || '') === d ? ' on' : ''}" data-q="${d}">${l}</button>`).join('');
   }
@@ -99,7 +101,7 @@ function bindOne(el) {
     el.querySelector('.dp-hours .on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
 
-  function draw() { quick(); if (!panel.hidden) { cal(); time(); } }
+  function draw() { quick(); if (!panel.hidden) { cal(); if (el.dataset.dateonly) el.querySelector('.dp-time').innerHTML = '<button type="button" class="btn small primary dp-done">Готово</button>'; else time(); } }
   const toggle = (open = panel.hidden) => {
     panel.hidden = !open; disp.setAttribute('aria-expanded', String(open)); el.classList.toggle('open', open);
     if (open) { view = (st.date || parisToday()).slice(0, 7); draw(); }
@@ -120,7 +122,7 @@ function bindOne(el) {
       const d = new Date(Date.UTC(y, m - 1 + +b.dataset.nav, 1));
       view = d.toISOString().slice(0, 7); return cal();
     }
-    if (b.dataset.day) { st.date = b.dataset.day; return commit(); }
+    if (b.dataset.day) { st.date = b.dataset.day; commit(); if (el.dataset.dateonly) toggle(false); return; }
     if (b.dataset.h != null) {
       if (!st.date) st.date = parisToday();
       st.hour = b.dataset.h === '' ? null : +b.dataset.h;

@@ -18,9 +18,9 @@ const urgencyPicker = (val) => `<div class="seg-pick" role="radiogroup">${URGENC
 
 export function restrictionsBlock(c) {
   if (!c) return '';
-  const groups = [['Аллергии', c.allergies], ['Диета', c.diet], ['Здоровье', c.health]].filter(([, l]) => l && l.length);
+  const groups = [['Аллергии', c.allergies], ['Диета', c.diet], ['Здоровье', c.health], ['Избегать', c.dislikes]].filter(([, l]) => l && l.length);
   if (!groups.length) return '';
-  return `<div class="alert"><h4>⚠ Аллергии и ограничения</h4>${groups.map(([t, l]) =>
+  return `<div class="alert"><h4>⚠ Аллергии, ограничения, стоп-лист</h4>${groups.map(([t, l]) =>
     `<div class="alert-row"><span>${t}:</span> ${l.map((x) => `<b class="chip">${esc(x)}</b>`).join(' ')}</div>`).join('')}</div>`;
 }
 
@@ -106,7 +106,13 @@ export function editClient(id) {
     field('pref_spa', 'Спа', area('pref_spa', c.pref_spa, 'rows="2"')) + '</div>' +
     `<div class="f2">${field('pref_transport', 'Транспорт', area('pref_transport', c.pref_transport, 'rows="2"'))}` +
     field('pref_hotels', 'Отели', area('pref_hotels', c.pref_hotels, 'rows="2"')) + '</div>' +
-    field('travel_history', 'История поездок', area('travel_history', lines(c.travel_history)), 'По строке на поездку: место | когда | заметка') +
+    '<h3 class="form-sec">Любит и избегает</h3>' +
+    `<div class="f2">${field('likes', '❤️ Любит', area('likes', lines(c.likes), 'rows="2" placeholder="пионы, столик у окна"'))}` +
+    field('dislikes', '🚫 Избегает', area('dislikes', lines(c.dislikes), 'rows="2" placeholder="лилии, шумные места"')) + '</div>' +
+    '<h3 class="form-sec">В пути</h3>' +
+    field('travel_habits', 'Привычки', area('travel_habits', c.travel_habits, 'rows="2" placeholder="Место у окна, 20° в номере, перьевые подушки"')) +
+    field('loyalty', 'Программы лояльности', area('loyalty', lines(c.loyalty), 'rows="2" placeholder="Air France · Platinum"'), 'По одной на строку') +
+    field('travel_history', 'Заметки о прошлых поездках', area('travel_history', lines(c.travel_history)), 'Новые поездки лучше добавлять во вкладке «Поездки»') +
     field('concierge_notes', 'Заметки консьержа', area('concierge_notes', c.concierge_notes));
   openModal({
     title: id ? 'Клиент' : 'Новый клиент',
@@ -117,6 +123,8 @@ export function editClient(id) {
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
         pref_food: nul(v.pref_food.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),
+        likes: toList(v.likes), dislikes: toList(v.dislikes), travel_habits: nul(v.travel_habits.trim()),
+        loyalty: v.loyalty.split('\n').map((s) => s.trim()).filter(Boolean),
         concierge_notes: nul(v.concierge_notes.trim()),
       });
       ui.client = row.id;

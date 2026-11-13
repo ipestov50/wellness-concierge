@@ -11,7 +11,7 @@ export function render() {
   document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === ui.tab)));
   const add = document.getElementById('addBtn');
   if (add) {
-    const label = { requests: 'Новый запрос', clients: 'Новый клиент', partners: 'Новый партнёр' }[ui.tab];
+    const label = { requests: 'Новый запрос', clients: 'Новый клиент', trips: 'Новая поездка', partners: 'Новый партнёр' }[ui.tab];
     add.innerHTML = `<span class="plus" aria-hidden="true">＋</span><span class="add-text">${label}</span>`;
     add.setAttribute('aria-label', label);
   }
@@ -26,7 +26,7 @@ export function render() {
   if (key !== lastKey) {
     lastKey = key;
     app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
-    app.querySelectorAll('.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
+    app.querySelectorAll('.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel, .trip').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
     clearTimeout(enterTimer); enterTimer = setTimeout(() => app.classList.remove('enter'), 900);
     countUp(app);
   }

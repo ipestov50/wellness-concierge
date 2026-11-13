@@ -1,7 +1,7 @@
 import { getSupabase } from './supabase.js';
 
-export const state = { clients: [], requests: [], partners: [], statuses: [], loaded: false };
-const TABLES = ['clients', 'requests', 'partners', 'statuses'];
+export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], loaded: false };
+const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates'];
 const listeners = new Set();
 let sb, channel;
 

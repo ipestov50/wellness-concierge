@@ -8,6 +8,8 @@ import { openTelegram } from './telegram.js';
 import './views/requests.js';
 import './views/clients.js';
 import './views/partners.js';
+import './views/trips.js';
+import { editTrip } from './dossier.js';
 
 const root = document.getElementById('root');
 let sb, shown = null;
@@ -79,6 +81,7 @@ function renderShell(session) {
       <nav class="tabs" role="tablist">
         <button class="tab" role="tab" data-tab="requests" type="button">Запросы</button>
         <button class="tab" role="tab" data-tab="clients" type="button">Клиенты</button>
+        <button class="tab" role="tab" data-tab="trips" type="button">Кто где</button>
         <button class="tab" role="tab" data-tab="partners" type="button">Партнёры</button>
       </nav>
       <div class="tools">
@@ -114,13 +117,14 @@ document.addEventListener('click', (e) => {
   if (!t) return;
   if (t.dataset.tab) { ui.tab = t.dataset.tab; ui.q = ''; render(); scrollTo(0, 0); }
   else if (t.dataset.req) editRequest(t.dataset.req);
-  else if (t.dataset.cl) { ui.client = t.dataset.cl; render(); if (matchMedia('(max-width: 760px)').matches) scrollTo(0, 0); }
+  else if (t.dataset.cl) { if (ui.client !== t.dataset.cl) ui.ctab = 'overview'; ui.client = t.dataset.cl; render(); if (matchMedia('(max-width: 760px)').matches) scrollTo(0, 0); }
   else if (t.dataset.newreq) editRequest(null, t.dataset.newreq);
   else if (t.dataset.editcl) editClient(t.dataset.editcl);
   else if (t.dataset.editp) editPartner(t.dataset.editp);
   else if (t.id === 'addBtn') {
     if (ui.tab === 'requests') editRequest(null);
     else if (ui.tab === 'clients') editClient(null);
+    else if (ui.tab === 'trips') editTrip(null, ui.client);
     else editPartner(null);
   } else if (t.id === 'theme') {
     const next = THEMES[(THEMES.indexOf(getTheme()) + 1) % THEMES.length];

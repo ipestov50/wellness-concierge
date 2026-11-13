@@ -33,21 +33,22 @@ export function birthdayLine(bd) {
 }
 
 // поле формы: день, месяц и необязательный год
-export function birthdayField(bd) {
+export function birthdayField(bd, prefix = 'bd', yearLabel = 'Год (не знаю)') {
   const [y, m, d] = bd ? bd.split('-').map(Number) : [null, null, null];
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 100 }, (_, i) => thisYear - i);
   return `<div class="bd-pick">
-    <select name="bd_day" id="f-bd_day" aria-label="День">${options(days, d, 'День')}</select>
-    <select name="bd_month" id="f-bd_month" aria-label="Месяц">${options(MONTHS.map((n, i) => [i + 1, n]), m, 'Месяц')}</select>
-    <select name="bd_year" id="f-bd_year" aria-label="Год">${options(years, y && y > 1900 ? y : '', 'Год (не знаю)')}</select>
+    <select name="${prefix}_day" id="f-${prefix}_day" aria-label="День">${options(days, d, 'День')}</select>
+    <select name="${prefix}_month" id="f-${prefix}_month" aria-label="Месяц">${options(MONTHS.map((n, i) => [i + 1, n]), m, 'Месяц')}</select>
+    <select name="${prefix}_year" id="f-${prefix}_year" aria-label="Год">${options(years, y && y > 1900 ? y : '', yearLabel)}</select>
   </div>`;
 }
-export function birthdayValue(v) {
-  if (!v.bd_day || !v.bd_month) return null;
-  const y = v.bd_year || '1900';
+export function birthdayValue(v, prefix = 'bd') {
+  const day = v[prefix + '_day'], month = v[prefix + '_month'];
+  if (!day || !month) return null;
+  const y = v[prefix + '_year'] || '1900';
   const pad = (n) => String(n).padStart(2, '0');
-  const dd = Math.min(+v.bd_day, new Date(Date.UTC(+y === 1900 ? 2000 : +y, +v.bd_month, 0)).getUTCDate());
-  return `${y}-${pad(v.bd_month)}-${pad(dd)}`;
+  const dd = Math.min(+day, new Date(Date.UTC(+y === 1900 ? 2000 : +y, +month, 0)).getUTCDate());
+  return `${y}-${pad(month)}-${pad(dd)}`;
 }

@@ -186,16 +186,17 @@ function preview(drafts, text) {
 }
 
 // что нового узнали о госте (без дублей с тем, что уже в профиле)
-const LABELS = { allergies: 'аллергия', diet: 'диета', health: 'здоровье' };
+const LABELS = { allergies: 'аллергия', diet: 'диета', health: 'здоровье', likes: 'любит', dislikes: 'избегает' };
 const PREF = { food: ['pref_food', 'еда'], spa: ['pref_spa', 'спа'], transport: ['pref_transport', 'транспорт'], hotels: ['pref_hotels', 'отели'] };
 const lc = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е').trim();
 const has = (list, v) => (list || []).some((x) => lc(x) === lc(v) || lc(x).includes(lc(v)) || lc(v).includes(lc(x)));
 
 function additions(client, d) {
   const out = [];
-  for (const k of ['allergies', 'diet', 'health']) {
+  for (const k of ['allergies', 'diet', 'health', 'likes', 'dislikes']) {
     const seen = [...(client?.[k] || [])];
-    for (const v of d.new_restrictions?.[k] || []) if (v && !has(seen, v)) { out.push({ kind: k, label: LABELS[k], value: v }); seen.push(v); }
+    const found = k === 'likes' || k === 'dislikes' ? d[k] : d.new_restrictions?.[k];
+    for (const v of found || []) if (v && !has(seen, v)) { out.push({ kind: k, label: LABELS[k], value: v }); seen.push(v); }
   }
   for (const [k, [col, label]] of Object.entries(PREF)) {
     const v = d.preferences?.[k];
@@ -244,7 +245,7 @@ async function createAll(items, text) {
     const restr = add.filter((a) => a.kind in LABELS);
     lines.push(`<b>Создан запрос${client ? ` — ${esc(client.name)}` : ''}</b>: ${esc(SHORT[d.category] || d.category)}, ${esc(fmtWhen(deadline))}.` +
       (createdGuest ? ' Добавлен новый гость.' : '') +
-      (restr.length ? ` ${restr.map((a) => `Добавлена ${esc(a.label === 'аллергия' ? 'аллергия' : a.label === 'диета' ? 'диета' : 'запись о здоровье')}: <b>${esc(a.value)}</b>`).join('. ')}.` : ''));
+      (restr.length ? ` ${restr.map((a) => ({ allergies: 'Добавлена аллергия', diet: 'Добавлена диета', health: 'Добавлено о здоровье', likes: 'Любит', dislikes: 'Избегает' }[a.kind]) + `: <b>${esc(a.value)}</b>`).join('. ')}.` : ''));
   }
   clearText();
   smart.result = { kind: 'ok', lines };
