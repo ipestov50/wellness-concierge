@@ -280,3 +280,42 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .toast.has-action { pointer-events: auto; display: flex; align-items: center; gap: 14px; }
 .toast button { border: 0; background: none; color: inherit; font-weight: 600; text-decoration: underline; padding: 4px 2px; }
 .newguest { background: var(--soft); border-radius: 12px; padding: 12px 12px 2px; margin: -4px 0 12px; }
+
+/* ---------- контакты гостя ---------- */
+.contacts { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 16px; }
+.contact {
+  display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--ink);
+  background: var(--soft); border: 1px solid var(--line); border-radius: 99px; padding: 7px 14px 7px 10px; min-height: 40px;
+  transition: border-color .15s, transform .15s; max-width: 100%;
+}
+.contact:hover { border-color: var(--accent); transform: translateY(-1px); }
+.contact b { font-weight: 500; overflow-wrap: anywhere; }
+.contact.add { color: var(--muted); border-style: dashed; background: none; }
+
+/* ---------- меню карточки ---------- */
+.card-wrap { position: relative; }
+.card-wrap .card { padding-right: 36px; }
+.card-menu {
+  position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); font-size: 18px; line-height: 1; display: grid; place-items: center;
+}
+.card-menu:hover { background: var(--soft); color: var(--ink); }
+.popover {
+  position: fixed; z-index: 70; width: 250px; max-height: 80vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.18); opacity: 0; transform: translateY(-4px) scale(.98);
+  transition: opacity .14s, transform .14s; transform-origin: top right;
+}
+.popover.open { opacity: 1; transform: none; }
+.popover.sheet {
+  left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; border-radius: 18px;
+  transform: translateY(20px); padding: 8px;
+}
+.popover.sheet.open { transform: none; }
+.popover button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 10px 12px; border-radius: 9px; min-height: 42px; }
+.popover button:hover:not(:disabled) { background: var(--soft); }
+.popover button:disabled { color: var(--accent); font-weight: 600; cursor: default; }
+.pop-title { padding: 8px 12px 6px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop-label { padding: 8px 12px 2px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; }
+.pop-danger { color: var(--crit); border-top: 1px solid var(--line) !important; margin-top: 4px; border-radius: 0 0 9px 9px !important; }
+.pop-danger.armed { background: var(--crit) !important; color: #fff; }

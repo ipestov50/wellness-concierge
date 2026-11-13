@@ -83,6 +83,8 @@ export function editClient(id) {
     field('name', 'Имя', input('name', c.name, 'type="text" required autocomplete="off"')) +
     `<div class="f2">${field('language', 'Язык общения', select('language', options(LANGUAGES, c.language)))}` +
     field('city', 'Город', input('city', c.city, 'type="text"')) + '</div>' +
+    `<div class="f2">${field('phone', 'Телефон', input('phone', c.phone, 'type="tel" placeholder="+33 6 00 00 00 00" autocomplete="off"'))}` +
+    field('email', 'Почта', input('email', c.email, 'type="email" placeholder="name@mail.com" autocapitalize="off" autocomplete="off"')) + '</div>' +
     `<div class="f2">${field('telegram', 'Telegram', input('telegram', c.telegram, 'type="text" placeholder="@username" autocapitalize="off"'))}` +
     field('last_contact', 'Последний контакт', input('last_contact', c.last_contact, 'type="date"')) + '</div>' +
     `<div class="checks">${check('vip', '★ VIP-клиент', c.vip)}</div>` +
@@ -102,7 +104,7 @@ export function editClient(id) {
     body,
     onSave: async (v) => {
       const row = await save('clients', id, {
-        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), telegram: nul(v.telegram.trim()), vip: v.vip,
+        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
         pref_food: nul(v.pref_food.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),

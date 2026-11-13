@@ -7,6 +7,21 @@ import { requestCard } from './requests.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
 
+// Кнопки связи: позвонить, WhatsApp, написать, Telegram
+function contacts(c) {
+  const digits = (c.phone || '').replace(/[^\d+]/g, '');
+  const tg = (c.telegram || '').trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');
+  const items = [];
+  if (digits) {
+    items.push(`<a class="contact" href="tel:${esc(digits)}"><span>📞</span><b>${esc(c.phone)}</b></a>`);
+    items.push(`<a class="contact" href="https://wa.me/${esc(digits.replace('+', ''))}" target="_blank" rel="noopener"><span>💬</span><b>WhatsApp</b></a>`);
+  }
+  if (c.email) items.push(`<a class="contact" href="mailto:${esc(c.email)}"><span>✉️</span><b>${esc(c.email)}</b></a>`);
+  if (tg) items.push(`<a class="contact" href="https://t.me/${esc(tg)}" target="_blank" rel="noopener"><span>✈️</span><b>@${esc(tg)}</b></a>`);
+  return items.length ? `<div class="contacts">${items.join('')}</div>`
+    : `<div class="contacts"><button class="contact add" data-editcl="${c.id}" type="button"><span>＋</span><b>Добавить телефон или почту</b></button></div>`;
+}
+
 function profile(c) {
   if (!c) return '<div class="empty">Выберите клиента слева или добавьте нового.</div>';
   const reqs = state.requests.filter((r) => r.client_id === c.id)
@@ -16,7 +31,8 @@ function profile(c) {
   return `<div class="panel">
     ${mobile() ? '<button class="btn small back" id="back" type="button">← Все клиенты</button>' : ''}
     <h2>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}</h2>
-    <div class="sub">${[c.language, c.city, c.telegram].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · последний контакт ${esc(fmtDate(c.last_contact))}` : ''}</div>
+    <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · последний контакт ${esc(fmtDate(c.last_contact))}` : ''}</div>
+    ${contacts(c)}
     ${restrictionsBlock(c)}
     <div class="grid2">${prefs.map(([t, v]) => `<div class="blk"><h4>${t}</h4><p>${v ? esc(v) : '<span class="muted">—</span>'}</p></div>`).join('')}</div>
     <div class="blk sect"><h4>История поездок</h4>${trips.length ? `<ul class="trips">${trips.map((t) =>
@@ -33,7 +49,7 @@ function profile(c) {
 function view(app) {
   const q = ui.q.trim().toLowerCase();
   const list = state.clients
-    .filter((c) => !q || [c.name, c.telegram, c.city].join(' ').toLowerCase().includes(q))
+    .filter((c) => !q || [c.name, c.telegram, c.city, c.phone, c.email].join(' ').toLowerCase().includes(q))
     .sort((a, b) => (b.vip - a.vip) || a.name.localeCompare(b.name, 'ru'));
   if (ui.client && !byId('clients', ui.client)) ui.client = null;
   if (!ui.client && !mobile() && list.length) ui.client = list[0].id;

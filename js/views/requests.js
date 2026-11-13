@@ -1,6 +1,6 @@
 import { STATUSES, ARCHIVE, CATEGORIES, URGENCY_LABEL, STATUS_LABEL, TZ } from '../const.js';
 import { esc, fmtDeadline, fmtMoney, toast } from '../ui.js';
-import { state, byId, save } from '../data.js';
+import { state, byId, save, remove } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { editRequest } from '../forms.js';
 
@@ -12,7 +12,7 @@ export function requestCard(r, { showClient = true } = {}) {
   const p = byId('partners', r.partner_id);
   const late = isLate(r);
   const allergic = c && (c.allergies?.length || c.diet?.length || c.health?.length);
-  return `<button class="card" data-req="${r.id}" type="button">
+  return `<div class="card-wrap"><button class="card" data-req="${r.id}" type="button">
     <div class="who"><span class="cat" title="${esc(r.category)}">${CATEGORIES[r.category] || '📌'}</span>${showClient ? esc(clientName(r.client_id)) : esc(r.summary)}${c?.vip && showClient ? ' <span class="vip">★</span>' : ''}</div>
     ${showClient ? `<div class="sum">${esc(r.summary)}</div>` : ''}
     <div class="meta">
@@ -25,8 +25,59 @@ export function requestCard(r, { showClient = true } = {}) {
       ${allergic ? '<span class="flag warn">⚠ ограничения</span>' : ''}
       ${r.needs_review ? '<span class="flag">проверить</span>' : ''}
       ${r.needs_approval ? '<span class="flag">одобрение гостя</span>' : ''}</div>` : ''}
-  </button>`;
+  </button><button class="card-menu" data-cardmenu="${r.id}" type="button" aria-label="Действия с запросом" aria-haspopup="menu">⋯</button></div>`;
 }
+
+// ---------- меню карточки: изменить, статус, удалить ----------
+function closeCardMenu() { document.getElementById('cardmenu')?.remove(); }
+function openCardMenu(id, anchor) {
+  closeCardMenu();
+  const r = byId('requests', id);
+  if (!r) return;
+  const m = document.createElement('div');
+  m.id = 'cardmenu'; m.className = 'popover'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<div class="pop-title">${esc(r.summary)}</div>
+    <button type="button" role="menuitem" data-act="edit">✎ Изменить</button>
+    <div class="pop-label">Перенести в</div>
+    <div class="pop-statuses">${STATUSES.map(([s, l]) =>
+      `<button type="button" role="menuitem" data-act="status" data-status="${s}"${s === r.status ? ' aria-current="true" disabled' : ''}>${s === r.status ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
+    <button type="button" role="menuitem" data-act="delete" class="pop-danger">Удалить</button>`;
+  document.body.append(m);
+  const a = anchor.getBoundingClientRect();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  if (innerWidth <= 520) m.classList.add('sheet');
+  else {
+    m.style.left = Math.max(8, Math.min(a.right - w, innerWidth - w - 8)) + 'px';
+    m.style.top = (a.bottom + 6 + h > innerHeight - 8 ? Math.max(8, a.top - h - 6) : a.bottom + 6) + 'px';
+  }
+  requestAnimationFrame(() => m.classList.add('open'));
+  let armed = false;
+  m.addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'edit') { closeCardMenu(); editRequest(id); }
+    else if (b.dataset.act === 'status') {
+      closeCardMenu();
+      const before = r.status;
+      try {
+        await save('requests', id, { status: b.dataset.status });
+        toast(`${STATUS_LABEL[b.dataset.status]}: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { status: before }) });
+      } catch (err) { toast('Не удалось: ' + (err.message || err), 'err'); }
+    } else if (b.dataset.act === 'delete') {
+      if (!armed) { armed = true; b.textContent = 'Точно удалить? Нажмите ещё раз'; b.classList.add('armed'); return; }
+      closeCardMenu();
+      try { await remove('requests', id); toast('Запрос удалён'); }
+      catch (err) { toast('Не удалось удалить: ' + (err.message || err), 'err'); }
+    }
+  });
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-cardmenu]');
+  if (t) { e.stopPropagation(); openCardMenu(t.dataset.cardmenu, t); return; }
+  if (!e.target.closest('#cardmenu')) closeCardMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMenu(); });
+addEventListener('resize', closeCardMenu);
 
 // ---------- режим «Сегодня»: открытые запросы по срокам ----------
 const parisDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
