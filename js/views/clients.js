@@ -3,6 +3,7 @@ import { state, byId } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { restrictionsBlock } from '../forms.js';
 import { isClosed } from '../statuses.js';
+import { birthdayLine, birthdayInfo } from '../birthday.js';
 import { requestCard } from './requests.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
@@ -32,6 +33,7 @@ function profile(c) {
     ${mobile() ? '<button class="btn small back" id="back" type="button">← Все клиенты</button>' : ''}
     <div class="phead">${avatar(c, 'av-lg')}<div><h2>${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</h2>
     <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · последний контакт ${esc(fmtDate(c.last_contact))}` : ''}</div></div></div>
+    ${birthdayLine(c.birthday)}
     ${contacts(c)}
     ${restrictionsBlock(c)}
     <div class="grid2">${prefs.map(([t, v]) => `<div class="blk"><h4>${t}</h4><p>${v ? esc(v) : '<span class="muted">—</span>'}</p></div>`).join('')}</div>
@@ -62,7 +64,7 @@ function view(app) {
         const n = state.requests.filter((r) => r.client_id === c.id && !isClosed(r.status)).length;
         const warn = c.allergies?.length || c.diet?.length || c.health?.length;
         return `<button class="row" data-cl="${c.id}" aria-current="${ui.client === c.id}" type="button">${avatar(c)}<span class="row-txt">
-          <b>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
+          <b>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}${(birthdayInfo(c.birthday)?.days ?? 99) <= 7 ? ' <span title="Скоро день рождения">🎂</span>' : ''}</b>
           <span>${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${n ? ` · открытых: ${n}` : ''}</span></span></button>`;
       }).join('') || `<div class="empty">${q ? 'Никого не нашлось.' : 'Клиентов пока нет.'}</div>`}</div>
     </div>` : ''}

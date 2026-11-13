@@ -1,4 +1,5 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
+import { birthdayInfo } from '../birthday.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
@@ -79,6 +80,8 @@ document.addEventListener('click', (e) => {
   if (cm) { e.stopPropagation(); openColumnMenu(cm.dataset.colmenu, cm); return; }
   if (e.target.closest('#colAdd')) { editColumn(null); return; }
   if (!e.target.closest('#cardmenu')) closeCardMenu();
+  const bo = e.target.closest('[data-cl-open]');
+  if (bo) { ui.tab = 'clients'; ui.client = bo.dataset.clOpen; ui.q = ''; render(); scrollTo(0, 0); }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMenu(); });
 addEventListener('resize', closeCardMenu);
@@ -130,6 +133,7 @@ function summary(today) {
   const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now) % 24;
   const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
   const date = now.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
+  const bdays = state.clients.map((c) => ({ c, b: birthdayInfo(c.birthday) })).filter(({ b }) => b && b.days <= 7).sort((x, y) => x.b.days - y.b.days);
   return `<section class="hero">
     <div class="hero-hello"><h2>${hello}</h2><span>${esc(date)}</span></div>
     <div class="hero-stats">
@@ -137,6 +141,8 @@ function summary(today) {
       <div class="stat s-today"><b data-count="${todayN}">${todayN}</b><span>на сегодня</span></div>
       <div class="stat s-done"><b data-count="${done}">${done}</b><span>сделано</span></div>
     </div>
+    ${bdays.length ? `<div class="hero-bdays">🎂 ${bdays.map(({ c, b }) =>
+      `<button type="button" data-cl-open="${c.id}">${esc(c.name.replace(/\s*\(.*?\)/g, ''))} — ${b.days === 0 ? 'сегодня' : b.days === 1 ? 'завтра' : esc(b.day + ' ' + b.text.split(' ')[1])}</button>`).join(', ')}</div>` : ''}
   </section>`;
 }
 

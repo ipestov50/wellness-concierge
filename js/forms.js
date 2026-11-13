@@ -4,6 +4,7 @@ import { state, byId, save, remove } from './data.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
+import { birthdayField, birthdayValue } from './birthday.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -94,6 +95,7 @@ export function editClient(id) {
     field('email', 'Почта', input('email', c.email, 'type="email" placeholder="name@mail.com" autocapitalize="off" autocomplete="off"')) + '</div>' +
     `<div class="f2">${field('telegram', 'Telegram', input('telegram', c.telegram, 'type="text" placeholder="@username" autocapitalize="off"'))}` +
     field('last_contact', 'Последний контакт', input('last_contact', c.last_contact, 'type="date"')) + '</div>' +
+    field('bd_day', 'День рождения', birthdayField(c.birthday), 'Год можно не указывать') +
     `<div class="checks">${check('vip', '★ VIP-клиент', c.vip)}</div>` +
     '<h3 class="form-sec warn">Аллергии и ограничения</h3>' +
     field('allergies', 'Аллергии', area('allergies', lines(c.allergies), 'rows="2"'), 'По одной на строку или через запятую') +
@@ -111,7 +113,7 @@ export function editClient(id) {
     body,
     onSave: async (v) => {
       const row = await save('clients', id, {
-        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), vip: v.vip,
+        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
         pref_food: nul(v.pref_food.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),

@@ -37,16 +37,31 @@ export function render() {
 let lastKey = '', enterTimer;
 
 // скользящая подложка под выбранной вкладкой
+const lastSel = {};
 export function updateGliders() {
   document.querySelectorAll('.tabs, .seg').forEach((bar) => {
     let g = bar.querySelector(':scope > .glider');
-    if (!g) { g = document.createElement('span'); g.className = 'glider'; bar.prepend(g); }
+    const fresh = !g;
+    if (fresh) { g = document.createElement('span'); g.className = 'glider'; bar.prepend(g); }
     const sel = bar.querySelector('[aria-selected="true"]');
     if (!sel) { g.style.opacity = 0; return; }
+    const type = bar.classList.contains('seg') ? 'seg' : 'tabs';
+    const key = sel.dataset.tab || sel.dataset.view || '';
+    const prev = lastSel[type];
+    lastSel[type] = key;
+    const place = (el) => {
+      g.style.width = el.offsetWidth + 'px';
+      g.style.height = el.offsetHeight + 'px';
+      g.style.transform = `translate(${el.offsetLeft}px, ${el.offsetTop}px)`;
+    };
+    const jump = (el) => { g.style.transition = 'none'; place(el); void g.offsetWidth; g.style.transition = ''; };
     g.style.opacity = 1;
-    g.style.width = sel.offsetWidth + 'px';
-    g.style.height = sel.offsetHeight + 'px';
-    g.style.transform = `translate(${sel.offsetLeft}px, ${sel.offsetTop}px)`;
+    if (prev === key) { jump(sel); return; } // тот же выбор — просто стоим на месте
+    // выбор сменился: едем от прежней кнопки к новой (даже если переключатель нарисован заново)
+    const old = prev && bar.querySelector(`[data-tab="${prev}"], [data-view="${prev}"]`);
+    if (fresh && old) jump(old);
+    else if (fresh) { jump(sel); return; }
+    requestAnimationFrame(() => place(sel));
   });
 }
 addEventListener('resize', updateGliders);

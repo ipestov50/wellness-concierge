@@ -508,3 +508,14 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
 .col-add span { font-size: 22px; }
 .col-add:hover { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 760px) { .col-add { flex-basis: 60vw; } }
+
+/* ---------- день рождения ---------- */
+.bd-pick { display: grid; grid-template-columns: 1fr 1.6fr 1.4fr; gap: 6px; }
+.bday { display: flex; gap: 10px; align-items: center; margin: -4px 0 12px; color: var(--muted); }
+.bday b { color: var(--ink); font-weight: 500; }
+.bday em { font-style: normal; color: var(--accent); font-weight: 600; }
+.bday.soon { background: color-mix(in srgb, var(--gold) 14%, transparent); border-radius: 12px; padding: 8px 12px; }
+.bday.today .bday-ico { display: inline-block; animation: wiggle 1.6s ease-in-out infinite; }
+@keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+.hero-bdays { width: 100%; position: relative; z-index: 1; font-size: 14px; color: var(--muted); }
+.hero-bdays button { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 500; text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; }
