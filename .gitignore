@@ -1,0 +1,14 @@
+# секреты
+.env
+.env.*
+!.env.example
+
+# зависимости и сборка
+node_modules/
+dist/
+.vercel/
+.netlify/
+
+# система
+.DS_Store
+*.log
