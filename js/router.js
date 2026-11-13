@@ -1,5 +1,7 @@
 // Состояние экрана и перерисовка текущего раздела
-export const ui = { tab: 'requests', client: null, archive: false, q: '', ptype: '', pcity: '' };
+let savedView = 'today';
+try { savedView = localStorage.getItem('reqView') || 'today'; } catch {}
+export const ui = { tab: 'requests', reqView: savedView, client: null, archive: false, q: '', ptype: '', pcity: '' };
 const views = {};
 export const registerView = (name, fn) => { views[name] = fn; };
 

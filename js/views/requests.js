@@ -1,4 +1,4 @@
-import { STATUSES, ARCHIVE, CATEGORIES, URGENCY_LABEL } from '../const.js';
+import { STATUSES, ARCHIVE, CATEGORIES, URGENCY_LABEL, STATUS_LABEL, TZ } from '../const.js';
 import { esc, fmtDeadline, fmtMoney, toast } from '../ui.js';
 import { state, byId, save } from '../data.js';
 import { ui, render, registerView } from '../router.js';
@@ -28,19 +28,52 @@ export function requestCard(r, { showClient = true } = {}) {
   </button>`;
 }
 
-function view(app) {
-  const q = ui.q.trim().toLowerCase();
+// ---------- режим «Сегодня»: открытые запросы по срокам ----------
+const parisDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const URG_ORDER = { critical: 0, high: 1, normal: 2, low: 3 };
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+
+function groupOf(r, today, tomorrow, weekEnd) {
+  if (!r.deadline) return 'none';
+  const day = parisDay(new Date(r.deadline));
+  if (new Date(r.deadline) < new Date() && day < today) return 'late';
+  if (day === today) return new Date(r.deadline) < new Date() && fmtTime(r.deadline) !== '00:00' ? 'late' : 'today';
+  if (day === tomorrow) return 'tomorrow';
+  if (day <= weekEnd) return 'week';
+  return 'later';
+}
+const GROUPS = [['late', 'Просрочено'], ['today', 'Сегодня'], ['tomorrow', 'Завтра'], ['week', 'На этой неделе'], ['later', 'Позже'], ['none', 'Без срока']];
+
+function rowHtml(r, group) {
+  const c = byId('clients', r.client_id);
+  const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
+  const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
+    ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : fmtDeadline(r.deadline);
+  return `<button class="trow u-line-${esc(r.urgency)}" data-req="${r.id}" type="button">
+    <span class="cat">${CATEGORIES[r.category] || '📌'}</span>
+    <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
+      <span class="tsum">${esc(r.summary)}</span></span>
+    <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
+      <span class="tstatus">${esc(STATUS_LABEL[r.status] || '')}</span></span>
+  </button>`;
+}
+
+function todayView(list) {
+  const now = new Date();
+  const today = parisDay(now), tomorrow = parisDay(new Date(+now + 864e5)), weekEnd = parisDay(new Date(+now + 7 * 864e5));
+  const open = list.filter((r) => !ARCHIVE.includes(r.status));
+  const by = {};
+  for (const r of open) (by[groupOf(r, today, tomorrow, weekEnd)] ||= []).push(r);
+  const sort = (a, b) => (a.deadline || '9').localeCompare(b.deadline || '9') || URG_ORDER[a.urgency] - URG_ORDER[b.urgency];
+  const html = GROUPS.filter(([g]) => by[g]?.length).map(([g, label]) =>
+    `<section class="tgroup g-${g}"><h3>${label}<span>${by[g].length}</span></h3>
+      <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g)).join('')}</div></section>`).join('');
+  return html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`;
+}
+
+function boardView(list) {
   const cols = STATUSES.filter(([s]) => ui.archive || !ARCHIVE.includes(s));
-  const list = state.requests.filter((r) => !q ||
-    [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
-  const open = state.requests.filter((r) => !ARCHIVE.includes(r.status)).length;
-  app.innerHTML = `
-    <div class="bar">
-      <div class="grow"><input type="search" id="q" placeholder="Поиск по запросам и клиентам" value="${esc(ui.q)}" autocomplete="off"></div>
-      <span class="count">Открытых: ${open}</span>
-      <button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>
-    </div>
-    <div class="board" id="board">${cols.map(([s, label]) => {
+  return `<div class="board" id="board">${cols.map(([s, label]) => {
       const items = list.filter((r) => r.status === s).sort((a, b) => a.position - b.position);
       return `<section class="col${ARCHIVE.includes(s) ? ' archived' : ''}" data-status="${s}">
         <h3>${esc(label)}<span>${items.length}</span></h3>
@@ -48,8 +81,32 @@ function view(app) {
       </section>`;
     }).join('')}</div>
     <p class="hint board-hint">Карточки можно перетаскивать между колонками. На телефоне — нажмите и подержите карточку.</p>`;
-  app.querySelector('#arch').onclick = () => { ui.archive = !ui.archive; render(); };
-  enableDrag(app.querySelector('#board'));
+}
+
+function view(app) {
+  const q = ui.q.trim().toLowerCase();
+  const list = state.requests.filter((r) => !q ||
+    [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
+  const open = state.requests.filter((r) => !ARCHIVE.includes(r.status)).length;
+  const board = ui.reqView === 'board';
+  app.innerHTML = `
+    <div class="bar">
+      <div class="seg" role="tablist" aria-label="Вид">
+        <button type="button" data-view="today" aria-selected="${!board}">Сегодня</button>
+        <button type="button" data-view="board" aria-selected="${board}">Доска</button>
+      </div>
+      <div class="grow"><input type="search" id="q" placeholder="Поиск по запросам и клиентам" value="${esc(ui.q)}" autocomplete="off"></div>
+      <span class="count">Открытых: ${open}</span>
+      ${board ? `<button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
+    </div>
+    ${board ? boardView(list) : todayView(list)}`;
+  app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
+    ui.reqView = b.dataset.view;
+    try { localStorage.setItem('reqView', ui.reqView); } catch {}
+    render();
+  });
+  app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
+  if (board) enableDrag(app.querySelector('#board'));
 }
 registerView('requests', view);
 
