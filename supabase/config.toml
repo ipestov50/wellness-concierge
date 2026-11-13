@@ -1,0 +1,9 @@
+# Только настройки входа. Остальные параметры проекта не трогаем.
+project_id = "wellness-concierge"
+
+[auth]
+enabled = true
+site_url = "https://wellness-concierge-desk.vercel.app"
+additional_redirect_urls = ["https://wellness-concierge-desk.vercel.app/**", "http://localhost:3000/**"]
+# Регистрация закрыта: войти может только уже созданный владелец
+enable_signup = false
