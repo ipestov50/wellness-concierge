@@ -1104,3 +1104,4 @@ details.past summary { cursor: pointer; color: var(--muted); font-size: 13px; fo
 .road.lvl3 { background: var(--crit-bg); border-color: color-mix(in srgb, var(--crit) 30%, transparent); }
 .road.lvl0 .road-ico { font-size: 12px; margin-top: 3px; }
 .road.muted-road { color: var(--muted); font-size: 13px; }
+.road-to { opacity: .85; }

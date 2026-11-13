@@ -34,6 +34,7 @@ export async function bindRoad(root) {
     el.classList.add(t.level >= 3 ? 'lvl3' : t.level >= 2 ? 'lvl2' : 'lvl0');
     el.querySelector('.road-ico').textContent = t.level >= 3 ? '⛔' : t.level >= 2 ? '🚦' : '🟢';
     el.querySelector('.road-txt').innerHTML = `<b>${t.minutes} мин</b> из ${esc(t.fromName)}${t.delay ? ` <span class="road-delay">+${t.delay} пробки</span>` : ' · дорога свободна'} · ${t.km} км
-      <small>${late ? '<b>выезжать сейчас</b>' : `выезжать в <b>${hm(t.leaveBy)}</b>`}${[...t.issues.map((x) => x.label), ...t.near.map((x) => x.label)].slice(0, 2).map((x) => ' · ' + esc(x)).join('')}</small>`;
+      <small>${late ? '<b>выезжать сейчас</b>' : `выезжать в <b>${hm(t.leaveBy)}</b>`}${[...t.issues.map((x) => x.label), ...t.near.map((x) => x.label)].slice(0, 2).map((x) => ' · ' + esc(x)).join('')}</small>
+      <small class="road-to">→ ${esc(t.toLabel || '')}${t.guessed ? ' · <b>найдено по названию, проверьте — точнее с адресом партнёра</b>' : ''}</small>`;
   } catch { el.remove(); }
 }

@@ -10,15 +10,21 @@ const CAT: Record<string, string> = { JAM: 'пробка', ROAD_WORK: 'доро�
 const ICON: Record<number, string> = { 1: 'авария', 6: 'пробка', 7: 'перекрыта полоса', 8: 'дорога перекрыта', 9: 'дорожные работы', 14: 'сломанная машина', 11: 'подтопление', 3: 'опасные условия' };
 
 // ---------- поиск места (с кэшем) ----------
-export async function geocode(db: any, query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
+// near — искать только рядом с этой точкой (в 80 км от отеля гостя), чтобы «Le Jules Verne» нашёлся в Париже, а не в Тулузе
+// poi — сначала искать заведения (ресторан «Le Jules Verne», а не улицу Жюля Верна)
+export async function geocode(db: any, query: string, near?: { lat: number; lon: number } | null, poi = false) {
+  const base = query.trim().toLowerCase();
+  if (!base) return null;
+  const q = (near ? `${base}@${near.lat.toFixed(1)},${near.lon.toFixed(1)}` : base) + (poi ? '#poi' : '');
   const { data: hit } = await db.from('geo_cache').select('*').eq('query', q).maybeSingle();
   if (hit) return hit.lat != null ? hit : null;
-  const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent(query)}.json?key=${KEY}&limit=1&language=ru-RU`);
-  if (!r.ok) throw new Error('tomtom_search_' + r.status);
-  const j = await r.json();
-  const top = j.results?.[0];
+  const bias = near ? `&lat=${near.lat}&lon=${near.lon}&radius=80000` : '';
+  const find = async (extra: string) => {
+    const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent(query)}.json?key=${KEY}&limit=1&language=ru-RU${bias}${extra}`);
+    if (!r.ok) throw new Error('tomtom_search_' + r.status);
+    return (await r.json()).results?.[0];
+  };
+  const top = (poi ? await find('&idxSet=POI') : null) || await find('');
   const row = { query: q, lat: top?.position?.lat ?? null, lon: top?.position?.lon ?? null, label: top ? (top.poi?.name ? top.poi.name + ', ' : '') + (top.address?.freeformAddress || '') : null };
   await db.from('geo_cache').upsert(row);
   return row.lat != null ? row : null;
@@ -46,22 +52,39 @@ export async function route(from: any, to: any) {
 }
 
 // ---------- инциденты рядом с местом назначения (перекрытия, мероприятия, аварии) ----------
-export async function incidentsNear(p: any, radiusKm = 1.5) {
+const distM = (aLat: number, aLon: number, bLat: number, bLon: number) => {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (bLat - aLat) * toR, dLon = (bLon - aLon) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * toR) * Math.cos(bLat * toR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+// в большом городе перекрытия есть всегда — считаем только те, что у самого места:
+// перекрытие дороги — до 400 м, авария или сильная пробка — до 700 м
+export async function incidentsNear(p: any, radiusKm = 1) {
   const dLat = radiusKm / 111, dLon = radiusKm / (111 * Math.cos((p.lat * Math.PI) / 180));
   const bbox = [p.lon - dLon, p.lat - dLat, p.lon + dLon, p.lat + dLat].map((x) => x.toFixed(5)).join(',');
-  const fields = '{incidents{properties{iconCategory,magnitudeOfDelay,events{description},from,to,roadNumbers,delay}}}';
+  const fields = '{incidents{geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,events{description},from,to,roadNumbers,delay}}}';
   const r = await fetch(`https://api.tomtom.com/traffic/services/5/incidentDetails?key=${KEY}&bbox=${bbox}&fields=${encodeURIComponent(fields)}&language=ru-RU&timeValidityFilter=present`);
   if (!r.ok) return [];
   const j = await r.json();
-  return (j.incidents || []).map((i: any) => i.properties).filter((x: any) => [1, 7, 8, 9, 11].includes(x.iconCategory) || (x.magnitudeOfDelay || 0) >= 3)
-    .slice(0, 4).map((x: any) => ({
+  return (j.incidents || []).map((i: any) => {
+    const g = i.geometry || {};
+    const pts: number[][] = g.type === 'Point' ? [g.coordinates] : (g.coordinates || []);
+    const d = pts.length ? Math.min(...pts.map(([lon, lat]) => distM(p.lat, p.lon, lat, lon))) : Infinity;
+    return { ...i.properties, d };
+  }).filter((x: any) => (x.iconCategory === 8 && x.d <= 400) || ((x.iconCategory === 1 || (x.magnitudeOfDelay || 0) >= 3) && x.d <= 700))
+    .sort((a: any, b: any) => a.d - b.d).slice(0, 3).map((x: any) => ({
       label: x.events?.[0]?.description || ICON[x.iconCategory] || 'инцидент',
       where: [x.from, x.to].filter(Boolean).join(' → ') || (x.roadNumbers || []).join(', '),
-      closed: x.iconCategory === 8,
+      closed: x.iconCategory === 8, meters: Math.round(x.d),
     }));
 }
 
 // откуда и куда едет гость по запросу
+const AIRPORT_POS: Record<string, [number, number]> = {
+  CDG: [49.0097, 2.5479], ORY: [48.7262, 2.3652], NCE: [43.6584, 7.2159], GVA: [46.2381, 6.109], LHR: [51.47, -0.4543],
+  DXB: [25.2532, 55.3657], LBG: [48.9694, 2.4414], MRS: [43.4393, 5.2214], PMI: [39.5517, 2.7388], MCM: [43.7258, 7.4196],
+};
 const AIRPORTS: Record<string, string> = { CDG: 'Charles de Gaulle Airport', ORY: 'Orly Airport', NCE: "Nice Côte d'Azur Airport", GVA: 'Geneva Airport', LHR: 'Heathrow Airport', DXB: 'Dubai International Airport', LBG: 'Paris Le Bourget Airport', MRS: 'Marseille Provence Airport', PMI: 'Palma de Mallorca Airport', MCM: 'Monaco Heliport' };
 export function endpoints(r: any, D: any) {
   const day = r.deadline.slice(0, 10);
@@ -76,7 +99,8 @@ export function endpoints(r: any, D: any) {
     to = p.address ? p.address : `${p.name}, ${p.city || trip?.city || ''}`; toName = p.name;
   }
   const from = trip?.hotel ? `${trip.hotel}, ${trip.city}` : null;
-  return from && to ? { from, fromName: trip.hotel, to, toName } : null;
+  const fixed = iata && AIRPORT_POS[iata] ? { lat: AIRPORT_POS[iata][0], lon: AIRPORT_POS[iata][1], label: toName } : null;
+  return from && to ? { from, fromName: trip.hotel, to, toName, fixed, poi: !!p && !p.address, airport: !!iata || /^airport /.test(to) } : null;
 }
 
 const hm = (ms: number) => new Date(ms).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
@@ -90,7 +114,8 @@ const LEAVE: Record<string, (t: string, place: string, d: number) => string> = {
 export async function checkRequest(db: any, r: any, D: any) {
   const e = endpoints(r, D);
   if (!e) return null;
-  const [a, b] = [await geocode(db, e.from), await geocode(db, e.to)];
+  const a = await geocode(db, e.from, null, true);
+  const b = !a ? null : e.fixed ? e.fixed : await geocode(db, e.to, e.airport ? null : a, e.poi);
   if (!a || !b) return { ...e, error: 'not_found' };
   const rt = await route(a, b);
   if (!rt) return { ...e, error: 'no_route' };
@@ -103,5 +128,5 @@ export async function checkRequest(db: any, r: any, D: any) {
     : rt.delay >= 8 ? 1 : 0;
   const c = D.clients.get(r.client_id);
   const msg = (LEAVE[c?.language] || LEAVE.RU)(hm(leaveBy), e.toName, rt.delay);
-  return { ...e, ...rt, near, leaveBy, level, guestText: msg };
+  return { ...e, ...rt, near, leaveBy, level, guestText: msg, toLabel: b.label || e.to, guessed: e.poi };
 }

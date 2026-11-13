@@ -214,7 +214,8 @@ function trafficText(r: any, D: any, t: any) {
   const head = t.level >= 3 ? `⛔ <b>Перекрытие по пути: ${esc(t.toName)}</b>` : `🚦 <b>Пробки по пути: ${esc(t.toName)}</b>`;
   const lines = [head,
     `${c ? `<b>${esc(c.name)}</b>${c.vip ? ' ★' : ''} — ` : ''}${esc(r.summary)} · ${hmT(at.getTime())}`,
-    `Из ${esc(t.fromName)}: <b>${t.minutes} мин</b>${t.delay ? ` вместо ${t.free} (+${t.delay})` : ''} · ${t.km} км`];
+    `Из ${esc(t.fromName)}: <b>${t.minutes} мин</b>${t.delay ? ` вместо ${t.free} (+${t.delay})` : ''} · ${t.km} км`,
+    `<i>→ ${esc(t.toLabel)}${t.guessed ? ' (найдено по названию — добавьте адрес партнёру)' : ''}</i>`];
   for (const x of t.issues.filter((i: any) => i.delay >= 3 || i.kind === 'ROAD_CLOSURE').slice(0, 3)) lines.push(`• ${esc(x.label)}${x.delay ? ` +${x.delay} мин` : ''}`);
   for (const x of t.near.slice(0, 3)) lines.push(`• рядом с местом: ${esc(x.label)}${x.where ? ` (${esc(x.where)})` : ''}`);
   const late = t.leaveBy < Date.now();
@@ -328,7 +329,7 @@ Deno.serve(async (req) => {
     if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return json({ error: 'unauthorized' }, 401);
     if (body.mode === 'traffic_probe') {
       if (!tomtomReady()) return json({ error: 'no_tomtom_key' }, 503);
-      const a = await geocode(db, body.from), b = await geocode(db, body.to);
+      const a = await geocode(db, body.from, null, true), b = a ? await geocode(db, body.to, body.airport ? null : a, true) : null;
       if (!a || !b) return json({ error: 'not_found', a, b });
       return json({ from: a.label, to: b.label, route: await route(a, b), near: await incidentsNear(b) });
     }
