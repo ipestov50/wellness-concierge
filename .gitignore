@@ -12,3 +12,7 @@ dist/
 # система
 .DS_Store
 *.log
+
+# служебные файлы Supabase CLI
+supabase/.temp/
+supabase/.branches/
