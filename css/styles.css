@@ -675,3 +675,21 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
 .bk-ico { font-size: 26px; flex: none; }
 .bk-opt b { display: block; font-size: 16px; }
 .bk-opt small { color: var(--muted); font-size: 13px; }
+
+/* ---------- Telegram ---------- */
+.tg-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--soft); margin-bottom: 14px; }
+.tg-status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.tg-status.on { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.tg-status.on .dot { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); animation: blink 2s ease-in-out infinite; }
+.tg-lead { margin: 0 0 10px; }
+.tg-steps { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 8px; }
+.tg-steps a { color: var(--accent); font-weight: 500; }
+.tg-steps code { background: var(--soft); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+.tg-settings { display: grid; gap: 12px; }
+.tg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.danger.armed { background: var(--crit); color: #fff; border-color: var(--crit); }
+.tg-rules { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.tg-rules summary { cursor: pointer; font-weight: 600; }
+.tg-rules table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 14px; }
+.tg-rules th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; }
+.tg-rules td, .tg-rules th { padding: 6px 4px; border-bottom: 1px solid var(--line); }

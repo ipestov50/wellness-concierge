@@ -4,6 +4,7 @@ import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js
 import { ui, render } from './router.js';
 import { editRequest, editClient, editPartner } from './forms.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
+import { openTelegram } from './telegram.js';
 import './views/requests.js';
 import './views/clients.js';
 import './views/partners.js';
@@ -87,6 +88,7 @@ function renderShell(session) {
           <button class="icon-btn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Меню">⋯</button>
           <div class="menu-list" id="menuList" hidden>
             <div class="menu-who">${esc(session.user.email)}</div>
+            <button type="button" id="tgBtn">✈️ Telegram-уведомления…</button>
             <button type="button" id="backupBtn">💾 Резервная копия…</button>
             <button type="button" id="setPass">Задать пароль</button>
             <button type="button" id="logout">Выйти</button>
@@ -106,7 +108,7 @@ function renderShell(session) {
 onChange(() => { if (shown === 'app' && state.loaded) render(); });
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup]');
+  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup],#tgBtn');
   const menu = $('#menuList');
   if (menu && !menu.hidden && !e.target.closest('.menu')) { menu.hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); }
   if (!t) return;
@@ -132,6 +134,9 @@ document.addEventListener('click', (e) => {
     if (!p) return;
     if (p.length < 8) { toast('Пароль слишком короткий.', 'err'); return; }
     sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? authError(error) : 'Пароль сохранён. Теперь можно входить по паролю.', error ? 'err' : ''));
+  } else if (t.id === 'tgBtn') {
+    if (menu) menu.hidden = true;
+    openTelegram();
   } else if (t.id === 'backupBtn' || t.dataset.backup != null) {
     if (menu) menu.hidden = true;
     openBackup(render);
