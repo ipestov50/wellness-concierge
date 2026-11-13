@@ -6,6 +6,7 @@
 //   setup    — один раз (x-cron-secret): регистрирует вебхук и команды бота
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { generateSuggestions } from './suggest.ts';
+import { tomtomReady, checkRequest, geocode, route, incidentsNear } from './traffic.ts';
 
 const TZ = 'Europe/Paris';
 const SITE = Deno.env.get('SITE_URL') || 'https://wellness-concierge-desk.vercel.app';
@@ -89,7 +90,7 @@ async function loadOwner(owner: string) {
   const [req, cli, par, st, tr, pe, dt] = await Promise.all([
     db.from('requests').select('*').eq('owner_id', owner),
     db.from('clients').select('*').eq('owner_id', owner),
-    db.from('partners').select('id,name').eq('owner_id', owner),
+    db.from('partners').select('*').eq('owner_id', owner),
     db.from('statuses').select('*').eq('owner_id', owner).order('position'),
     db.from('trips').select('*').eq('owner_id', owner),
     db.from('people').select('*').eq('owner_id', owner),
@@ -103,6 +104,7 @@ async function loadOwner(owner: string) {
   if (cut < 0) cut = Math.max(1, active.length - 1);
   return {
     requests: req.data || [], clients: new Map((cli.data || []).map((c: any) => [c.id, c])), partners: new Map((par.data || []).map((p: any) => [p.id, p])),
+    partnersFull: new Map((par.data || []).map((p: any) => [p.id, p])),
     activeKeys: new Set(active.map((s: any) => s.key)), earlyKeys: new Set(active.slice(0, cut).map((s: any) => s.key)),
     label: new Map(statuses.map((s: any) => [s.key, s.label])), doneKey: statuses.find((s: any) => s.kind === 'done')?.key || null,
     clientsList: cli.data || [], trips: tr.data || [], people: pe.data || [], dates: dt.data || [],
@@ -178,6 +180,22 @@ async function runCron() {
       await log(s.owner_id, key, r.id); sent++;
     }
 
+    // 🚦 дороги: запросы через 30 минут – 3 часа, гость в поездке, есть куда ехать
+    if (tomtomReady()) {
+      const soon = open.filter((r: any) => r.deadline && ['Dining', 'Spa & Wellness', 'Activities', 'Health & Fitness', 'Transport', 'Gifts & Events'].includes(r.category)
+        && new Date(r.deadline).getTime() - now >= 30 * 60e3 && new Date(r.deadline).getTime() - now <= 3 * H);
+      for (const r of soon) {
+        try {
+          const t = await checkRequest(db, r, D);
+          if (!t || t.error || t.level < 2) continue;
+          const key = `traffic:${r.id}:${t.level}`;
+          if (await logged(s.owner_id, key)) continue;
+          await send(s.tg_chat_id, trafficText(r, D, t), r.id);
+          await log(s.owner_id, key, r.id); sent++;
+        } catch (e) { console.error('traffic', e); }
+      }
+    }
+
     // утренний бриф
     const today = parisDay(new Date(now));
     if (hour === s.brief_hour && !(await logged(s.owner_id, `brief:${today}`))) {
@@ -187,6 +205,22 @@ async function runCron() {
     report[s.owner_id] = sent;
   }
   return report;
+}
+
+function trafficText(r: any, D: any, t: any) {
+  const c = D.clients.get(r.client_id);
+  const at = new Date(r.deadline);
+  const hmT = (ms: number) => new Date(ms).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  const head = t.level >= 3 ? `⛔ <b>Перекрытие по пути: ${esc(t.toName)}</b>` : `🚦 <b>Пробки по пути: ${esc(t.toName)}</b>`;
+  const lines = [head,
+    `${c ? `<b>${esc(c.name)}</b>${c.vip ? ' ★' : ''} — ` : ''}${esc(r.summary)} · ${hmT(at.getTime())}`,
+    `Из ${esc(t.fromName)}: <b>${t.minutes} мин</b>${t.delay ? ` вместо ${t.free} (+${t.delay})` : ''} · ${t.km} км`];
+  for (const x of t.issues.filter((i: any) => i.delay >= 3 || i.kind === 'ROAD_CLOSURE').slice(0, 3)) lines.push(`• ${esc(x.label)}${x.delay ? ` +${x.delay} мин` : ''}`);
+  for (const x of t.near.slice(0, 3)) lines.push(`• рядом с местом: ${esc(x.label)}${x.where ? ` (${esc(x.where)})` : ''}`);
+  const late = t.leaveBy < Date.now();
+  lines.push('', late ? `⏱ <b>Нужно выезжать сейчас</b> — или сдвинуть время на ${Math.ceil((Date.now() - t.leaveBy) / 60e3 / 5) * 5} мин` : `⏱ <b>Совет:</b> выехать в <b>${hmT(t.leaveBy)}</b>${t.delay >= 15 ? ` или сдвинуть бронь на ${hmT(at.getTime() + Math.ceil(t.delay / 5) * 5 * 60e3)}` : ''}`);
+  lines.push('', '<b>Текст гостю:</b>', `<blockquote>${esc(t.guestText)}</blockquote>`);
+  return lines.join('\n');
 }
 
 async function openSuggestions(owner: string) {
@@ -292,6 +326,12 @@ Deno.serve(async (req) => {
   // расписание и разовая настройка
   if (req.headers.get('x-cron-secret')) {
     if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return json({ error: 'unauthorized' }, 401);
+    if (body.mode === 'traffic_probe') {
+      if (!tomtomReady()) return json({ error: 'no_tomtom_key' }, 503);
+      const a = await geocode(db, body.from), b = await geocode(db, body.to);
+      if (!a || !b) return json({ error: 'not_found', a, b });
+      return json({ from: a.label, to: b.label, route: await route(a, b), near: await incidentsNear(b) });
+    }
     if (!TOKEN) return json({ error: 'no_token' }, 503);
     if (body.mode === 'setup') {
       const hook = await tg('setWebhook', { url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/jarvis`, secret_token: HOOK_SECRET, allowed_updates: ['message', 'callback_query'] });
@@ -317,6 +357,14 @@ Deno.serve(async (req) => {
       await tg('setMyCommands', { commands: [{ command: 'brief', description: 'Бриф на сегодня' }] });
     }
     return json({ bot: me.result.username, configured: true });
+  }
+  if (body.mode === 'traffic') {
+    if (!tomtomReady()) return json({ error: 'no_tomtom_key' }, 503);
+    const D = await loadOwner(u.user.id);
+    const r = D.requests.find((x: any) => x.id === body.id);
+    if (!r?.deadline) return json({ error: 'no_deadline' }, 400);
+    const t = await checkRequest(db, r, D);
+    return json(t || { error: 'no_endpoints' });
   }
   if (body.mode === 'suggest') {
     await db.from('app_settings').upsert({ owner_id: u.user.id }, { onConflict: 'owner_id', ignoreDuplicates: true });

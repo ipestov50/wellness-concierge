@@ -6,6 +6,7 @@ import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue } from './birthday.js';
 import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
+import { roadSlot, bindRoad } from './road.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -38,6 +39,7 @@ export function editRequest(id, presetClient, preset = {}) {
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
+    roadSlot(r) +
     checklistSection(r) +
     field('client_id', 'Гость', select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'))) +
     `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
@@ -83,6 +85,7 @@ export function editRequest(id, presetClient, preset = {}) {
   });
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
+  bindRoad(m.form);
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
     m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));
@@ -155,6 +158,7 @@ export function editPartner(id) {
     field('name', 'Название', input('name', p.name, 'type="text" required')) +
     `<div class="f2">${field('type', 'Тип', select('type', options(PARTNER_TYPES, p.type)))}` +
     field('city', 'Город', input('city', p.city, 'type="text"')) + '</div>' +
+    field('address', 'Адрес', input('address', p.address, 'type="text" placeholder="12 Rue de Rivoli, Paris"'), 'Нужен Jarvis, чтобы следить за пробками по пути к партнёру') +
     field('contact', 'Контакт', area('contact', p.contact, 'rows="2"'), 'Имя менеджера, телефон, почта, сайт') +
     `<div class="f2">${field('commission', 'Комиссия', input('commission', p.commission, 'type="text" placeholder="10%"'))}` +
     field('rating', 'Моя оценка', select('rating', options([[5, '★★★★★'], [4, '★★★★'], [3, '★★★'], [2, '★★'], [1, '★']], p.rating, '— без оценки —'))) + '</div>' +
@@ -165,7 +169,7 @@ export function editPartner(id) {
     body,
     onSave: async (v) => {
       await save('partners', id, {
-        name: v.name.trim(), type: v.type, city: nul(v.city.trim()), contact: nul(v.contact.trim()),
+        name: v.name.trim(), type: v.type, city: nul(v.city.trim()), address: nul(v.address.trim()), contact: nul(v.contact.trim()),
         commission: nul(v.commission.trim()), rating: v.rating ? Number(v.rating) : null, terms: nul(v.terms.trim()), notes: nul(v.notes.trim()),
       });
       toast(id ? 'Партнёр сохранён' : 'Партнёр добавлен');
