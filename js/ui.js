@@ -134,3 +134,17 @@ export function toast(msg, kind = '', action = null) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), action ? 7000 : kind === 'err' ? 6000 : 3500);
 }
+
+// ---------- монограмма гостя ----------
+export function initials(name) {
+  const clean = String(name || '').replace(/\(.*?\)/g, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+}
+export function avatar(c, cls = '') {
+  if (!c) return `<span class="av av-none ${cls}" aria-hidden="true">?</span>`;
+  const clean = c.name.replace(/\(.*?\)/g, '').trim();
+  let h = 0;
+  for (const ch of clean) h = (h * 31 + ch.codePointAt(0)) % 360;
+  return `<span class="av${c.vip ? ' av-vip' : ''} ${cls}" style="--h:${h}" aria-hidden="true">${esc(initials(c.name))}</span>`;
+}

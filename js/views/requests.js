@@ -1,5 +1,5 @@
 import { STATUSES, ARCHIVE, CATEGORIES, URGENCY_LABEL, STATUS_LABEL, TZ } from '../const.js';
-import { esc, fmtDeadline, fmtMoney, toast } from '../ui.js';
+import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput } from '../ui.js';
 import { state, byId, save, remove } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { editRequest } from '../forms.js';
@@ -95,19 +95,45 @@ function groupOf(r, today, tomorrow, weekEnd) {
 }
 const GROUPS = [['late', 'Просрочено'], ['today', 'Сегодня'], ['tomorrow', 'Завтра'], ['week', 'На этой неделе'], ['later', 'Позже'], ['none', 'Без срока']];
 
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
+
 function rowHtml(r, group) {
   const c = byId('clients', r.client_id);
   const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
   const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
     ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : fmtDeadline(r.deadline);
-  return `<div class="trow-wrap u-line-${esc(r.urgency)}"><button class="done-btn" data-done="${r.id}" type="button" aria-label="Отметить «${esc(r.summary)}» выполненным" title="Сделано"></button>
-  <button class="trow" data-req="${r.id}" type="button">
-    <span class="cat">${CATEGORIES[r.category] || '📌'}</span>
-    <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
-      <span class="tsum">${esc(r.summary)}</span></span>
-    <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
-      <span class="tstatus">${esc(STATUS_LABEL[r.status] || '')}</span></span>
-  </button></div>`;
+  return `<div class="trow-wrap u-line-${esc(r.urgency)}" data-row="${r.id}">
+    <div class="swipe-bg" aria-hidden="true"><span class="sb-done">✓ Сделано</span><span class="sb-later">На завтра →</span></div>
+    <div class="swipe-fg">
+      <button class="done-btn" data-done="${r.id}" type="button" aria-label="Отметить «${esc(r.summary)}» выполненным" title="Сделано">${CHECK}</button>
+      <button class="trow" data-req="${r.id}" type="button">
+        ${avatar(c)}
+        <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
+          <span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span></span>
+        <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
+          <span class="tstatus">${esc(STATUS_LABEL[r.status] || '')}</span></span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function summary(today) {
+  const open = state.requests.filter((r) => !ARCHIVE.includes(r.status));
+  const now = new Date();
+  const late = open.filter((r) => r.deadline && new Date(r.deadline) < now).length;
+  const todayN = open.filter((r) => r.deadline && parisDay(new Date(r.deadline)) === today && new Date(r.deadline) >= now).length;
+  const done = state.requests.filter((r) => r.status === 'done' && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
+  const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now) % 24;
+  const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
+  const date = now.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
+  return `<section class="hero">
+    <div class="hero-hello"><h2>${hello}</h2><span>${esc(date)}</span></div>
+    <div class="hero-stats">
+      <div class="stat${late ? ' s-late' : ''}"><b data-count="${late}">${late}</b><span>просрочено</span></div>
+      <div class="stat s-today"><b data-count="${todayN}">${todayN}</b><span>на сегодня</span></div>
+      <div class="stat s-done"><b data-count="${done}">${done}</b><span>сделано</span></div>
+    </div>
+  </section>`;
 }
 
 function todayView(list) {
@@ -120,7 +146,9 @@ function todayView(list) {
   const html = GROUPS.filter(([g]) => by[g]?.length).map(([g, label]) =>
     `<section class="tgroup g-${g}"><h3>${label}<span>${by[g].length}</span></h3>
       <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g)).join('')}</div></section>`).join('');
-  return html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`;
+  return (ui.q ? '' : summary(today)) +
+    (html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`) +
+    (html ? '<p class="hint swipe-hint">На телефоне: смахните строку вправо — «Сделано», влево — «На завтра».</p>' : '');
 }
 
 function boardView(list) {
@@ -160,6 +188,7 @@ function view(app) {
   app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
+  if (!board) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
 }
 
 // «Сделано»: статус «Выполнено», строка уходит, в уведомлении можно отменить
@@ -285,3 +314,66 @@ async function drop(id, col, y) {
 }
 
 export { editRequest };
+
+// ---------- «На завтра» ----------
+async function postpone(id) {
+  const r = byId('requests', id);
+  if (!r) return;
+  const before = r.deadline;
+  let next;
+  if (r.deadline) next = new Date(+new Date(r.deadline) + 864e5).toISOString();
+  else next = fromParisInput(parisDay(new Date(Date.now() + 864e5)) + 'T10:00');
+  try {
+    await save('requests', id, { deadline: next });
+    toast(`На завтра: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { deadline: before }) });
+  } catch (err) { render(); toast('Не удалось перенести: ' + (err.message || err), 'err'); }
+}
+
+// ---------- свайп строки пальцем ----------
+function enableSwipe(wrap) {
+  const fg = wrap.querySelector('.swipe-fg');
+  const id = wrap.dataset.row;
+  wrap.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    const sx = e.clientX, sy = e.clientY;
+    let dx = 0, mode = null; // null → ещё не решили, 'x' → свайп, 'y' → прокрутка
+    const W = wrap.offsetWidth, LIMIT = Math.min(110, W * 0.3);
+    const move = (ev) => {
+      const ddx = ev.clientX - sx, ddy = ev.clientY - sy;
+      if (!mode) {
+        if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+        mode = Math.abs(ddx) > Math.abs(ddy) * 1.3 ? 'x' : 'y';
+        if (mode === 'x') { wrap.classList.add('swiping'); dragActive = true; }
+      }
+      if (mode !== 'x') return;
+      dx = ddx;
+      fg.style.transform = `translateX(${dx}px)`;
+      wrap.classList.toggle('arm-done', dx > LIMIT);
+      wrap.classList.toggle('arm-later', dx < -LIMIT);
+      wrap.classList.toggle('dir-right', dx > 0);
+    };
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      removeEventListener('pointercancel', up);
+      dragActive = false;
+      if (mode !== 'x') return;
+      suppressClick = true; setTimeout(() => { suppressClick = false; }, 60);
+      wrap.classList.remove('swiping');
+      if (dx > LIMIT) {
+        fg.style.transform = `translateX(${W}px)`;
+        markDone(id, wrap.querySelector('.done-btn'));
+      } else if (dx < -LIMIT) {
+        fg.style.transform = `translateX(${-W}px)`;
+        wrap.classList.add('leaving');
+        setTimeout(() => postpone(id), 250);
+      } else {
+        fg.style.transform = '';
+        wrap.classList.remove('arm-done', 'arm-later');
+      }
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+    addEventListener('pointercancel', up);
+  });
+}

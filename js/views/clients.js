@@ -1,5 +1,5 @@
 import { ARCHIVE } from '../const.js';
-import { esc, fmtDate } from '../ui.js';
+import { esc, fmtDate, avatar } from '../ui.js';
 import { state, byId } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { restrictionsBlock } from '../forms.js';
@@ -30,8 +30,8 @@ function profile(c) {
   const trips = (c.travel_history || []).map((t) => { const [place, when, ...note] = t.split('|').map((s) => s.trim()); return { place, when, note: note.join(' | ') }; });
   return `<div class="panel">
     ${mobile() ? '<button class="btn small back" id="back" type="button">← Все клиенты</button>' : ''}
-    <h2>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}</h2>
-    <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · последний контакт ${esc(fmtDate(c.last_contact))}` : ''}</div>
+    <div class="phead">${avatar(c, 'av-lg')}<div><h2>${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</h2>
+    <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · последний контакт ${esc(fmtDate(c.last_contact))}` : ''}</div></div></div>
     ${contacts(c)}
     ${restrictionsBlock(c)}
     <div class="grid2">${prefs.map(([t, v]) => `<div class="blk"><h4>${t}</h4><p>${v ? esc(v) : '<span class="muted">—</span>'}</p></div>`).join('')}</div>
@@ -61,9 +61,9 @@ function view(app) {
       <div class="list">${list.map((c) => {
         const n = state.requests.filter((r) => r.client_id === c.id && !ARCHIVE.includes(r.status)).length;
         const warn = c.allergies?.length || c.diet?.length || c.health?.length;
-        return `<button class="row" data-cl="${c.id}" aria-current="${ui.client === c.id}" type="button">
+        return `<button class="row" data-cl="${c.id}" aria-current="${ui.client === c.id}" type="button">${avatar(c)}<span class="row-txt">
           <b>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
-          <span>${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${n ? ` · открытых: ${n}` : ''}</span></button>`;
+          <span>${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${n ? ` · открытых: ${n}` : ''}</span></span></button>`;
       }).join('') || `<div class="empty">${q ? 'Никого не нашлось.' : 'Клиентов пока нет.'}</div>`}</div>
     </div>` : ''}
     ${showProfile ? `<div>${profile(byId('clients', ui.client))}</div>` : ''}
