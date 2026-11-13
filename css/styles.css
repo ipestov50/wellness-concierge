@@ -1035,3 +1035,61 @@ details.past summary { cursor: pointer; color: var(--muted); font-size: 13px; fo
 .sg-touch { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--gold) 9%, var(--bg)); }
 .sg-touch > b { color: color-mix(in srgb, var(--gold) 70%, var(--ink)); }
 .sg-touch li { font-size: 14px; }
+
+/* =================== ЧЕК-ЛИСТ: тихо, аккуратно, плавно =================== */
+.cl { border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; background: var(--surface); overflow: hidden; transition: box-shadow .4s var(--ease), border-color .4s; }
+.cl.complete { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
+.cl-head { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; padding: 11px 14px; text-align: left; }
+.cl-title { flex: 1; font-weight: 600; font-size: 14.5px; }
+.cl-title small { font-weight: 400; color: var(--muted); }
+.cl-prog { display: inline-flex; align-items: center; gap: 8px; }
+.cl-prog small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+.cl-bar { width: 64px; height: 4px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+.cl-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .5s var(--ease); }
+.cl-chev { color: var(--muted); font-size: 12px; transition: transform .3s var(--ease); }
+.cl.open .cl-chev { transform: rotate(180deg); }
+/* плавное раскрытие без скачков высоты */
+.cl-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s var(--ease); }
+.cl.open .cl-body { grid-template-rows: 1fr; }
+.cl-inner { overflow: hidden; }
+.cl-phase { padding: 0 8px 4px; }
+.cl-ph { display: block; padding: 8px 6px 4px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.cl-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 6px; border-radius: 10px; transition: background .2s, opacity .22s, transform .22s; }
+.cl-item:hover { background: var(--bg); }
+.cl-item.leaving { opacity: 0; transform: translateX(10px); }
+.cl-check { flex: none; width: 22px; height: 22px; border: 0; background: none; padding: 0; margin-top: 1px; }
+.cl-check svg { width: 22px; height: 22px; overflow: visible; }
+.cl-check circle { fill: none; stroke: color-mix(in srgb, var(--muted) 60%, transparent); stroke-width: 1.4; transition: fill .25s var(--ease), stroke .25s; }
+.cl-check path { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset .3s .08s var(--ease); }
+.cl-check:hover circle { stroke: var(--accent); }
+.cl-item.done .cl-check circle { fill: var(--accent); stroke: var(--accent); }
+.cl-item.done .cl-check path { stroke-dashoffset: 0; }
+.cl-item.done .cl-check svg { animation: pop .3s var(--spring); }
+.cl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 14px; line-height: 1.35; }
+.cl-text > span { transition: color .3s, opacity .3s; background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 1px; transition: background-size .35s var(--ease), color .3s; }
+.cl-item.done .cl-text > span { color: var(--muted); background-size: 100% 1px; }
+.cl-text small { color: var(--muted); font-size: 12px; transition: opacity .3s; }
+.cl-item.done .cl-text small { opacity: .5; }
+.cl-star { color: var(--gold); font-weight: 600; font-size: 11px; }
+.cl-x { flex: none; border: 0; background: none; color: var(--muted); opacity: 0; width: 22px; height: 22px; border-radius: 6px; font-size: 15px; transition: opacity .15s; }
+.cl-item:hover .cl-x, .cl-x:focus-visible { opacity: .7; }
+@media (hover: none) { .cl-x { opacity: .35; } }
+.cl-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 14px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); margin-top: 4px; }
+.cl-add { flex: 1 1 160px; min-height: 34px !important; padding: 6px 10px !important; font-size: 14px !important; border-radius: 9px !important; background: var(--bg) !important; border-color: transparent !important; }
+.cl-link { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 2px; display: inline-flex; align-items: center; gap: 6px; }
+.cl-link .spin { width: 11px; height: 11px; }
+.cl-tpl { width: auto !important; min-height: 32px !important; padding: 4px 28px 4px 8px !important; font-size: 12.5px !important; border-color: transparent !important; background-color: var(--bg) !important; color: var(--muted); }
+.cl-empty { color: var(--muted); padding: 4px 14px; margin: 0; }
+
+/* кольцо прогресса на строках «Сегодня» */
+.ring { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; vertical-align: middle; }
+.ring svg { display: block; }
+.ring-bg { fill: none; stroke: var(--soft); stroke-width: 2; }
+.ring-fg { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset .6s var(--ease); }
+.ring small { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ring.full .ring-fg { stroke: var(--gold); }
+/* тонкая полоска прогресса на карточке доски */
+.card-cl { display: block; height: 3px; border-radius: 3px; background: var(--soft); margin-top: 9px; overflow: hidden; }
+.card-cl i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.cl-text > span { background: none !important; text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: transparent; transition: text-decoration-color .35s var(--ease), color .3s; }
+.cl-item.done .cl-text > span { text-decoration-color: currentColor; }

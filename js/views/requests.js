@@ -2,6 +2,7 @@ import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
+import { ring } from '../checklist.js';
 import { calendarView, bindCalendar } from './calendar.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
@@ -31,6 +32,7 @@ export function requestCard(r, { showClient = true } = {}) {
       ${allergic ? '<span class="flag warn">⚠ ограничения</span>' : ''}
       ${r.needs_review ? '<span class="flag">проверить</span>' : ''}
       ${r.needs_approval ? '<span class="flag">одобрение гостя</span>' : ''}</div>` : ''}
+    ${(r.checklist?.items || []).length ? `<span class="card-cl"><i style="width:${(r.checklist.items.filter((x) => x.done).length / r.checklist.items.length) * 100}%"></i></span>` : ''}
   </button><button class="card-menu" data-cardmenu="${r.id}" type="button" aria-label="Действия с запросом" aria-haspopup="menu">⋯</button></div>`;
 }
 
@@ -131,7 +133,7 @@ function rowHtml(r, group) {
           <span class="tline"><b class="tname">${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
             <span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span></span>
           <span class="tline"><span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span>
-            <span class="tstatus">${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
+            <span class="tstatus">${ring(r, 14)}${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
         </span>
       </button>
     </div>

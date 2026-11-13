@@ -5,6 +5,7 @@ import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue } from './birthday.js';
+import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -25,12 +26,19 @@ export function restrictionsBlock(c) {
 }
 
 export function editRequest(id, presetClient, preset = {}) {
+  const ex = id ? byId('requests', id) : null;
+  if (ex && !ex.checklist) {
+    // запрос создан до появления чек-листов — собираем его сейчас
+    ex.checklist = buildChecklist(ex);
+    save('requests', id, { checklist: ex.checklist }).catch(() => {});
+  }
   const r = id ? byId('requests', id) : { client_id: presetClient || '', status: firstKey(), urgency: 'normal', category: 'Other', currency: 'EUR', ...preset };
   if (!r) return;
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
+    checklistSection(r) +
     field('client_id', 'Гость', select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'))) +
     `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
     field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
@@ -74,6 +82,7 @@ export function editRequest(id, presetClient, preset = {}) {
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
   bindDeadlinePicker(m.form);
+  bindChecklist(m.form);
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
     m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));

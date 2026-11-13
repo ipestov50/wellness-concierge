@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase.js';
+import { buildChecklist } from './checklist.js';
 
 export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], loaded: false };
 const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions'];
@@ -51,6 +52,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 export async function save(table, id, data) {
+  // новый запрос сразу получает продуманный чек-лист под свой тип
+  if (table === 'requests' && !id && data.checklist === undefined) {
+    try { data = { ...data, checklist: buildChecklist(data) }; } catch {}
+  }
   const q = id ? sb.from(table).update(data).eq('id', id) : sb.from(table).insert(data);
   const { data: row, error } = await q.select().single();
   if (error) throw error;
