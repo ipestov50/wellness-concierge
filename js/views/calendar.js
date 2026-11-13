@@ -8,7 +8,12 @@ import { birthdayInfo } from '../birthday.js';
 import { editRequest } from '../forms.js';
 import { editTrip, editPerson, editDate } from '../dossier.js';
 
-const H0 = 6, H1 = 24, HOUR_PX = 56; // сетка с 06:00 до 24:00
+const H0 = 6, H1 = 24; // сетка с 06:00 до 24:00
+// масштаб: высота одного часа в пикселях
+const ZOOMS = [36, 48, 64, 84, 112, 144];
+let zoom = (() => { try { const z = +localStorage.getItem('cal.zoom'); return ZOOMS.includes(z) ? z : 64; } catch { return 64; } })();
+let HOUR_PX = zoom;
+let keepMinute = null; // какое время держать в центре после смены масштаба
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const WD_LONG = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -204,8 +209,15 @@ export function calendarView(list) {
         <button type="button" class="icon-btn" data-calnav="1" aria-label="Вперёд">›</button>
         <button type="button" class="btn small" data-caltoday>Сегодня</button>
       </div>
-      <div class="seg cal-modes" role="tablist" aria-label="Масштаб">
+      <div class="cal-right">
+      ${mode !== 'month' && !(mode === 'week' && mobile()) ? `<div class="zoom" role="group" aria-label="Масштаб сетки">
+        <button type="button" class="icon-btn" data-zoom="-1" aria-label="Отдалить"${ZOOMS.indexOf(zoom) === 0 ? ' disabled' : ''}>−</button>
+        <span class="zoom-v">${Math.round((zoom / 64) * 100)}%</span>
+        <button type="button" class="icon-btn" data-zoom="1" aria-label="Приблизить"${ZOOMS.indexOf(zoom) === ZOOMS.length - 1 ? ' disabled' : ''}>+</button>
+      </div>` : ''}
+      <div class="seg cal-modes" role="tablist" aria-label="Режим календаря">
         ${[['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']].map(([k, l]) => `<button type="button" data-calmode="${k}" aria-selected="${k === mode}">${l}</button>`).join('')}
+      </div>
       </div>
     </header>
     <div class="cal-filters">
@@ -259,8 +271,34 @@ export function bindCalendar(app) {
     const min = Math.round(((e.clientY - r.top) / HOUR_PX * 60 + H0 * 60) / 30) * 30;
     editRequest(null, null, { deadline: fromParisInput(`${col.dataset.day}T${hhmm(Math.min(min, 23 * 60 + 30))}`) });
   }));
+  // масштаб: держим в центре то же время
+  const setZoom = (dir) => {
+    const i = Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoom) + dir));
+    if (ZOOMS[i] === zoom) return;
+    const box = cal.querySelector('#tgScroll');
+    if (box) keepMinute = H0 * 60 + ((box.scrollTop + box.clientHeight / 2) / HOUR_PX) * 60;
+    zoom = HOUR_PX = ZOOMS[i];
+    try { localStorage.setItem('cal.zoom', String(zoom)); } catch {}
+    render();
+  };
+  cal.querySelectorAll('[data-zoom]').forEach((b) => b.onclick = () => setZoom(+b.dataset.zoom));
+  // Ctrl/⌘ + колесо или щипок на тачпаде тоже меняют масштаб
+  const scBox = cal.querySelector('#tgScroll');
+  let wheelLock = 0;
+  scBox?.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    if (Date.now() - wheelLock < 180) return;
+    wheelLock = Date.now();
+    setZoom(e.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
   // прокрутка к 8:00 или к текущему времени
   const sc = cal.querySelector('#tgScroll');
+  if (sc && keepMinute != null) {
+    sc.scrollTop = ((keepMinute - H0 * 60) / 60) * HOUR_PX - sc.clientHeight / 2;
+    sc.dataset.scrolled = '1';
+    keepMinute = null;
+  }
   if (sc && !sc.dataset.scrolled) {
     const nowMin = minOf(new Date().toISOString());
     const target = (ui.calDate || todayParis()) === todayParis() && nowMin > 9 * 60 ? nowMin - 90 : 8 * 60;
