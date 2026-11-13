@@ -105,21 +105,31 @@ const GROUPS = [['late', 'Просрочено'], ['today', 'Сегодня'], [
 
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
 
+// «пт 20.11 · 20:30» — коротко, чтобы имя гостя помещалось целиком
+function shortWhen(iso) {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit' }).replace(',', '');
+  const t = fmtTime(iso);
+  return t === '00:00' ? day : `${day} · ${t}`;
+}
+
 function rowHtml(r, group) {
   const c = byId('clients', r.client_id);
   const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
   const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
-    ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : fmtDeadline(r.deadline);
+    ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : shortWhen(r.deadline);
   return `<div class="trow-wrap u-line-${esc(r.urgency)}" data-row="${r.id}">
     <div class="swipe-bg" aria-hidden="true"><span class="sb-done">✓ Сделано</span><span class="sb-later">На завтра →</span></div>
     <div class="swipe-fg">
       <button class="done-btn" data-done="${r.id}" type="button" aria-label="Отметить «${esc(r.summary)}» выполненным" title="Сделано">${CHECK}</button>
       <button class="trow" data-req="${r.id}" type="button">
         ${avatar(c)}
-        <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
-          <span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span></span>
-        <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
-          <span class="tstatus">${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
+        <span class="tbody">
+          <span class="tline"><b class="tname">${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
+            <span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span></span>
+          <span class="tline"><span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span>
+            <span class="tstatus">${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
+        </span>
       </button>
     </div>
   </div>`;
@@ -157,8 +167,7 @@ function todayView(list) {
   const html = GROUPS.filter(([g]) => by[g]?.length).map(([g, label]) =>
     `<section class="tgroup g-${g}"><h3>${label}<span>${by[g].length}</span></h3>
       <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g)).join('')}</div></section>`).join('');
-  return (ui.q ? '' : summary(today)) +
-    (html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`) +
+  return (html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`) +
     (html ? '<p class="hint swipe-hint">На телефоне: смахните строку вправо — «Сделано», влево — «На завтра».</p>' : '');
 }
 
@@ -268,17 +277,19 @@ function view(app) {
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
   const board = ui.reqView === 'board';
-  app.innerHTML = `${smartBar()}
-    <div class="bar">
+  const toolbar = `<div class="bar toolbar">
       <div class="seg" role="tablist" aria-label="Вид">
         <button type="button" data-view="today" aria-selected="${!board}">Сегодня</button>
         <button type="button" data-view="board" aria-selected="${board}">Доска</button>
       </div>
-      <div class="grow"><input type="search" id="q" placeholder="Поиск по запросам и клиентам" value="${esc(ui.q)}" autocomplete="off"></div>
-      <span class="count">Открытых: ${open}</span>
-      ${board ? `<button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
-    </div>
-    ${board ? boardView(list) : todayView(list)}`;
+      <div class="grow search"><input type="search" id="q" placeholder="Поиск по запросам и гостям" value="${esc(ui.q)}" autocomplete="off"></div>
+      ${board ? `<span class="count">Открытых: ${open}</span>
+        <button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
+    </div>`;
+  // «Сегодня» — одна центрированная колонка: приветствие → Jarvis → переключатель и поиск → список
+  app.innerHTML = board
+    ? `<div class="board-top">${smartBar()}${toolbar}</div>${boardView(list)}`
+    : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${smartBar()}${toolbar}${todayView(list)}</div>`;
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}
@@ -290,6 +301,7 @@ function view(app) {
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
   if (!board) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
 }
+
 
 // «Сделано»: статус «Выполнено», строка уходит, в уведомлении можно отменить
 async function markDone(id, btn) {

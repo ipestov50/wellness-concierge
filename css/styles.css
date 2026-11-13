@@ -581,3 +581,79 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
 .pv-add { margin: -2px 0 12px; font-size: 13.5px; color: var(--muted); }
 .pv-add .chip { border-color: var(--accent); color: var(--accent); }
 .pv-money { display: grid; grid-template-columns: 1fr 90px; gap: 6px; }
+
+/* =================== РИТМ ЭКРАНА «СЕГОДНЯ» =================== */
+/* одна колонка по центру, одинаковая ширина и шаг 20px между блоками */
+.stack { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.stack > * { margin: 0 !important; max-width: none !important; width: 100%; }
+.stack .tgroup { margin: 0; }
+.stack .tgroup + .tgroup { margin-top: 4px !important; }
+.board-top { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+.board-top .jarvis { max-width: none; margin: 0; }
+.board-top .bar { margin: 0; }
+
+/* приветствие: компактнее, цифры одного размера с заголовком */
+.hero { padding: 18px 20px; gap: 12px 20px; border-radius: 18px; }
+.hero-hello h2 { font-size: 26px; }
+.hero-hello span { font-size: 14px; }
+.hero-stats { gap: 8px; }
+.stat { min-width: 84px; padding: 8px 12px; border-radius: 12px; }
+.stat b { font-size: 24px; }
+.stat span { font-size: 11.5px; letter-spacing: .02em; }
+.hero-bdays { padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+
+/* Jarvis: та же высота, что у строк поиска; подсказка тише */
+.jarvis-form { border-radius: 16px; padding: 6px 6px 6px 42px; }
+.jarvis-form textarea { min-height: 40px; padding: 9px 2px; }
+.jarvis-send { width: 40px; height: 40px; border-radius: 11px; }
+.jarvis-foot { padding: 6px 4px 0; }
+.jarvis-foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+
+/* панель: переключатель и поиск в одну линию одинаковой высоты */
+.toolbar { gap: 10px; flex-wrap: nowrap; }
+.toolbar .seg { flex: none; height: 44px; align-items: stretch; }
+.toolbar .seg button { padding: 0 18px; }
+.toolbar .search { flex: 1; min-width: 0; }
+.toolbar .search input { height: 44px; border-radius: 12px; }
+.board-top .toolbar { flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .stack { gap: 16px; }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar .seg { width: 100%; }
+  .hero { padding: 16px; }
+  .hero-hello h2 { font-size: 24px; }
+  .jarvis-foot > span { display: none; }
+  .jarvis-foot { justify-content: flex-end; }
+}
+
+/* группы и строки: единый размер шрифтов */
+.tgroup h3 { font-size: 12px; margin: 0 0 8px 4px; }
+.trow { min-height: 62px; padding: 10px 14px 10px 4px; gap: 12px; }
+.tmain b { font-size: 15px; }
+.tsum { font-size: 14px; }
+.twhen { font-size: 14px; }
+.tstatus { font-size: 12px; }
+.empty.calm { padding: 40px 16px; }
+.swipe-hint { margin: -8px 0 0 !important; }
+
+/* строка списка: две линии — «гость … срок» и «суть … статус» */
+.trow .tbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tline { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.tname { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tline .tsum { flex: 1; min-width: 0; }
+.tline .twhen, .tline .tstatus { flex: none; text-align: right; }
+.trow .tside, .trow .tmain { display: none; }
+
+/* кнопка «Новый …»: на телефоне только плюс */
+#addBtn { display: inline-flex; align-items: center; gap: 6px; }
+#addBtn .plus { font-weight: 600; }
+@media (max-width: 760px) {
+  .top { flex-wrap: wrap; }
+  .brand { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #addBtn { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 10px; }
+  #addBtn .add-text { display: none; }
+  #addBtn .plus { font-size: 18px; }
+  .trow { padding: 10px 12px 10px 2px; gap: 10px; }
+  .trow .av { width: 34px; height: 34px; font-size: 13px; }
+  .done-btn { width: 42px; }
+}

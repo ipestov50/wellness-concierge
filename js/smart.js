@@ -30,12 +30,12 @@ export function smartBar() {
   return `<section class="jarvis${smart.busy ? ' busy' : ''}">
     <form class="jarvis-form" id="jarvisForm" autocomplete="off">
       <span class="jarvis-mark" aria-hidden="true">✦</span>
-      <textarea id="jarvisInput" rows="1" placeholder="Jarvis, запиши: «Мария Иванова: массаж в пятницу в 15:00, аллергия на миндальное масло»"
+      <textarea id="jarvisInput" rows="1" placeholder="Опишите запрос для Jarvis"
         aria-label="Умное поле: опишите запрос обычным текстом" ${smart.busy ? 'disabled' : ''}>${esc(smart.text)}</textarea>
       <button class="jarvis-send" type="submit" aria-label="Разобрать" ${smart.busy ? 'disabled' : ''}>${smart.busy ? '<span class="spin"></span>' : '↵'}</button>
     </form>
     <div class="jarvis-foot">
-      <span>${smart.busy ? 'Jarvis разбирает текст…' : 'Enter — разобрать · Shift+Enter — новая строка'}</span>
+      <span>${smart.busy ? 'Jarvis разбирает текст…' : 'Например: «Мария Иванова: массаж в пятницу в 15:00, аллергия на миндаль»'}</span>
       <label class="switch"><input type="checkbox" id="jarvisAuto"${smart.auto ? ' checked' : ''}><span></span>Создавать сразу</label>
     </div>
     ${r ? `<div class="jarvis-result ${r.kind}" role="status"><div>${r.lines.map((l) => `<p>${l}</p>`).join('')}</div>

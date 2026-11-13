@@ -10,7 +10,11 @@ export function render() {
   if (!app) return;
   document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === ui.tab)));
   const add = document.getElementById('addBtn');
-  if (add) add.textContent = { requests: '+ Новый запрос', clients: '+ Новый клиент', partners: '+ Новый партнёр' }[ui.tab];
+  if (add) {
+    const label = { requests: 'Новый запрос', clients: 'Новый клиент', partners: 'Новый партнёр' }[ui.tab];
+    add.innerHTML = `<span class="plus" aria-hidden="true">＋</span><span class="add-text">${label}</span>`;
+    add.setAttribute('aria-label', label);
+  }
   // не теряем фокус и курсор в поле поиска при перерисовке
   const active = document.activeElement;
   const keepId = active && app.contains(active) && active.id ? active.id : null;
