@@ -320,7 +320,7 @@ Deno.serve(async (req) => {
   }
   if (body.mode === 'suggest') {
     await db.from('app_settings').upsert({ owner_id: u.user.id }, { onConflict: 'owner_id', ignoreDuplicates: true });
-    return json(await generateSuggestions(db, u.user.id, await loadOwner(u.user.id)));
+    return json(await generateSuggestions(db, u.user.id, await loadOwner(u.user.id), { wide: !!body.wide }));
   }
   if (body.mode === 'test') {
     const { data: s } = await db.from('app_settings').select('*').eq('owner_id', u.user.id).maybeSingle();

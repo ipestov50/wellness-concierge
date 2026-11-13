@@ -20,7 +20,10 @@ const MON = ['января', 'февраля', 'марта', 'апреля', 'м
 const inDays = (n: number) => (n === 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`);
 const shortName = (s: string) => String(s || '').replace(/\s*\(.*?\)/g, '');
 
-export async function generateSuggestions(db: any, owner: string, D: any) {
+// wide = ручной запуск «Что впереди?»: смотрим дальше (поездки 21 день, даты 30 дней, рейсы 21 день)
+export async function generateSuggestions(db: any, owner: string, D: any, opt: { wide?: boolean } = {}) {
+  const W = { trip: 21, date: 30, flight: 21 };
+  const N = opt.wide ? W : { trip: 5, date: 10, flight: 14 };
   const now = new Date();
   const today = dayOf(now);
   const reqs = D.requests as any[];
@@ -31,8 +34,12 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
   const { data: dismissed } = await db.from('suggestions').select('kind,client_id').eq('owner_id', owner).eq('status', 'dismissed').gte('updated_at', new Date(Date.now() - 30 * 864e5).toISOString());
   const muted = new Set((dismissed || []).map((x: any) => `${x.kind}:${x.client_id}`));
 
-  const found: any[] = [];
-  const push = (s: any) => { if (!muted.has(`${s.kind}:${s.client_id}`)) found.push({ owner_id: owner, ...s }); };
+  const found: any[] = [];        // попадают в рабочее окно — сохраняем
+  const watch = new Set<string>(); // в широком окне — не считаем устаревшими
+  const push = (s: any, inWindow = true) => {
+    watch.add(s.key);
+    if (inWindow && !muted.has(`${s.kind}:${s.client_id}`)) found.push({ owner_id: owner, ...s });
+  };
 
   for (const t of D.trips as any[]) {
     const c = D.clients.get(t.client_id);
@@ -43,18 +50,19 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
       const n = diff(t.start_date, today);
       const end = t.end_date || t.start_date;
       const has = byClient(c.id).some((r) => { const d = reqDay(r); return d && d >= addDays(t.start_date, -1) && d <= addDays(end, 1); });
-      if (n >= 0 && n <= 5 && !has) push({
+      if (n >= 0 && n <= W.trip && !has) push({
         client_id: c.id, trip_id: t.id, kind: 'pre_arrival', key: `pre_arrival:${t.id}`,
         title: `✈️ ${name} прилетает ${inDays(n)}`,
         reason: `${t.city}${t.hotel ? ', ' + t.hotel : ''} · ${+t.start_date.slice(8)} ${MON[+t.start_date.slice(5, 7) - 1]}${end !== t.start_date ? ` – ${+end.slice(8)} ${MON[+end.slice(5, 7) - 1]}` : ''}. Запросов под поездку ещё нет.`,
         due_at: parisAt(t.start_date, 10),
-      });
+      }, n <= N.trip);
     }
     // 🛬 рейс без трансфера: прилёт или вылет в ближайшие 14 дней, трансфера рядом по времени нет
     for (const [at, num, dir] of [[t.flight_in_at, t.flight_in, 'in'], [t.flight_out_at, t.flight_out, 'out']] as [string, string, string][]) {
       if (!at) continue;
       const ms = new Date(at).getTime();
-      if (ms < Date.now() || ms - Date.now() > 14 * 24 * H) continue;
+      if (ms < Date.now() || ms - Date.now() > W.flight * 24 * H) continue;
+      const inWin = ms - Date.now() <= N.flight * 24 * H;
       const covered = byClient(c.id).some((r) => r.category === 'Transport' && r.deadline && Math.abs(new Date(r.deadline).getTime() - ms) <= 6 * H);
       if (covered) continue;
       const when = dir === 'in' ? new Date(ms + 30 * 60e3).toISOString() : new Date(ms - 3 * H).toISOString();
@@ -68,7 +76,7 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
           category: 'Transport', when_local: localOf(when), partner_id: null,
           note: [c.pref_transport, dir === 'in' ? 'табличка с именем, вода в машине' : 'выезд за 3 часа до вылета'].filter(Boolean).join('; '),
         }], source: 'rules' },
-      });
+      }, inWin);
     }
   }
 
@@ -82,7 +90,7 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
   for (const x of D.dates) { const c = D.clients.get(x.client_id); if (c) dates.push({ c, ref: x.id, kind: 'date', title: x.title.toLowerCase(), who: shortName(c.name), date: x.date }); }
   for (const x of dates) {
     const n = next(x.date);
-    if (n.days > 10) continue;
+    if (n.days > W.date) continue;
     const has = byClient(x.c.id).some((r) => r.category === 'Gifts & Events' && reqDay(r) && reqDay(r)! >= today && reqDay(r)! <= n.day);
     if (has) continue;
     const guest = shortName(x.c.name);
@@ -92,7 +100,7 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
       reason: x.kind === 'self' ? `${+n.day.slice(8)} ${MON[+n.day.slice(5, 7) - 1]}. Поздравление и подарок ещё не заказаны.`
         : `${x.kind === 'person' ? 'Близкий человек гостя ' + guest : 'Гость ' + guest}, ${+n.day.slice(8)} ${MON[+n.day.slice(5, 7) - 1]}. Подарок ещё не заказан.`,
       due_at: parisAt(n.day, 10),
-    });
+    }, n.days <= N.date);
   }
 
   // 💬 давно не общались: VIP, больше 30 дней без контакта и без запросов
@@ -115,7 +123,7 @@ export async function generateSuggestions(db: any, owner: string, D: any) {
   if (found.length) await db.from('suggestions').upsert(found, { onConflict: 'owner_id,key', ignoreDuplicates: true });
 
   // устаревшие поводы убираем: под поездку уже есть запросы, трансфер заказан, подарок оформлен
-  const valid = new Set(found.map((s) => s.key));
+  const valid = watch;
   const { data: open } = await db.from('suggestions').select('id,key,kind').eq('owner_id', owner).in('status', ['new', 'snoozed']).in('kind', ['pre_arrival', 'transfer', 'close_date']);
   const stale = (open || []).filter((s: any) => !valid.has(s.key)).map((s: any) => s.id);
   if (stale.length) await db.from('suggestions').delete().in('id', stale);

@@ -9,6 +9,7 @@ import { render } from './router.js';
 
 const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂', reconnect: '💬' };
 const drafting = new Set();   // какие планы сейчас составляются
+const deep = { on: false, text: '' }; // ручной запуск «Что впереди?»
 const failed = new Set();
 const expanded = new Set();   // у каких карточек открыт полный план
 
@@ -34,8 +35,8 @@ export async function refreshSuggestions(force = false) {
   } catch {} finally { refreshing = false; }
 }
 
-async function draft(s) {
-  if (drafting.has(s.id) || s.payload?.tasks) return;
+async function draft(s, force = false) {
+  if (drafting.has(s.id) || (!force && s.payload?.tasks)) return;
   drafting.add(s.id); failed.delete(s.id); render();
   try {
     const sb = await getSupabase();
@@ -73,6 +74,9 @@ function card(s, { compact = false } = {}) {
         <label><input type="checkbox" data-sg-task="${i}" checked><span class="sg-cat">${CATEGORIES[t.category] || '📌'}</span>
         <span class="sg-tmain"><b>${esc(t.summary)}</b><small>${esc(fmtWhen(t.when_local))}${t.partner_id && byId('partners', t.partner_id) ? ' · ' + esc(byId('partners', t.partner_id).name) : ''}${t.note ? ' · ' + esc(t.note) : ''}</small></span></label></li>`).join('')}</ul>
       ${!open && tasks.length > 3 ? `<button type="button" class="sg-more" data-sg-expand="${s.id}">Ещё ${tasks.length - 3}</button>` : ''}
+      ${(p.warnings || []).length ? `<div class="sg-warn"><b>Jarvis заметил</b><ul>${p.warnings.map((w) =>
+        `<li class="w-${esc(w.level)}"><span>${w.level === 'critical' ? '⚠️' : w.level === 'important' ? '❗' : 'ℹ️'}</span>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
+      ${(p.touches || []).length ? `<div class="sg-touch"><b>Детали, которые удивят</b><ul>${p.touches.map((t) => `<li>✦ ${esc(t)}</li>`).join('')}</ul></div>` : ''}
       ${p.insight ? `<p class="sg-insight">✦ ${esc(p.insight)}</p>` : ''}
       ${p.message ? `<details class="sg-msg"><summary>Сообщение гостю</summary><p>${esc(personal(p.message, c))}</p>
         <div class="sg-msg-actions"><button type="button" class="btn small" data-sg-copy="${s.id}">Скопировать</button>
@@ -80,6 +84,7 @@ function card(s, { compact = false } = {}) {
     <div class="sg-actions">
       ${tasks.length ? `<button type="button" class="btn small primary" data-sg-accept="${s.id}">Принять</button>
       <button type="button" class="btn small" data-sg-edit="${s.id}">Изменить</button>` : ''}
+      ${tasks.length && s.kind !== 'transfer' ? `<button type="button" class="btn small ghostish" data-sg-redraft="${s.id}" title="Составить план заново">↻</button>` : ''}
       <button type="button" class="btn small ghostish" data-sg-snooze="${s.id}">Позже</button>
       <button type="button" class="btn small ghostish" data-sg-dismiss="${s.id}">Не нужно</button>
     </div>
@@ -88,12 +93,13 @@ function card(s, { compact = false } = {}) {
 
 export function suggestionsBlock() {
   const list = visibleSuggestions();
+  if (!list.length && deep.on) return `<section class="jarvis-sg"><div class="sg-title"><span>✦ Jarvis предлагает</span><span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span></div></section>`;
   if (!list.length) return '';
   const top = list.slice(0, 3);
   // первые карточки без плана — составляем план сразу, чтобы он был готов, когда вы посмотрите
-  setTimeout(() => top.filter((s) => !s.payload?.tasks && !failed.has(s.id)).slice(0, 2).forEach(draft), 0);
+  if (!deep.on) setTimeout(() => top.filter((s) => !s.payload?.tasks && !failed.has(s.id)).slice(0, 2).forEach((x) => draft(x)), 0);
   return `<section class="jarvis-sg">
-    <div class="sg-title"><span>✦ Jarvis предлагает</span>${list.length > 3 ? `<button type="button" class="link" data-sg-all>Все · ${list.length}</button>` : `<span class="muted">${list.length}</span>`}</div>
+    <div class="sg-title"><span>✦ Jarvis предлагает</span>${deep.on ? `<span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span>` : list.length > 3 ? `<button type="button" class="link" data-sg-all>Все · ${list.length}</button>` : `<span class="muted">${list.length}</span>`}</div>
     <div class="sg-list">${top.map((s) => card(s, { compact: true })).join('')}</div>
   </section>`;
 }
@@ -150,15 +156,16 @@ function showAll() {
 }
 
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-sg-draft],[data-sg-accept],[data-sg-edit],[data-sg-snooze],[data-sg-dismiss],[data-sg-copy],[data-sg-expand],[data-sg-all]');
+  const b = e.target.closest('[data-sg-draft],[data-sg-redraft],[data-sg-accept],[data-sg-edit],[data-sg-snooze],[data-sg-dismiss],[data-sg-copy],[data-sg-expand],[data-sg-all]');
   if (!b) return;
   if (b.hasAttribute('data-sg-all')) return showAll();
-  const id = b.dataset.sgDraft || b.dataset.sgAccept || b.dataset.sgEdit || b.dataset.sgSnooze || b.dataset.sgDismiss || b.dataset.sgCopy || b.dataset.sgExpand;
+  const id = b.dataset.sgDraft || b.dataset.sgRedraft || b.dataset.sgAccept || b.dataset.sgEdit || b.dataset.sgSnooze || b.dataset.sgDismiss || b.dataset.sgCopy || b.dataset.sgExpand;
   const s = state.suggestions.find((x) => x.id === id);
   if (!s) return;
   const root = b.closest('.jarvis-sg') || document;
   try {
     if (b.dataset.sgDraft) draft(s);
+    else if (b.dataset.sgRedraft) draft(s, true);
     else if (b.dataset.sgExpand) { expanded.add(id); render(); }
     else if (b.dataset.sgAccept) { b.disabled = true; await accept(s, selected(root, s)); }
     else if (b.dataset.sgEdit) edit(s, selected(root, s));
@@ -175,3 +182,31 @@ document.addEventListener('click', async (e) => {
     }
   } catch (err) { b.disabled = false; toast('Не получилось: ' + (err.message || err), 'err'); }
 });
+
+// «✦ Что впереди?»: пересмотреть поводы на 3–4 недели вперёд и составить планы для всех
+export async function runDeep() {
+  if (deep.on) return;
+  const { ui } = await import('./router.js');
+  if (ui.tab !== 'requests' || ui.reqView !== 'today') { ui.tab = 'requests'; ui.reqView = 'today'; }
+  deep.on = true; deep.text = 'Jarvis изучает гостей и ближайшие события…';
+  render();
+  document.querySelector('.jarvis-sg')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const sb = await getSupabase();
+    await sb.functions.invoke('jarvis', { body: { mode: 'suggest', wide: true } });
+    try { localStorage.setItem('sugg.refreshed', String(Date.now())); } catch {}
+    const { data } = await sb.from('suggestions').select('*');
+    if (data) state.suggestions = data;
+    const todo = visibleSuggestions().filter((x) => !x.payload?.tasks);
+    // по одному: так не упрёмся в бесплатный лимит Gemini
+    for (let i = 0; i < todo.length; i++) {
+      deep.text = `Jarvis продумывает планы: ${i + 1} из ${todo.length}`;
+      render();
+      await draft(todo[i]);
+    }
+    const n = visibleSuggestions().length;
+    toast(n ? `Jarvis подготовил предложений: ${n}` : 'На ближайшие недели всё под контролем ✨');
+  } catch (e) {
+    toast('Не получилось: ' + (e.message || e), 'err');
+  } finally { deep.on = false; render(); }
+}

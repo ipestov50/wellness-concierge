@@ -32,7 +32,10 @@ export function smartBar() {
       <span class="jarvis-mark" aria-hidden="true">✦</span>
       <textarea id="jarvisInput" rows="1" placeholder="Опишите запрос для Jarvis"
         aria-label="Умное поле: опишите запрос обычным текстом" ${smart.busy ? 'disabled' : ''}>${esc(smart.text)}</textarea>
-      <button class="jarvis-send" type="submit" aria-label="Разобрать" ${smart.busy ? 'disabled' : ''}>${smart.busy ? '<span class="spin"></span>' : '↵'}</button>
+      <div class="jarvis-btns">
+        <button class="jarvis-ahead" type="button" id="jarvisAhead" title="Jarvis, что впереди? — планы на ближайшие важные события" aria-label="Jarvis предлагает: планы на ближайшие события">✦<span>Что впереди?</span></button>
+        <button class="jarvis-send" type="submit" aria-label="Разобрать" ${smart.busy ? 'disabled' : ''}>${smart.busy ? '<span class="spin"></span>' : '↵'}</button>
+      </div>
     </form>
     <div class="jarvis-foot">
       <span>${smart.busy ? 'Jarvis разбирает текст…' : 'Например: «Мария Иванова: массаж в пятницу в 15:00, аллергия на миндаль»'}</span>
@@ -55,6 +58,10 @@ export function bindSmart(app) {
   app.querySelector('#jarvisForm').addEventListener('submit', (e) => { e.preventDefault(); run(); });
   app.querySelector('#jarvisAuto').addEventListener('change', (e) => { smart.auto = e.target.checked; ls.set(LS_AUTO, smart.auto ? '1' : null); });
   app.querySelector('#jarvisClose')?.addEventListener('click', () => { smart.result = null; render(); });
+  app.querySelector('#jarvisAhead')?.addEventListener('click', async () => {
+    const { runDeep } = await import('./suggest.js');
+    runDeep();
+  });
 }
 
 const setBusy = (b) => { smart.busy = b; render(); };
