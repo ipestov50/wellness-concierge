@@ -21,13 +21,13 @@ function label(st) {
   return (rel ? `${rel}, ${d.replace(/^[^,]+,\s*/, '')}` : d) + time;
 }
 
-export function deadlinePicker(iso) {
+export function deadlinePicker(iso, name = 'deadline') {
   const v = toParisInput(iso); // 'YYYY-MM-DDTHH:MM' или ''
   const [date, time] = v ? v.split('T') : [null, null];
   const hasTime = time && time !== '00:00';
   const st = { date, hour: hasTime ? +time.slice(0, 2) : null, minute: hasTime ? +time.slice(3, 5) : 0 };
   return `<div class="dp" data-dp data-date="${esc(st.date || '')}" data-hour="${st.hour ?? ''}" data-minute="${st.minute}">
-    <input type="hidden" name="deadline" id="f-deadline" value="${esc(v)}">
+    <input type="hidden" name="${esc(name)}" id="f-${esc(name)}" value="${esc(v)}">
     <button type="button" class="dp-display" aria-expanded="false"><span class="dp-ico">🗓</span><span class="dp-text">${esc(label(st))}</span><span class="dp-chev">▾</span></button>
     <div class="dp-quick"></div>
     <div class="dp-panel" hidden>
@@ -38,8 +38,11 @@ export function deadlinePicker(iso) {
 }
 
 export function bindDeadlinePicker(root) {
-  const el = root.querySelector('[data-dp]');
-  if (!el) return;
+  root.querySelectorAll('[data-dp]:not([data-bound])').forEach(bindOne);
+}
+
+function bindOne(el) {
+  el.dataset.bound = '1';
   const st = { date: el.dataset.date || null, hour: el.dataset.hour === '' ? null : +el.dataset.hour, minute: +el.dataset.minute || 0 };
   let view = (st.date || parisToday()).slice(0, 7); // 'YYYY-MM'
   const input = el.querySelector('input[type=hidden]');

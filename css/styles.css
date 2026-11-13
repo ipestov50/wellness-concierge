@@ -519,3 +519,65 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
 .hero-bdays { width: 100%; position: relative; z-index: 1; font-size: 14px; color: var(--muted); }
 .hero-bdays button { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 500; text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; }
+
+/* =================== JARVIS: умное поле =================== */
+.jarvis { max-width: 820px; margin-bottom: 18px; }
+.jarvis-form {
+  position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 44px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
+  transition: border-color .2s, box-shadow .2s;
+}
+.jarvis-form::before { /* переливающаяся рамка при фокусе и разборе */
+  content: ""; position: absolute; inset: -1.5px; border-radius: 19px; padding: 1.5px; pointer-events: none; opacity: 0;
+  background: conic-gradient(from var(--ang, 0deg), var(--accent), var(--gold), #c9826b, var(--accent));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  transition: opacity .25s;
+}
+.jarvis-form:focus-within::before { opacity: .9; }
+.jarvis.busy .jarvis-form::before { opacity: 1; animation: spinang 1.6s linear infinite; }
+@property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes spinang { to { --ang: 360deg; } }
+.jarvis-mark { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 18px; }
+.jarvis.busy .jarvis-mark { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; transform: translateY(-50%) scale(.85); } }
+.jarvis-form textarea {
+  flex: 1; border: 0; background: none; resize: none; min-height: 40px; max-height: 180px; padding: 9px 4px; line-height: 1.4;
+  font-size: 16px; outline: none; box-shadow: none;
+}
+.jarvis-form textarea:focus { outline: none; }
+.jarvis-send {
+  flex: none; width: 42px; height: 42px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-ink);
+  font-size: 18px; display: grid; place-items: center; transition: transform .15s var(--spring);
+}
+.jarvis-send:active { transform: scale(.92); }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: rot .7s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg); } }
+.jarvis-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 6px 0; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch span { width: 34px; height: 20px; border-radius: 99px; background: var(--line); position: relative; transition: background .2s; }
+.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .25s var(--spring); }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(14px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.jarvis-result {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; padding: 12px 12px 12px 16px; border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: rise .35s var(--ease) both;
+}
+.jarvis-result > div { flex: 1; } .jarvis-result p { margin: 0 0 4px; } .jarvis-result p:last-child { margin: 0; }
+.jarvis-result.warn { background: var(--high-bg); border-color: color-mix(in srgb, var(--high) 35%, transparent); color: var(--ink); }
+.jarvis-result.err { background: var(--crit-bg); border-color: color-mix(in srgb, var(--crit) 35%, transparent); }
+.jarvis-result .icon-btn { width: 30px; height: 30px; font-size: 13px; background: transparent; border: 0; }
+
+/* превью разобранных карточек */
+.pv-src { margin: -4px 0 14px; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
+.pv { border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 12px; background: var(--bg); transition: opacity .2s; }
+.pv.skipped { opacity: .45; }
+.pv.skipped > :not(.pv-head) { display: none; }
+.pv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pv-head b { font-family: var(--f-head); font-size: 17px; }
+.pv-skip { border: 0; background: none; color: var(--muted); text-decoration: underline; font-size: 13.5px; }
+.pv-add { margin: -2px 0 12px; font-size: 13.5px; color: var(--muted); }
+.pv-add .chip { border-color: var(--accent); color: var(--accent); }
+.pv-money { display: grid; grid-template-columns: 1fr 90px; gap: 6px; }

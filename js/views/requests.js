@@ -1,5 +1,6 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { birthdayInfo } from '../birthday.js';
+import { smartBar, bindSmart } from '../smart.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
@@ -267,7 +268,7 @@ function view(app) {
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
   const board = ui.reqView === 'board';
-  app.innerHTML = `
+  app.innerHTML = `${smartBar()}
     <div class="bar">
       <div class="seg" role="tablist" aria-label="Вид">
         <button type="button" data-view="today" aria-selected="${!board}">Сегодня</button>
@@ -285,6 +286,7 @@ function view(app) {
   });
   app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
+  bindSmart(app);
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
   if (!board) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
 }
