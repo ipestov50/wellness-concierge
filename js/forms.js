@@ -24,8 +24,8 @@ export function restrictionsBlock(c) {
     `<div class="alert-row"><span>${t}:</span> ${l.map((x) => `<b class="chip">${esc(x)}</b>`).join(' ')}</div>`).join('')}</div>`;
 }
 
-export function editRequest(id, presetClient) {
-  const r = id ? byId('requests', id) : { client_id: presetClient || '', status: firstKey(), urgency: 'normal', category: 'Other', currency: 'EUR' };
+export function editRequest(id, presetClient, preset = {}) {
+  const r = id ? byId('requests', id) : { client_id: presetClient || '', status: firstKey(), urgency: 'normal', category: 'Other', currency: 'EUR', ...preset };
   if (!r) return;
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);

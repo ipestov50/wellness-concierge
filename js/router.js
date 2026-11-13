@@ -22,11 +22,11 @@ export function render() {
   const scroll = app.querySelector('.board')?.scrollLeft;
   views[ui.tab]?.(app);
   // плавное появление — только при смене раздела или вида, не при каждом обновлении
-  const key = ui.tab + '|' + ui.reqView + '|' + (ui.tab === 'clients' ? ui.client : '');
+  const key = ui.tab + '|' + ui.reqView + '|' + (ui.tab === 'clients' ? ui.client : '') + '|' + (ui.reqView === 'calendar' ? (ui.calMode || '') + (ui.calDate || '') : '');
   if (key !== lastKey) {
     lastKey = key;
     app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
-    app.querySelectorAll('.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel, .trip').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
+    app.querySelectorAll('.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel, .trip, .ev, .ag-day, .mg-cell').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 14)));
     clearTimeout(enterTimer); enterTimer = setTimeout(() => app.classList.remove('enter'), 900);
     countUp(app);
   }
@@ -49,8 +49,8 @@ export function updateGliders() {
     if (fresh) { g = document.createElement('span'); g.className = 'glider'; bar.prepend(g); }
     const sel = bar.querySelector('[aria-selected="true"]');
     if (!sel) { g.style.opacity = 0; return; }
-    const type = bar.classList.contains('seg') ? 'seg' : 'tabs';
-    const key = sel.dataset.tab || sel.dataset.view || '';
+    const type = bar.getAttribute('aria-label') || (bar.classList.contains('seg') ? 'seg' : 'tabs');
+    const key = sel.dataset.tab || sel.dataset.view || sel.dataset.calmode || '';
     const prev = lastSel[type];
     lastSel[type] = key;
     const place = (el) => {
@@ -62,7 +62,7 @@ export function updateGliders() {
     g.style.opacity = 1;
     if (prev === key) { jump(sel); return; } // тот же выбор — просто стоим на месте
     // выбор сменился: едем от прежней кнопки к новой (даже если переключатель нарисован заново)
-    const old = prev && bar.querySelector(`[data-tab="${prev}"], [data-view="${prev}"]`);
+    const old = prev && bar.querySelector(`[data-tab="${prev}"], [data-view="${prev}"], [data-calmode="${prev}"]`);
     if (fresh && old) jump(old);
     else if (fresh) { jump(sel); return; }
     requestAnimationFrame(() => place(sel));

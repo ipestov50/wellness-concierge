@@ -1,6 +1,7 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
+import { calendarView, bindCalendar } from './calendar.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
@@ -279,17 +280,21 @@ function view(app) {
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
   const board = ui.reqView === 'board';
+  const cal = ui.reqView === 'calendar';
   const toolbar = `<div class="bar toolbar">
       <div class="seg" role="tablist" aria-label="Вид">
-        <button type="button" data-view="today" aria-selected="${!board}">Сегодня</button>
+        <button type="button" data-view="today" aria-selected="${!board && !cal}">Сегодня</button>
         <button type="button" data-view="board" aria-selected="${board}">Доска</button>
+        <button type="button" data-view="calendar" aria-selected="${cal}">Календарь</button>
       </div>
       <div class="grow search"><input type="search" id="q" placeholder="Поиск по запросам и гостям" value="${esc(ui.q)}" autocomplete="off"></div>
       ${board ? `<span class="count">Открытых: ${open}</span>
         <button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
     </div>`;
   // «Сегодня» — одна центрированная колонка: приветствие → Jarvis → переключатель и поиск → список
-  app.innerHTML = board
+  app.innerHTML = cal
+    ? `<div class="board-top">${smartBar()}${toolbar}</div>${calendarView(list)}`
+    : board
     ? `<div class="board-top">${smartBar()}${toolbar}</div>${boardView(list)}`
     : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${smartBar()}${toolbar}${todayView(list)}</div>`;
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
@@ -299,9 +304,10 @@ function view(app) {
   });
   app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
+  if (cal) bindCalendar(app);
   bindSmart(app);
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
-  if (!board) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
+  if (!board && !cal) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
 }
 
 
