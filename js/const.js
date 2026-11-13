@@ -1,17 +1,3 @@
-export const STATUSES = [
-  ['new', 'Новый'],
-  ['clarifying', 'Уточняем'],
-  ['sourcing', 'Подбор вариантов'],
-  ['awaiting_approval', 'Ждёт одобрения гостя'],
-  ['booking', 'Бронируем'],
-  ['confirmed', 'Подтверждено'],
-  ['done', 'Выполнено'],
-  ['postponed', 'Отложен'],
-  ['cancelled', 'Отменён'],
-];
-export const ARCHIVE = ['done', 'postponed', 'cancelled'];
-export const STATUS_LABEL = Object.fromEntries(STATUSES);
-
 export const CATEGORIES = {
   'Spa & Wellness': '💆',
   'Dining': '🍽️',

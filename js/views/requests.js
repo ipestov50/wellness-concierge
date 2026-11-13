@@ -1,10 +1,11 @@
-import { STATUSES, ARCHIVE, CATEGORIES, URGENCY_LABEL, STATUS_LABEL, TZ } from '../const.js';
-import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput } from '../ui.js';
-import { state, byId, save, remove } from '../data.js';
+import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
+import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
+import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
+import { state, byId, save, remove, updateWhere } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { editRequest } from '../forms.js';
 
-const isLate = (r) => r.deadline && !ARCHIVE.includes(r.status) && new Date(r.deadline) < new Date();
+const isLate = (r) => r.deadline && !isClosed(r.status) && new Date(r.deadline) < new Date();
 const clientName = (id) => byId('clients', id)?.name || 'Без клиента';
 
 export function requestCard(r, { showClient = true } = {}) {
@@ -39,8 +40,8 @@ function openCardMenu(id, anchor) {
   m.innerHTML = `<div class="pop-title">${esc(r.summary)}</div>
     <button type="button" role="menuitem" data-act="edit">✎ Изменить</button>
     <div class="pop-label">Перенести в</div>
-    <div class="pop-statuses">${STATUSES.map(([s, l]) =>
-      `<button type="button" role="menuitem" data-act="status" data-status="${s}"${s === r.status ? ' aria-current="true" disabled' : ''}>${s === r.status ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
+    <div class="pop-statuses">${columns().map(({ key: s, label: l }) =>
+      `<button type="button" role="menuitem" data-act="status" data-status="${esc(s)}"${s === r.status ? ' aria-current="true" disabled' : ''}>${s === r.status ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
     <button type="button" role="menuitem" data-act="delete" class="pop-danger">Удалить</button>`;
   document.body.append(m);
   const a = anchor.getBoundingClientRect();
@@ -61,7 +62,7 @@ function openCardMenu(id, anchor) {
       const before = r.status;
       try {
         await save('requests', id, { status: b.dataset.status });
-        toast(`${STATUS_LABEL[b.dataset.status]}: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { status: before }) });
+        toast(`${statusLabel(b.dataset.status)}: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { status: before }) });
       } catch (err) { toast('Не удалось: ' + (err.message || err), 'err'); }
     } else if (b.dataset.act === 'delete') {
       if (!armed) { armed = true; b.textContent = 'Точно удалить? Нажмите ещё раз'; b.classList.add('armed'); return; }
@@ -74,6 +75,9 @@ function openCardMenu(id, anchor) {
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-cardmenu]');
   if (t) { e.stopPropagation(); openCardMenu(t.dataset.cardmenu, t); return; }
+  const cm = e.target.closest('[data-colmenu]');
+  if (cm) { e.stopPropagation(); openColumnMenu(cm.dataset.colmenu, cm); return; }
+  if (e.target.closest('#colAdd')) { editColumn(null); return; }
   if (!e.target.closest('#cardmenu')) closeCardMenu();
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMenu(); });
@@ -111,18 +115,18 @@ function rowHtml(r, group) {
         <span class="tmain"><b>${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
           <span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span></span>
         <span class="tside"><span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span>
-          <span class="tstatus">${esc(STATUS_LABEL[r.status] || '')}</span></span>
+          <span class="tstatus">${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
       </button>
     </div>
   </div>`;
 }
 
 function summary(today) {
-  const open = state.requests.filter((r) => !ARCHIVE.includes(r.status));
+  const open = state.requests.filter((r) => !isClosed(r.status));
   const now = new Date();
   const late = open.filter((r) => r.deadline && new Date(r.deadline) < now).length;
   const todayN = open.filter((r) => r.deadline && parisDay(new Date(r.deadline)) === today && new Date(r.deadline) >= now).length;
-  const done = state.requests.filter((r) => r.status === 'done' && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
+  const done = state.requests.filter((r) => r.status === doneKey() && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
   const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now) % 24;
   const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
   const date = now.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
@@ -139,7 +143,7 @@ function summary(today) {
 function todayView(list) {
   const now = new Date();
   const today = parisDay(now), tomorrow = parisDay(new Date(+now + 864e5)), weekEnd = parisDay(new Date(+now + 7 * 864e5));
-  const open = list.filter((r) => !ARCHIVE.includes(r.status));
+  const open = list.filter((r) => !isClosed(r.status));
   const by = {};
   for (const r of open) (by[groupOf(r, today, tomorrow, weekEnd)] ||= []).push(r);
   const sort = (a, b) => (a.deadline || '9').localeCompare(b.deadline || '9') || URG_ORDER[a.urgency] - URG_ORDER[b.urgency];
@@ -152,22 +156,110 @@ function todayView(list) {
 }
 
 function boardView(list) {
-  const cols = STATUSES.filter(([s]) => ui.archive || !ARCHIVE.includes(s));
-  return `<div class="board" id="board">${cols.map(([s, label]) => {
-      const items = list.filter((r) => r.status === s).sort((a, b) => a.position - b.position);
-      return `<section class="col${ARCHIVE.includes(s) ? ' archived' : ''}" data-status="${s}">
-        <h3>${esc(label)}<span>${items.length}</span></h3>
+  const cols = columns().filter((c) => ui.archive || c.kind === 'active');
+  const hidden = columns().length - cols.length;
+  return `<div class="board" id="board">${cols.map((c) => {
+      const items = list.filter((r) => effectiveStatus(r.status) === c.key).sort((a, b) => a.position - b.position);
+      return `<section class="col${c.kind !== 'active' ? ' archived' : ''}" data-status="${esc(c.key)}">
+        <h3><span class="col-name">${esc(c.label)}</span><span class="col-count">${items.length}</span>
+          <button class="col-menu" data-colmenu="${c.id}" type="button" aria-label="Настроить колонку «${esc(c.label)}»">⋯</button></h3>
         <div class="col-body">${items.map((r) => requestCard(r)).join('') || '<div class="col-empty">Пусто</div>'}</div>
       </section>`;
-    }).join('')}</div>
-    <p class="hint board-hint">Карточки можно перетаскивать между колонками. На телефоне — нажмите и подержите карточку.</p>`;
+    }).join('')}
+    <button class="col-add" id="colAdd" type="button"><span>＋</span>Новая колонка</button></div>
+    <p class="hint board-hint">Карточки перетаскиваются между колонками (на телефоне — нажмите и подержите). Колонки настраиваются кнопкой ⋯ в заголовке.${hidden && !ui.archive ? ` Скрыто колонок: ${hidden} — «Показать архив».` : ''}</p>`;
+}
+
+// ---------- настройка колонок ----------
+function editColumn(id) {
+  const c = id ? state.statuses.find((x) => x.id === id) : { label: '', kind: 'active' };
+  if (!c) return;
+  const count = id ? state.requests.filter((r) => effectiveStatus(r.status) === c.key).length : 0;
+  const others = columns().filter((x) => x.id !== id);
+  const body =
+    field('label', 'Название колонки', `<input id="f-label" name="label" type="text" required value="${esc(c.label)}" placeholder="Например: Ждём партнёра" autocomplete="off">`) +
+    field('kind', 'Тип', `<select id="f-kind" name="kind">${options(KINDS, c.kind)}</select>`,
+      'Рабочие колонки видны на экране «Сегодня». Колонки «Выполнено» и «Архив» скрыты, пока не нажат «Показать архив».') +
+    (id && count ? field('move_to', `При удалении перенести карточки (${count}) в`, `<select id="f-move_to" name="move_to">${options(others.map((x) => [x.key, x.label]), others.find((x) => x.kind === 'active')?.key)}</select>`) : '');
+  openModal({
+    title: id ? 'Колонка' : 'Новая колонка',
+    body,
+    onSave: async (v) => {
+      if (id) await save('statuses', id, { label: v.label.trim(), kind: v.kind });
+      else {
+        const last = columns().filter((x) => x.kind === 'active').at(-1);
+        const after = columns().find((x) => x.position > (last?.position ?? 0));
+        const position = last ? (after ? (last.position + after.position) / 2 : last.position + 1) : 1;
+        await save('statuses', null, { key: 'c_' + Math.random().toString(36).slice(2, 10), label: v.label.trim(), kind: v.kind, position });
+      }
+      toast(id ? 'Колонка сохранена' : 'Колонка добавлена');
+    },
+    onDelete: id ? async () => {
+      if (columns().length <= 1) throw new Error('нужна хотя бы одна колонка');
+      if (count) {
+        const target = document.getElementById('f-move_to')?.value;
+        if (!target) throw new Error('выберите, куда перенести карточки');
+        await updateWhere('requests', 'status', c.key, { status: target });
+      }
+      await remove('statuses', id);
+      toast(`Колонка «${c.label}» удалена${count ? ', карточки перенесены' : ''}`);
+    } : null,
+  });
+}
+
+async function moveColumn(id, dir) {
+  const list = columns();
+  const i = list.findIndex((x) => x.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  const a = list[i], b = list[j];
+  const pa = a.position, pb = b.position;
+  Object.assign(a, { position: pb }); Object.assign(b, { position: pa }); render();
+  try { await Promise.all([save('statuses', a.id, { position: pb }), save('statuses', b.id, { position: pa })]); }
+  catch (err) { toast('Не удалось переставить: ' + (err.message || err), 'err'); }
+}
+
+function openColumnMenu(id, anchor) {
+  closeCardMenu();
+  const c = state.statuses.find((x) => x.id === id);
+  if (!c) return;
+  const list = columns(), i = list.findIndex((x) => x.id === id);
+  const m = document.createElement('div');
+  m.id = 'cardmenu'; m.className = 'popover'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<div class="pop-title">${esc(c.label)}</div>
+    <button type="button" data-act="edit">✎ Переименовать или изменить тип</button>
+    <button type="button" data-act="left"${i === 0 ? ' disabled' : ''}>← Сдвинуть левее</button>
+    <button type="button" data-act="right"${i === list.length - 1 ? ' disabled' : ''}>Сдвинуть правее →</button>
+    <button type="button" data-act="add">＋ Новая колонка</button>
+    <button type="button" data-act="delete" class="pop-danger">Удалить колонку…</button>`;
+  placePopover(m, anchor);
+  m.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b || b.disabled) return;
+    closeCardMenu();
+    if (b.dataset.act === 'edit' || b.dataset.act === 'delete') editColumn(id);
+    else if (b.dataset.act === 'add') editColumn(null);
+    else moveColumn(id, b.dataset.act === 'left' ? -1 : 1);
+  });
+}
+
+function placePopover(m, anchor) {
+  document.body.append(m);
+  const a = anchor.getBoundingClientRect();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  if (innerWidth <= 520) m.classList.add('sheet');
+  else {
+    m.style.left = Math.max(8, Math.min(a.right - w, innerWidth - w - 8)) + 'px';
+    m.style.top = (a.bottom + 6 + h > innerHeight - 8 ? Math.max(8, a.top - h - 6) : a.bottom + 6) + 'px';
+  }
+  requestAnimationFrame(() => m.classList.add('open'));
 }
 
 function view(app) {
   const q = ui.q.trim().toLowerCase();
   const list = state.requests.filter((r) => !q ||
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
-  const open = state.requests.filter((r) => !ARCHIVE.includes(r.status)).length;
+  const open = state.requests.filter((r) => !isClosed(r.status)).length;
   const board = ui.reqView === 'board';
   app.innerHTML = `
     <div class="bar">
@@ -196,11 +288,13 @@ async function markDone(id, btn) {
   const r = byId('requests', id);
   if (!r) return;
   const before = r.status;
+  const done = doneKey();
+  if (!done) { toast('Нет колонки типа «Выполнено». Создайте её на доске.', 'err'); return; }
   btn.classList.add('checked');
   btn.closest('.trow-wrap')?.classList.add('leaving');
   await new Promise((ok) => setTimeout(ok, 280));
   try {
-    await save('requests', id, { status: 'done' });
+    await save('requests', id, { status: done });
     toast(`Выполнено: ${r.summary}`, '', { label: 'Отменить', fn: async () => {
       try { await save('requests', id, { status: before }); toast('Вернул в работу'); }
       catch (err) { toast('Не удалось отменить: ' + (err.message || err), 'err'); }
@@ -306,7 +400,7 @@ async function drop(id, col, y) {
   render();
   try {
     await save('requests', id, { status, position });
-    if (status !== before.status) toast(`«${r.summary}» → ${col.querySelector('h3').firstChild.textContent}`);
+    if (status !== before.status) toast(`«${r.summary}» → ${statusLabel(status)}`);
   } catch (err) {
     Object.assign(r, before); render();
     toast('Не удалось переместить: ' + (err.message || err), 'err');

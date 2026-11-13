@@ -1,7 +1,7 @@
 import { getSupabase } from './supabase.js';
 
-export const state = { clients: [], requests: [], partners: [], loaded: false };
-const TABLES = ['clients', 'requests', 'partners'];
+export const state = { clients: [], requests: [], partners: [], statuses: [], loaded: false };
+const TABLES = ['clients', 'requests', 'partners', 'statuses'];
 const listeners = new Set();
 let sb, channel;
 
@@ -23,6 +23,7 @@ export async function loadAll() {
   sb = await getSupabase();
   const results = await Promise.all(TABLES.map((t) => sb.from(t).select('*')));
   results.forEach((r, i) => { if (r.error) throw r.error; state[TABLES[i]] = r.data; });
+  if (!state.statuses.length) await seedStatuses();
   state.loaded = true;
   emit();
 }
@@ -70,4 +71,21 @@ export function stopRealtime() {
   channel = null;
   TABLES.forEach((t) => (state[t] = []));
   state.loaded = false;
+}
+
+// стандартные колонки для нового аккаунта
+async function seedStatuses() {
+  const { DEFAULT_STATUSES } = await import('./statuses.js');
+  const rows = DEFAULT_STATUSES.map(([key, label, kind], i) => ({ key, label, kind, position: i + 1 }));
+  const { data, error } = await sb.from('statuses').upsert(rows, { onConflict: 'owner_id,key', ignoreDuplicates: true }).select();
+  if (!error && data?.length) state.statuses = data;
+  else { const r = await sb.from('statuses').select('*'); if (!r.error) state.statuses = r.data; }
+}
+
+// изменить сразу много строк (например, перенести все карточки из колонки)
+export async function updateWhere(table, column, value, data) {
+  const { error } = await sb.from(table).update(data).eq(column, value);
+  if (error) throw error;
+  state[table].forEach((row) => { if (row[column] === value) Object.assign(row, data); });
+  emit();
 }

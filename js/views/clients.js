@@ -1,8 +1,8 @@
-import { ARCHIVE } from '../const.js';
 import { esc, fmtDate, avatar } from '../ui.js';
 import { state, byId } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { restrictionsBlock } from '../forms.js';
+import { isClosed } from '../statuses.js';
 import { requestCard } from './requests.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
@@ -25,7 +25,7 @@ function contacts(c) {
 function profile(c) {
   if (!c) return '<div class="empty">Выберите клиента слева или добавьте нового.</div>';
   const reqs = state.requests.filter((r) => r.client_id === c.id)
-    .sort((a, b) => (ARCHIVE.includes(a.status) - ARCHIVE.includes(b.status)) || b.created_at.localeCompare(a.created_at));
+    .sort((a, b) => (isClosed(a.status) - isClosed(b.status)) || b.created_at.localeCompare(a.created_at));
   const prefs = [['Еда', c.pref_food], ['Спа', c.pref_spa], ['Транспорт', c.pref_transport], ['Отели', c.pref_hotels]];
   const trips = (c.travel_history || []).map((t) => { const [place, when, ...note] = t.split('|').map((s) => s.trim()); return { place, when, note: note.join(' | ') }; });
   return `<div class="panel">
@@ -59,7 +59,7 @@ function view(app) {
     ${showList ? `<div>
       <div class="bar"><div class="grow"><input type="search" id="q" placeholder="Найти клиента" value="${esc(ui.q)}" autocomplete="off"></div></div>
       <div class="list">${list.map((c) => {
-        const n = state.requests.filter((r) => r.client_id === c.id && !ARCHIVE.includes(r.status)).length;
+        const n = state.requests.filter((r) => r.client_id === c.id && !isClosed(r.status)).length;
         const warn = c.allergies?.length || c.diet?.length || c.health?.length;
         return `<button class="row" data-cl="${c.id}" aria-current="${ui.client === c.id}" type="button">${avatar(c)}<span class="row-txt">
           <b>${c.vip ? '<span class="vip">★</span> ' : ''}${esc(c.name)}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>

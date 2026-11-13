@@ -108,7 +108,7 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
     if (bad) { fail('Заполните поле «' + (form.querySelector(`label[for="${bad.id}"]`)?.textContent || bad.name) + '».'); bad.focus(); return; }
     const v = {};
     for (const el of form.elements) {
-      if (!el.name) continue;
+      if (!el.name || (el.type === 'radio' && !el.checked)) continue;
       v[el.name] = el.type === 'checkbox' ? el.checked : el.value;
     }
     $('#ok').disabled = true;

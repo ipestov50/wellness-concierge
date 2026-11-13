@@ -1,13 +1,19 @@
-import { STATUSES, CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
+import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast } from './ui.js';
 import { state, byId, save, remove } from './data.js';
 import { ui, render } from './router.js';
+import { statusOptions, firstKey, statusOf } from './statuses.js';
+import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
 const select = (name, html, attrs = '') => `<select id="f-${name}" name="${name}" ${attrs}>${html}</select>`;
 const check = (name, label, on) => `<label class="check"><input type="checkbox" id="f-${name}" name="${name}"${on ? ' checked' : ''}> ${esc(label)}</label>`;
 const nul = (v) => (v === '' || v == null ? null : v);
+
+// срочность — четыре цветные кнопки вместо списка
+const urgencyPicker = (val) => `<div class="seg-pick" role="radiogroup">${URGENCY.map(([k, l]) =>
+  `<label class="u-opt u-${k}"><input type="radio" name="urgency" value="${k}"${k === (val || 'normal') ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
 
 export function restrictionsBlock(c) {
   if (!c) return '';
@@ -18,7 +24,7 @@ export function restrictionsBlock(c) {
 }
 
 export function editRequest(id, presetClient) {
-  const r = id ? byId('requests', id) : { client_id: presetClient || '', status: 'new', urgency: 'normal', category: 'Other', currency: 'EUR' };
+  const r = id ? byId('requests', id) : { client_id: presetClient || '', status: firstKey(), urgency: 'normal', category: 'Other', currency: 'EUR' };
   if (!r) return;
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
@@ -30,9 +36,9 @@ export function editRequest(id, presetClient) {
     field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
     field('summary', 'Что нужно', input('summary', r.summary, 'type="text" required placeholder="Массаж на двоих в пятницу вечером"')) +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
-    field('status', 'Статус', select('status', options(STATUSES, r.status))) + '</div>' +
-    `<div class="f2">${field('urgency', 'Срочность', select('urgency', options(URGENCY, r.urgency)))}` +
-    field('deadline', 'Срок (время Парижа)', input('deadline', toParisInput(r.deadline), 'type="datetime-local"')) + '</div>' +
+    field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
+    field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
+    field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline)) +
     `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
     field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
     field('partner_id', 'Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —'))) +
@@ -66,6 +72,7 @@ export function editRequest(id, presetClient) {
     },
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
+  bindDeadlinePicker(m.form);
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
     m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));
