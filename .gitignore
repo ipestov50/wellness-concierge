@@ -16,3 +16,7 @@ dist/
 # служебные файлы Supabase CLI
 supabase/.temp/
 supabase/.branches/
+
+# локальная проверка
+dev-preview.html
+.claude/
