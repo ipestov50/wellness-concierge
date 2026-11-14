@@ -1131,3 +1131,68 @@ details.past summary { cursor: pointer; color: var(--muted); font-size: 13px; fo
 .ac-wait .spin { width: 12px; height: 12px; }
 .road-form { overflow: visible; }
 .cl, .dlg { overflow: visible; }
+
+/* =================== ЧЕК-ЛИСТ v2: секции, приоритеты, перетаскивание =================== */
+.cl-factors { margin: 2px 14px 4px; padding: 8px 10px; border-radius: 10px; font-size: 12.5px; color: var(--muted);
+  background: color-mix(in srgb, var(--gold) 8%, var(--bg)); }
+.cl-sec { padding: 4px 10px 2px; transition: opacity .2s; }
+.cl-sec.empty { display: none; }
+.cl.dragging .cl-sec.empty { display: block; }
+.cl-sec-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 6px 6px; flex-wrap: wrap; }
+.cl-sec-title { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+.cl-sec-title::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.s-urgent .cl-sec-title { color: var(--crit); } .s-urgent .cl-sec-title::before { background: var(--crit); }
+.s-prep .cl-sec-title::before { background: var(--accent); }
+.s-details .cl-sec-title::before { background: var(--gold); }
+.cl-sec-count { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--soft); border-radius: 99px; padding: 0 7px; line-height: 18px; font-variant-numeric: tabular-nums; }
+.cl-sec-hint { flex-basis: 100%; font-size: 12px; color: var(--muted); opacity: .85; padding-left: 13px; margin-top: -1px; }
+@media (min-width: 640px) { .cl-sec-hint { flex-basis: auto; margin-left: auto; padding-left: 0; } }
+
+.cl-list { display: flex; flex-direction: column; gap: 4px; min-height: 8px; border-radius: 12px; padding: 2px; transition: background .2s, box-shadow .2s; }
+.cl.dragging .cl-list { min-height: 44px; }
+.cl-list.over { background: color-mix(in srgb, var(--accent) 5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+.cl-drop-hint { display: none; font-size: 12.5px; color: var(--muted); text-align: center; padding: 10px; }
+.cl.dragging .cl-sec.empty .cl-drop-hint { display: block; }
+
+/* карточка пункта — как в Linear/Notion: чистая, мягкая граница, тонкая метка приоритета слева */
+.cl .cl-item { position: relative; align-items: flex-start; gap: 8px; padding: 9px 8px 9px 4px; border-radius: 11px; background: var(--surface);
+  border: 1px solid transparent; box-shadow: 0 0 0 0 transparent; transition: border-color .18s, background .18s, box-shadow .2s, opacity .25s, height .25s, padding .25s, margin .25s; }
+.cl .cl-item:hover { border-color: var(--line); background: var(--surface); box-shadow: 0 1px 2px rgba(40,30,20,.04); }
+.cl .cl-item::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; border-radius: 2px; background: transparent; }
+.cl .cl-item.p-high::before { background: var(--crit); }
+.cl .cl-item.p-med::before { background: color-mix(in srgb, var(--high) 75%, transparent); }
+.cl .cl-item.done::before { opacity: .35; }
+.cl .cl-item.leaving { opacity: 0; height: 0 !important; padding-top: 0; padding-bottom: 0; margin: -2px 0; overflow: hidden; }
+
+/* ручка — видна при наведении, на телефоне всегда */
+.cl-grip { flex: none; width: 16px; height: 22px; margin-top: 0; border: 0; background: none; padding: 3px 2px; cursor: grab; opacity: 0; color: var(--muted);
+  touch-action: none; transition: opacity .15s; border-radius: 5px; }
+.cl-grip svg { width: 10px; height: 16px; fill: currentColor; display: block; }
+.cl-item:hover .cl-grip, .cl-grip:focus-visible { opacity: .55; }
+.cl-grip:hover { opacity: 1 !important; background: var(--soft); }
+@media (hover: none) { .cl-grip { opacity: .4; } }
+
+/* бейдж приоритета */
+.cl-prio { flex: none; align-self: center; border: 0; border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 600; letter-spacing: .02em; line-height: 16px;
+  background: none; color: var(--muted); min-width: 10px; transition: background .2s, color .2s, transform .2s var(--spring); }
+.cl-prio.pr-high { background: var(--crit-bg); color: var(--crit); }
+.cl-prio.pr-med { background: var(--high-bg); color: var(--high); }
+.cl-prio.pr-normal { width: 18px; height: 18px; padding: 0; position: relative; opacity: 0; }
+.cl-prio.pr-normal::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.cl-item:hover .cl-prio.pr-normal { opacity: .6; }
+.cl-prio:hover { transform: scale(1.06); }
+.cl-prio.bump { animation: pop .3s var(--spring); }
+.cl-item.done .cl-prio { opacity: .45; }
+
+/* поднятая карточка: лёгкий наклон, масштаб, мягкая тень */
+.cl-item.lifted { position: fixed !important; z-index: 300; margin: 0; pointer-events: none; cursor: grabbing;
+  background: var(--surface) !important; border-color: color-mix(in srgb, var(--accent) 35%, var(--line)) !important;
+  box-shadow: 0 2px 4px rgba(30,20,10,.06), 0 18px 40px -8px rgba(30,20,10,.28) !important; transition: none !important; will-change: transform; }
+.cl-item.lifted .cl-grip { opacity: 1; }
+body:has(.cl-item.lifted) { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+/* место, куда встанет карточка */
+.cl-ph-slot { border-radius: 11px; border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent); transition: height .2s var(--ease); }
+
+.cl-link.muted { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .cl-item.lifted { transform: none !important; } }

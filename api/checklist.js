@@ -20,9 +20,10 @@ const SCHEMA = {
         properties: {
           t: { type: 'STRING', description: 'Пункт чек-листа, по-русски, до 70 символов, начинается с действия' },
           hint: { type: 'STRING', nullable: true, description: 'Почему это важно именно этому гостю — коротко' },
-          phase: { type: 'STRING', enum: ['before', 'day', 'after'] },
+          section: { type: 'STRING', enum: ['urgent', 'prep', 'details', 'after'], description: 'urgent — критично и срочно (безопасность, сорвёт визит); prep — подготовка; details — детали впечатления; after — после визита' },
+          prio: { type: 'STRING', enum: ['high', 'med', 'normal'] },
         },
-        required: ['t', 'phase'],
+        required: ['t', 'section', 'prio'],
       },
     },
   },
@@ -81,7 +82,8 @@ export default async function handler(req, res) {
     let out;
     try { out = JSON.parse(data?.candidates?.[0]?.content?.parts?.map((x) => x.text || '').join('') || ''); } catch { return res.status(502).json({ error: 'bad_json' }); }
     const items = (out.items || []).filter((x) => x && x.t).slice(0, 4).map((x) => ({
-      t: String(x.t).slice(0, 120), hint: x.hint ? String(x.hint).slice(0, 200) : null, phase: ['before', 'day', 'after'].includes(x.phase) ? x.phase : 'before',
+      t: String(x.t).slice(0, 120), hint: x.hint ? String(x.hint).slice(0, 200) : null,
+      section: ['urgent', 'prep', 'details', 'after'].includes(x.section) ? x.section : 'details', prio: ['high', 'med', 'normal'].includes(x.prio) ? x.prio : 'med',
     }));
     return res.status(200).json({ items });
   } catch (e) {
