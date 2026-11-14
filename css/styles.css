@@ -1105,3 +1105,16 @@ details.past summary { cursor: pointer; color: var(--muted); font-size: 13px; fo
 .road.lvl0 .road-ico { font-size: 12px; margin-top: 3px; }
 .road.muted-road { color: var(--muted); font-size: 13px; }
 .road-to { opacity: .85; }
+
+/* 🚦 дорога: строка + поля «Откуда / Куда» */
+.road { display: block; padding: 0; }
+.road-line { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px 10px 14px; }
+.road-txt { flex: 1; min-width: 0; }
+.road-ico .spin { width: 13px; height: 13px; color: var(--accent); display: inline-block; }
+.road-edit { flex: none; border: 0; background: none; color: var(--muted); width: 28px; height: 28px; border-radius: 8px; font-size: 14px; }
+.road-edit:hover, .road.editing .road-edit { background: var(--soft); color: var(--ink); }
+.road-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; padding: 0 12px 12px; animation: rise .25s var(--ease); }
+.road-form label span { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+.road-form input { min-height: 38px !important; padding: 7px 10px !important; font-size: 15px !important; }
+.road-form .btn { min-height: 38px; }
+@media (max-width: 560px) { .road-form { grid-template-columns: 1fr; } }

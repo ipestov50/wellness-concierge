@@ -6,7 +6,7 @@
 //   setup    — один раз (x-cron-secret): регистрирует вебхук и команды бота
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { generateSuggestions } from './suggest.ts';
-import { tomtomReady, checkRequest, geocode, route, incidentsNear } from './traffic.ts';
+import { tomtomReady, checkRequest, geocode, route, incidentsNear, resolveRoute } from './traffic.ts';
 
 const TZ = 'Europe/Paris';
 const SITE = Deno.env.get('SITE_URL') || 'https://wellness-concierge-desk.vercel.app';
@@ -365,7 +365,10 @@ Deno.serve(async (req) => {
     const r = D.requests.find((x: any) => x.id === body.id);
     if (!r?.deadline) return json({ error: 'no_deadline' }, 400);
     const t = await checkRequest(db, r, D);
-    return json(t || { error: 'no_endpoints' });
+    if (t) return json(t);
+    // чего не хватает — подскажем, что подставить в поля «Откуда / Куда»
+    const e = resolveRoute(r, D);
+    return json({ error: 'no_endpoints', need: { from: !e.from, to: !e.to }, hint: e.hint });
   }
   if (body.mode === 'suggest') {
     await db.from('app_settings').upsert({ owner_id: u.user.id }, { onConflict: 'owner_id', ignoreDuplicates: true });

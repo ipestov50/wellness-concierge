@@ -86,21 +86,32 @@ const AIRPORT_POS: Record<string, [number, number]> = {
   DXB: [25.2532, 55.3657], LBG: [48.9694, 2.4414], MRS: [43.4393, 5.2214], PMI: [39.5517, 2.7388], MCM: [43.7258, 7.4196],
 };
 const AIRPORTS: Record<string, string> = { CDG: 'Charles de Gaulle Airport', ORY: 'Orly Airport', NCE: "Nice Côte d'Azur Airport", GVA: 'Geneva Airport', LHR: 'Heathrow Airport', DXB: 'Dubai International Airport', LBG: 'Paris Le Bourget Airport', MRS: 'Marseille Provence Airport', PMI: 'Palma de Mallorca Airport', MCM: 'Monaco Heliport' };
-export function endpoints(r: any, D: any) {
-  const day = r.deadline.slice(0, 10);
-  const trip = D.trips.find((t: any) => t.client_id === r.client_id && t.start_date && t.start_date <= day && day <= (t.end_date || t.start_date));
+// что известно о маршруте: адреса из запроса важнее отеля из поездки и адреса партнёра
+export function resolveRoute(r: any, D: any) {
+  const day = (r.deadline || '').slice(0, 10);
+  const trip = D.trips.find((t: any) => t.client_id === r.client_id && t.start_date && t.start_date <= day && day <= (t.end_date || t.start_date))
+    || D.trips.filter((t: any) => t.client_id === r.client_id && t.hotel).sort((a: any, b: any) => (b.start_date || '').localeCompare(a.start_date || ''))[0];
   const p = r.partner_id ? D.partnersFull.get(r.partner_id) : null;
   const text = `${r.summary || ''} ${r.original_message || ''}`;
-  let to: string | null = null, toName = '';
+  const city = trip?.city || p?.city || D.clients.get(r.client_id)?.city || '';
+  // куда
+  let to: string | null = null, toName = '', fixed: any = null, poi = false, airport = false;
   const iata = text.match(/\b(CDG|ORY|NCE|GVA|LHR|DXB|LBG|MRS|PMI|MCM)\b/i)?.[1]?.toUpperCase();
-  if (r.category === 'Transport' && /аэропорт|вылет|airport|aéroport/i.test(text) && (iata || trip?.city)) {
-    to = iata ? AIRPORTS[iata] : `airport ${trip.city}`; toName = iata ? `аэропорт ${iata}` : 'аэропорт';
-  } else if (p) {
-    to = p.address ? p.address : `${p.name}, ${p.city || trip?.city || ''}`; toName = p.name;
-  }
-  const from = trip?.hotel ? `${trip.hotel}, ${trip.city}` : null;
-  const fixed = iata && AIRPORT_POS[iata] ? { lat: AIRPORT_POS[iata][0], lon: AIRPORT_POS[iata][1], label: toName } : null;
-  return from && to ? { from, fromName: trip.hotel, to, toName, fixed, poi: !!p && !p.address, airport: !!iata || /^airport /.test(to) } : null;
+  if (r.road_to) { to = r.road_to; toName = p?.name || r.road_to.split(',')[0]; }
+  else if (r.category === 'Transport' && /аэропорт|вылет|airport|aéroport/i.test(text) && (iata || city)) {
+    to = iata ? AIRPORTS[iata] : `airport ${city}`; toName = iata ? `аэропорт ${iata}` : 'аэропорт'; airport = true;
+    if (iata && AIRPORT_POS[iata]) fixed = { lat: AIRPORT_POS[iata][0], lon: AIRPORT_POS[iata][1], label: toName };
+  } else if (p) { to = p.address ? p.address : `${p.name}, ${p.city || city}`; toName = p.name; poi = !p.address; }
+  // откуда
+  let from: string | null = null, fromName = '';
+  if (r.road_from) { from = r.road_from; fromName = r.road_from.split(',')[0]; }
+  else if (trip?.hotel) { from = `${trip.hotel}, ${trip.city}`; fromName = trip.hotel; }
+  return { from, fromName, to, toName, fixed, poi, airport, city,
+    hint: { from: from || '', to: to || (p ? `${p.name}, ${p.city || city}` : '') } };
+}
+export function endpoints(r: any, D: any) {
+  const e = resolveRoute(r, D);
+  return e.from && e.to ? e : null;
 }
 
 const hm = (ms: number) => new Date(ms).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
