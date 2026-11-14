@@ -5,6 +5,7 @@ import { ui, render } from './router.js';
 import { editRequest, editClient, editPartner } from './forms.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
 import { openTelegram } from './telegram.js';
+import './brief.js';
 import './views/requests.js';
 import './views/clients.js';
 import './views/partners.js';
@@ -103,7 +104,7 @@ function renderShell(session) {
     <div id="modal"></div>`;
   applyTheme(getTheme());
   render();
-  loadAll().then(startRealtime).catch((e) => {
+  loadAll().then(startRealtime).then(() => import('./tz.js').then((m) => m.backfillTrips())).catch((e) => {
     $('#app').innerHTML = `<div class="notice">Не удалось загрузить данные: ${esc(e.message || e)}. Обновите страницу.</div>`;
   });
 }

@@ -20,3 +20,4 @@ supabase/.branches/
 # локальная проверка
 dev-preview.html
 .claude/
+dev-facts.json

@@ -7,6 +7,7 @@ import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue } from './birthday.js';
 import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
 import { roadSlot, bindRoad } from './road.js';
+import { ZONES, CITIZENSHIPS, lookupPlace, guestTimeLine } from './tz.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -49,7 +50,7 @@ export function editRequest(id, presetClient, preset = {}) {
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
     field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
-    field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline)) +
+    field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
     field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
     field('partner_id', 'Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —'))) +
@@ -86,6 +87,16 @@ export function editRequest(id, presetClient, preset = {}) {
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
+  // «для гостя — 22:00 по Москве»: обновляем при смене срока или гостя
+  const gtime = () => {
+    const el = m.form.querySelector('#req-gtime');
+    const c = byId('clients', m.form.client_id.value);
+    const v = m.form.querySelector('[name="deadline"]')?.value;
+    el.innerHTML = c && v ? guestTimeLine(c, fromParisInput(v)) : '';
+  };
+  gtime();
+  m.form.addEventListener('click', () => setTimeout(gtime, 0));
+  m.form.client_id.addEventListener('change', gtime);
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
     m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));
@@ -103,6 +114,8 @@ export function editClient(id) {
     field('name', 'Имя', input('name', c.name, 'type="text" required autocomplete="off"')) +
     `<div class="f2">${field('language', 'Язык общения', select('language', options(LANGUAGES, c.language)))}` +
     field('city', 'Город', input('city', c.city, 'type="text"')) + '</div>' +
+    `<div class="f2">${field('citizenship', 'Гражданство', select('citizenship', options(CITIZENSHIPS, c.citizenship, '— не указано —')), 'Нужно для брифинга «Перед вылетом»: визы, платежи')}` +
+    field('home_tz', 'Часовой пояс дома', select('home_tz', options(ZONES.some(([z]) => z === c.home_tz) || !c.home_tz ? ZONES : [[c.home_tz, c.home_tz], ...ZONES], c.home_tz, '— определить по городу —')), 'Jarvis покажет время гостя и не даст написать ночью') + '</div>' +
     `<div class="f2">${field('phone', 'Телефон', input('phone', c.phone, 'type="tel" placeholder="+33 6 00 00 00 00" autocomplete="off"'))}` +
     field('email', 'Почта', input('email', c.email, 'type="email" placeholder="name@mail.com" autocapitalize="off" autocomplete="off"')) + '</div>' +
     `<div class="f2">${field('telegram', 'Telegram', input('telegram', c.telegram, 'type="text" placeholder="@username" autocapitalize="off"'))}` +
@@ -126,12 +139,12 @@ export function editClient(id) {
     field('loyalty', 'Программы лояльности', area('loyalty', lines(c.loyalty), 'rows="2" placeholder="Air France · Platinum"'), 'По одной на строку') +
     field('travel_history', 'Заметки о прошлых поездках', area('travel_history', lines(c.travel_history)), 'Новые поездки лучше добавлять во вкладке «Поездки»') +
     field('concierge_notes', 'Заметки консьержа', area('concierge_notes', c.concierge_notes));
-  openModal({
+  const mc = openModal({
     title: id ? 'Клиент' : 'Новый клиент',
     body,
     onSave: async (v) => {
       const row = await save('clients', id, {
-        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
+        name: v.name.trim(), language: v.language, city: nul(v.city.trim()), citizenship: nul(v.citizenship), home_tz: nul(v.home_tz) || (await lookupPlace(v.city))?.tz || null, telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
         pref_food: nul(v.pref_food.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),
@@ -148,6 +161,14 @@ export function editClient(id) {
       ui.client = null; render();
       toast('Клиент удалён. Его запросы остались на доске без клиента.');
     } : null,
+  });
+  mc.form.city.addEventListener('change', async (e) => {
+    if (mc.form.home_tz.value) return;
+    const p = await lookupPlace(e.target.value);
+    if (!p?.tz) return;
+    if (![...mc.form.home_tz.options].some((o) => o.value === p.tz)) mc.form.home_tz.add(new Option(p.tz, p.tz));
+    mc.form.home_tz.value = p.tz;
+    mc.form.home_tz.classList.add('flash');
   });
 }
 

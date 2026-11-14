@@ -6,6 +6,7 @@ import { state, byId, save } from './data.js';
 import { firstKey } from './statuses.js';
 import { preview } from './smart.js';
 import { render } from './router.js';
+import { quietNote } from './tz.js';
 
 const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂', reconnect: '💬' };
 const drafting = new Set();   // какие планы сейчас составляются
@@ -79,7 +80,7 @@ function card(s, { compact = false } = {}) {
       ${(p.touches || []).length ? `<div class="sg-touch"><b>Детали, которые удивят</b><ul>${p.touches.map((t) => `<li>✦ ${esc(t)}</li>`).join('')}</ul></div>` : ''}
       ${p.insight ? `<p class="sg-insight">✦ ${esc(p.insight)}</p>` : ''}
       ${p.message ? `<details class="sg-msg"><summary>Сообщение гостю</summary><p>${esc(personal(p.message, c))}</p>
-        <div class="sg-msg-actions"><button type="button" class="btn small" data-sg-copy="${s.id}">Скопировать</button>
+        <div class="sg-msg-actions">${quietNote(c)}<button type="button" class="btn small" data-sg-copy="${s.id}">Скопировать</button>
         ${c?.phone ? `<a class="btn small" target="_blank" rel="noopener" href="https://wa.me/${esc((c.phone || '').replace(/[^\d]/g, ''))}?text=${encodeURIComponent(personal(p.message, c))}">WhatsApp</a>` : ''}</div></details>` : ''}` : ''}
     <div class="sg-actions">
       ${tasks.length ? `<button type="button" class="btn small primary" data-sg-accept="${s.id}">Принять</button>

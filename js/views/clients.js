@@ -6,6 +6,7 @@ import { isClosed } from '../statuses.js';
 import { birthdayLine, birthdayInfo } from '../birthday.js';
 import { requestCard } from './requests.js';
 import { clientSuggestions } from '../suggest.js';
+import { guestClock, flag } from '../tz.js';
 import { tripState, tripCard, fmtRange, parisToday, upcomingDates, chipEditor, bindChipEditors, personCard, editTrip, editPerson, editDate } from '../dossier.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
@@ -109,6 +110,7 @@ function profile(c) {
     <div class="phead">${avatar(c, 'av-lg')}<div class="phead-txt"><h2>${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</h2>
       <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · контакт ${esc(fmtDate(c.last_contact))}` : ''}</div></div>
       <button class="icon-btn edit-btn" data-editcl="${c.id}" type="button" aria-label="Редактировать профиль" title="Редактировать">✎</button></div>
+    ${guestClock(c)}
     ${birthdayLine(c.birthday)}
     ${contacts(c)}
     ${restrictionsBlock(c)}

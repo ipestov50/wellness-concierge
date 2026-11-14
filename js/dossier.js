@@ -5,6 +5,7 @@ import { state, byId, save, remove } from './data.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue, birthdayInfo } from './birthday.js';
 import { render } from './router.js';
+import { lookupPlace, flag as flagOf } from './tz.js';
 
 // ---------- поездки ----------
 export const parisToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -41,17 +42,18 @@ export const fmtFlight = (iso) => (iso ? new Date(iso).toLocaleString('ru-RU', {
 export function tripCard(t, { showGuest = false } = {}) {
   const st = tripState(t);
   const c = byId('clients', t.client_id);
-  return `<button type="button" class="trip trip-${st.kind}" data-trip="${t.id}">
+  const showBrief = st.kind === 'now' || st.kind === 'soon';
+  return `<div class="trip-wrap"><button type="button" class="trip trip-${st.kind}" data-trip="${t.id}">
     <span class="trip-date"><b>${esc(fmtRange(t) || '—')}</b><small class="ts-${st.kind}">${esc(st.label)}</small></span>
     <span class="trip-main">
       ${showGuest && c ? `<span class="trip-guest">${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</span>` : ''}
-      <b class="trip-city">${esc(t.city)}${t.country ? `<span>, ${esc(t.country)}</span>` : ''}</b>
+      <b class="trip-city">${t.country_code ? flagOf(t.country_code) + ' ' : ''}${esc(t.city)}${t.country ? `<span>, ${esc(t.country)}</span>` : ''}</b>
       ${t.hotel ? `<span class="trip-line">🏨 ${esc(t.hotel)}</span>` : ''}
       ${t.flight_in || t.flight_in_at ? `<span class="trip-line">🛬 ${esc(t.flight_in || '')}${t.flight_in_at ? ' · ' + esc(fmtFlight(t.flight_in_at)) : ''}</span>` : ''}
       ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}</span>` : ''}
       ${t.companions ? `<span class="trip-line">👥 ${esc(t.companions)}</span>` : ''}
     </span>
-  </button>`;
+  </button>${showBrief ? `<button type="button" class="trip-brief" data-brief="${t.id}" title="Перед вылетом: погода, праздники, визы, оплата">✈️ Перед вылетом${t.brief ? '' : ' <i>✦</i>'}</button>` : ''}</div>`;
 }
 
 const guestOptions = () => [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
@@ -81,11 +83,14 @@ export function editTrip(id, clientId) {
       const start = v.start ? v.start.slice(0, 10) : null;
       let end = v.end ? v.end.slice(0, 10) : null;
       if (start && end && end < start) end = start;
+      const place = (v.city.trim() !== (t.city || '') || v.country.trim() !== (t.country || '') || !t.tz) ? await lookupPlace(`${v.city.trim()}${v.country.trim() ? ' ' + v.country.trim() : ''}`) || await lookupPlace(v.city.trim()) : null;
+      const geo = place ? { tz: place.tz, country_code: place.cc, lat: place.lat, lon: place.lon, country: nul(v.country) || place.country } : {};
       await save('trips', id, {
+        ...geo,
         client_id: v.client_id, city: v.city.trim(), country: nul(v.country), hotel: nul(v.hotel), start_date: start, end_date: end,
         flight_in: nul(v.flight_in), flight_in_at: v.flight_in_at ? fromParisInput(v.flight_in_at) : null,
         flight_out: nul(v.flight_out), flight_out_at: v.flight_out_at ? fromParisInput(v.flight_out_at) : null,
-        companions: nul(v.companions), notes: nul(v.notes),
+        companions: nul(v.companions), notes: nul(v.notes), ...(geo.country ? { country: geo.country } : {}),
       });
       toast(id ? 'Поездка сохранена' : 'Поездка добавлена');
     },
