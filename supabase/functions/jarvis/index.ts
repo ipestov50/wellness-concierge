@@ -6,7 +6,7 @@
 //   setup    — один раз (x-cron-secret): регистрирует вебхук и команды бота
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { generateSuggestions } from './suggest.ts';
-import { tomtomReady, checkRequest, geocode, route, incidentsNear, resolveRoute } from './traffic.ts';
+import { tomtomReady, checkRequest, geocode, route, incidentsNear, resolveRoute, places } from './traffic.ts';
 
 const TZ = 'Europe/Paris';
 const SITE = Deno.env.get('SITE_URL') || 'https://wellness-concierge-desk.vercel.app';
@@ -358,6 +358,20 @@ Deno.serve(async (req) => {
       await tg('setMyCommands', { commands: [{ command: 'brief', description: 'Бриф на сегодня' }] });
     }
     return json({ bot: me.result.username, configured: true });
+  }
+  if (body.mode === 'places') {
+    if (!tomtomReady()) return json({ error: 'no_tomtom_key' }, 503);
+    const q = String(body.q || '').trim().slice(0, 120);
+    if (q.length < 2) return json({ items: [] });
+    // ищем рядом с городом гостя по этому запросу
+    let near = null;
+    if (body.id) {
+      const D = await loadOwner(u.user.id);
+      const r = D.requests.find((x: any) => x.id === body.id);
+      const city = r ? resolveRoute(r, D).city : '';
+      if (city) near = await geocode(db, city);
+    }
+    return json({ items: await places(db, q, near) });
   }
   if (body.mode === 'traffic') {
     if (!tomtomReady()) return json({ error: 'no_tomtom_key' }, 503);

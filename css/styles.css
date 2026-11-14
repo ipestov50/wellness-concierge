@@ -1118,3 +1118,16 @@ details.past summary { cursor: pointer; color: var(--muted); font-size: 13px; fo
 .road-form input { min-height: 38px !important; padding: 7px 10px !important; font-size: 15px !important; }
 .road-form .btn { min-height: 38px; }
 @media (max-width: 560px) { .road-form { grid-template-columns: 1fr; } }
+
+/* подсказки адресов */
+.ac { position: relative; }
+.ac-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.14); padding: 4px; max-height: 260px; overflow-y: auto; animation: rise .18s var(--ease); }
+.ac-item { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 9px; }
+.ac-item:hover, .ac-item:focus-visible { background: var(--soft); }
+.ac-item b { font-size: 14px; font-weight: 600; }
+.ac-item small { color: var(--muted); font-size: 12px; }
+.ac-wait { padding: 10px; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.ac-wait .spin { width: 12px; height: 12px; }
+.road-form { overflow: visible; }
+.cl, .dlg { overflow: visible; }

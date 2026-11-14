@@ -17,8 +17,8 @@ export function roadSlot(r) {
     <div class="road-line"><span class="road-ico">🚦</span><span class="road-txt">${auto ? 'Jarvis проверяет дорогу…' : 'Дорога: Jarvis проверит пробки в день визита'}</span>
       <button type="button" class="road-edit" data-road-edit aria-label="Откуда и куда">✎</button></div>
     <div class="road-form" hidden>
-      <label><span>Откуда</span><input type="text" class="road-from" placeholder="Отель гостя или адрес" value="${esc(r.road_from || '')}"></label>
-      <label><span>Куда</span><input type="text" class="road-to-in" placeholder="Ресторан или адрес" value="${esc(r.road_to || '')}"></label>
+      <label class="ac"><span>Откуда</span><input type="text" class="road-from" placeholder="Отель гостя или адрес" value="${esc(r.road_from || '')}" autocomplete="off"><div class="ac-list" hidden></div></label>
+      <label class="ac"><span>Куда</span><input type="text" class="road-to-in" placeholder="Ресторан или адрес" value="${esc(r.road_to || '')}" autocomplete="off"><div class="ac-list" hidden></div></label>
       <button type="button" class="btn small primary" data-road-check>🚦 Проверить дорогу</button>
     </div>
   </section>`;
@@ -34,7 +34,41 @@ export async function bindRoad(root) {
   const openForm = (on = true) => { form.hidden = !on; el.classList.toggle('editing', on); if (on) (form.querySelector('.road-from').value ? form.querySelector('.road-to-in') : form.querySelector('.road-from')).focus(); };
   el.querySelector('[data-road-edit]').addEventListener('click', () => openForm(form.hidden));
   // Enter в полях — проверить, а не отправить форму запроса
-  form.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); form.querySelector('[data-road-check]').click(); } });
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const list = e.target.closest('.ac')?.querySelector('.ac-list');
+    const first = list && !list.hidden && list.querySelector('[data-ac]');
+    if (first) first.click(); else form.querySelector('[data-road-check]').click();
+  });
+  // подсказки мест из TomTom, пока печатаете
+  form.querySelectorAll('.ac').forEach((box) => {
+    const input = box.querySelector('input');
+    const list = box.querySelector('.ac-list');
+    let timer, seq = 0;
+    const close = () => { list.hidden = true; };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 3) return close();
+      timer = setTimeout(async () => {
+        const my = ++seq;
+        list.hidden = false;
+        list.innerHTML = '<div class="ac-wait"><span class="spin"></span> ищу места…</div>';
+        try {
+          const sb = await getSupabase();
+          const { data } = await sb.functions.invoke('jarvis', { body: { mode: 'places', q, id } });
+          if (my !== seq) return;
+          const items = data?.items || [];
+          list.innerHTML = items.length ? items.map((x, i) => `<button type="button" class="ac-item" data-ac="${i}"><b>${esc(x.name)}</b><small>${esc(x.addr)}</small></button>`).join('')
+            : '<div class="ac-wait">Ничего не нашлось — попробуйте иначе</div>';
+          list.querySelectorAll('[data-ac]').forEach((b) => b.addEventListener('mousedown', (ev) => ev.preventDefault()));
+          list.querySelectorAll('[data-ac]').forEach((b) => b.addEventListener('click', () => { input.value = items[+b.dataset.ac].label; close(); input.dataset.picked = '1'; }));
+        } catch { close(); }
+      }, 320);
+    });
+    input.addEventListener('blur', () => setTimeout(close, 150));
+  });
 
   const show = (t) => {
     el.classList.remove('lvl0', 'lvl2', 'lvl3', 'muted-road');
@@ -60,9 +94,10 @@ export async function bindRoad(root) {
     const late = t.leaveBy < Date.now();
     el.classList.add(t.level >= 3 ? 'lvl3' : t.level >= 2 ? 'lvl2' : 'lvl0');
     ico.textContent = t.level >= 3 ? '⛔' : t.level >= 2 ? '🚦' : '🟢';
-    txt.innerHTML = `<b>${t.minutes} мин</b> из ${esc(t.fromName)}${t.delay ? ` <span class="road-delay">+${t.delay} пробки</span>` : ' · дорога свободна'} · ${t.km} км
+    txt.innerHTML = `<b>${t.minutes} мин</b>${t.delay ? ` <span class="road-delay">+${t.delay} пробки</span>` : ' · дорога свободна'} · ${t.km} км
       <small>${late ? '<b>выезжать сейчас</b>' : `выезжать в <b>${hm(t.leaveBy)}</b>`}${[...t.issues.map((x) => x.label), ...t.near.map((x) => x.label)].slice(0, 2).map((x) => ' · ' + esc(x)).join('')}</small>
-      <small class="road-to">→ ${esc(t.toLabel || '')}${t.guessed ? ' · <b>найдено по названию — уточните адрес через ✎</b>' : ''}</small>`;
+      <small class="road-to">из <b>${esc(t.fromLabel || t.fromName || '')}</b></small>
+      <small class="road-to">в <b>${esc(t.toLabel || '')}</b>${t.guessed ? ' · найдено по названию — уточните через ✎' : ''}</small>`;
     openForm(false);
   };
 

@@ -15,6 +15,8 @@ const ICON: Record<number, string> = { 1: 'авария', 6: 'пробка', 7: 
 export async function geocode(db: any, query: string, near?: { lat: number; lon: number } | null, poi = false) {
   const base = query.trim().toLowerCase();
   if (!base) return null;
+  const { data: exact } = await db.from('geo_cache').select('*').eq('query', base).maybeSingle();
+  if (exact?.lat != null && exact.label && exact.label.trim().toLowerCase() === base) return exact; // выбрано из подсказок
   const q = (near ? `${base}@${near.lat.toFixed(1)},${near.lon.toFixed(1)}` : base) + (poi ? '#poi' : '');
   const { data: hit } = await db.from('geo_cache').select('*').eq('query', q).maybeSingle();
   if (hit) return hit.lat != null ? hit : null;
@@ -139,5 +141,24 @@ export async function checkRequest(db: any, r: any, D: any) {
     : rt.delay >= 8 ? 1 : 0;
   const c = D.clients.get(r.client_id);
   const msg = (LEAVE[c?.language] || LEAVE.RU)(hm(leaveBy), e.toName, rt.delay);
-  return { ...e, ...rt, near, leaveBy, level, guestText: msg, toLabel: b.label || e.to, guessed: e.poi };
+  return { ...e, ...rt, near, leaveBy, level, guestText: msg, toLabel: b.label || e.to, fromLabel: a.label || e.from, guessed: e.poi };
+}
+
+// подсказки при вводе адреса: реальные места рядом с городом гостя; сразу запоминаем их координаты,
+// чтобы выбранное место строилось точно, без повторного поиска
+export async function places(db: any, q: string, near?: { lat: number; lon: number } | null) {
+  const bias = near ? `&lat=${near.lat}&lon=${near.lon}&radius=60000` : '';
+  const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?key=${KEY}&limit=6&typeahead=true&language=ru-RU${bias}`);
+  if (!r.ok) throw new Error('tomtom_search_' + r.status);
+  const j = await r.json();
+  const out = (j.results || []).filter((x: any) => x.position).map((x: any) => {
+    const name = x.poi?.name || '';
+    const addr = x.address?.freeformAddress || '';
+    const label = name ? `${name}, ${addr}` : addr;
+    return { label, name: name || addr.split(',')[0], addr, kind: x.poi?.categories?.[0] || (x.type === 'POI' ? 'место' : 'адрес'), lat: x.position.lat, lon: x.position.lon };
+  });
+  const seen = new Set();
+  const uniq = out.filter((x: any) => !seen.has(x.label) && seen.add(x.label));
+  if (uniq.length) await db.from('geo_cache').upsert(uniq.map((x: any) => ({ query: x.label.trim().toLowerCase(), lat: x.lat, lon: x.lon, label: x.label })));
+  return uniq.map(({ label, name, addr, kind }: any) => ({ label, name, addr, kind }));
 }
