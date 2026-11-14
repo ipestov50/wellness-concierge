@@ -19,7 +19,7 @@ const addDays = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDa
 async function facts(t, c) {
   let { lat, lon, tz, country_code: cc } = t;
   if (lat == null || !tz) {
-    const g = await getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(t.city)}&count=1&language=ru`);
+    const g = await getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(t.city)}&count=1&language=ru${t.country_code ? '&countryCode=' + t.country_code : ''}`);
     const x = g.results?.[0];
     if (x) ({ latitude: lat, longitude: lon, timezone: tz, country_code: cc } = x);
   }
@@ -27,20 +27,59 @@ async function facts(t, c) {
   const today = new Date().toISOString().slice(0, 10);
   const start = t.start_date || today;
   const end = t.end_date || start;
-  // погода: прогноз на 16 дней, дальше — как было в эти даты год назад
+  // погода: «сейчас» + 5 дней. Значок дня — по ДНЕВНЫМ часам (от рассвета до заката), а не «худшее за сутки»:
+  // иначе ночной дождь превращает солнечный день в «дождь».
   if (lat != null) {
+    const tzq = encodeURIComponent(tz || 'auto');
     const ahead = (Date.parse(start) - Date.parse(today)) / 864e5;
-    const last = addDays(end, 0) > addDays(start, 13) ? addDays(start, 13) : end; // не больше 14 дней
-    const daily = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max';
     try {
-      if (ahead <= 14 && Date.parse(end) >= Date.parse(today)) {
-        const from = start < today ? today : start;
-        const w = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=${daily}&timezone=${encodeURIComponent(tz || 'auto')}&start_date=${from}&end_date=${last < from ? from : last}`);
-        out.weather = { mode: 'forecast', days: w.daily.time.map((d, i) => ({ date: d, code: w.daily.weather_code[i], tmax: w.daily.temperature_2m_max[i], tmin: w.daily.temperature_2m_min[i], rain: w.daily.precipitation_probability_max[i], mm: w.daily.precipitation_sum[i], wind: w.daily.wind_speed_10m_max[i] })) };
+      if (ahead <= 11) {
+        const from = start <= today ? today : start;
+        const to = addDays(from, 4);
+        const w = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=${tzq}&start_date=${from}&end_date=${to}`
+          + '&current=temperature_2m,apparent_temperature,weather_code,cloud_cover,wind_speed_10m,relative_humidity_2m,is_day,precipitation'
+          + '&hourly=weather_code,cloud_cover,precipitation_probability,precipitation,temperature_2m'
+          + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,wind_speed_10m_max,uv_index_max');
+        const H = w.hourly, D = w.daily;
+        const days = D.time.map((d, i) => {
+          const sr = D.sunrise[i].slice(11, 13) | 0, ss = D.sunset[i].slice(11, 13) | 0;
+          const idx = H.time.map((t, k) => (t.startsWith(d) ? k : -1)).filter((k) => k >= 0);
+          const day = idx.filter((k) => { const h = +H.time[k].slice(11, 13); return h >= Math.max(8, sr) && h <= Math.min(19, ss); });
+          const night = idx.filter((k) => !day.includes(k));
+          const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+          const cloud = Math.round(avg(day.map((k) => H.cloud_cover[k])));
+          const rainDay = Math.max(0, ...day.map((k) => H.precipitation_probability[k] ?? 0));
+          const wetHours = day.filter((k) => (H.precipitation[k] ?? 0) >= 0.2 || (H.precipitation_probability[k] ?? 0) >= 60);
+          const codes = day.map((k) => H.weather_code[k]);
+          const snow = codes.filter((c) => (c >= 71 && c <= 77) || c === 85 || c === 86).length;
+          const storm = codes.filter((c) => c >= 95).length;
+          const fog = codes.filter((c) => c === 45 || c === 48).length;
+          // представительное состояние дня
+          let code;
+          if (storm >= 1) code = 95;
+          else if (snow >= 2) code = 73;
+          else if (wetHours.length >= 3) code = 63;
+          else if (wetHours.length >= 1) code = 80;          // кратковременный дождь
+          else if (fog >= day.length / 2) code = 45;
+          else code = cloud < 20 ? 0 : cloud < 45 ? 1 : cloud < 75 ? 2 : 3;
+          const nightRain = night.some((k) => (H.precipitation[k] ?? 0) >= 0.3);
+          return { date: d, code, cloud, tmax: D.temperature_2m_max[i], tmin: D.temperature_2m_min[i], rain: rainDay, mm: D.precipitation_sum[i],
+            wind: D.wind_speed_10m_max[i], uv: D.uv_index_max?.[i] ?? null, sunrise: D.sunrise[i].slice(11), sunset: D.sunset[i].slice(11), nightRain, wetFrom: wetHours.length ? H.time[wetHours[0]].slice(11) : null };
+        });
+        const c = w.current;
+        out.weather = { mode: 'forecast', place: { lat, lon }, now: { t: c.temperature_2m, feels: c.apparent_temperature, code: c.weather_code, cloud: c.cloud_cover, wind: c.wind_speed_10m, hum: c.relative_humidity_2m, day: !!c.is_day, at: c.time }, days };
       } else {
         const shift = (d) => `${+d.slice(0, 4) - 1}${d.slice(4)}`;
-        const w = await getJSON(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=${encodeURIComponent(tz || 'auto')}&start_date=${shift(start)}&end_date=${shift(last)}`);
-        out.weather = { mode: 'lastyear', days: w.daily.time.map((d, i) => ({ date: `${+d.slice(0, 4) + 1}${d.slice(4)}`, code: w.daily.weather_code[i], tmax: w.daily.temperature_2m_max[i], tmin: w.daily.temperature_2m_min[i], mm: w.daily.precipitation_sum[i], wind: w.daily.wind_speed_10m_max[i] })) };
+        const to = addDays(start, 4);
+        const w = await getJSON(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&timezone=${tzq}&start_date=${shift(start)}&end_date=${shift(to)}`
+          + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,sunshine_duration,daylight_duration');
+        const D = w.daily;
+        out.weather = { mode: 'lastyear', days: D.time.map((d, i) => {
+          const sun = D.daylight_duration[i] ? D.sunshine_duration[i] / D.daylight_duration[i] : 0;
+          const mm = D.precipitation_sum[i];
+          return { date: `${+d.slice(0, 4) + 1}${d.slice(4)}`, code: mm >= 3 ? 63 : mm >= 0.5 ? 80 : sun > 0.7 ? 0 : sun > 0.45 ? 1 : sun > 0.2 ? 2 : 3,
+            tmax: D.temperature_2m_max[i], tmin: D.temperature_2m_min[i], mm, wind: D.wind_speed_10m_max[i] };
+        }) };
       }
     } catch (e) { out.weather = { error: String(e.message) }; }
   }
@@ -88,10 +127,19 @@ async function jarvis(t, c, people) {
  "connect": { "sim": "связь: eSIM, роуминг", "plugs": "розетки и напряжение" },
  "etiquette": ["2–3 пункта: дресс-код, поведение, что важно знать"],
  "safety": ["0–3 пункта: безопасность, здоровье, сезонные риски"],
+ "transport": {
+   "summary": "одна строка: как удобнее всего передвигаться по городу",
+   "lines": [ { "name": "линия метро/автобуса/трамвая с номером и цветом, напр. «Метро 1 (жёлтая)»", "to": "главные места, куда по ней удобно добраться" } ],
+   "fares": [ { "what": "билет или проездной", "price": "цена в местной валюте" } ],
+   "taxi": "такси и приложения: какие работают, примерная цена поездки по центру и до аэропорта",
+   "airport": "как добраться из аэропорта в центр: варианты, время, цена",
+   "tips": "1–2 полезных совета (оплата картой/телефоном у турникета, час пик, безопасность в метро)"
+ },
  "phrases": [ { "ru": "фраза по-русски", "local": "на местном языке", "say": "как произнести" } ],
  "actions": [ { "t": "что консьержу сделать заранее (действие)", "why": "почему именно этому гостю", "days_before": 7 } ],
  "confidence": "high" | "medium" | "low"
 }
+Транспорт — актуальные цены и линии на ${new Date().getFullYear()} год по официальным сайтам перевозчика: 3–6 самых полезных линий для туриста (до главных достопримечательностей, торговых улиц, вокзалов, аэропорта), 2–4 тарифа. Если в городе нет метро — автобусы, трамваи, такси, лодки.
 Фразы — 3 штуки (такси до отеля, «у меня аллергия на…», «спасибо»). Действия — 3–6, конкретные (например: «Договориться об оплате брони через консьержа — российские карты не работают»).
 Если не уверен — так и напиши в details и поставь confidence low. Данные: ${JSON.stringify(ctx)}`;
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
