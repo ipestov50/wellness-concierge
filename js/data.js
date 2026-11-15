@@ -77,9 +77,12 @@ export async function startRealtime() {
       emit();
     });
   }
+  let first = true;
   channel.subscribe((status) => {
-    // после разрыва связи перечитываем всё, чтобы ничего не пропустить
-    if (status === 'SUBSCRIBED' && state.loaded) loadAll().catch(() => {});
+    // после разрыва связи перечитываем всё, чтобы ничего не пропустить (первая подписка — сразу после загрузки, не нужно)
+    if (status !== 'SUBSCRIBED') return;
+    if (first) { first = false; return; }
+    if (state.loaded) loadAll().catch(() => {});
   });
 }
 
