@@ -3,7 +3,7 @@
 import { TEMPLATES, SECTIONS, PRIOS, PRIO_RANK, pickTemplate } from './checklist-templates.js';
 import { esc, toast } from './ui.js';
 import { state, byId, save } from './data.js';
-import { getSupabase } from './supabase.js';
+import { api, isAbort, scopeSignal } from './api.js';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const LANG = { EN: 'английски', FR: 'французски' };
@@ -245,11 +245,8 @@ export function bindChecklist(root) {
   async function enrich(btn) {
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Jarvis думает…';
     try {
-      const sb = await getSupabase();
-      const token = (await sb.auth.getSession()).data.session?.access_token;
-      const res = await fetch('/api/checklist', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ id }) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : body.error || res.status);
+      const body = await api('checklist', { id }, { signal: btn.closest('#frm') ? scopeSignal('modal') : undefined }).catch((e) => { throw isAbort(e) ? e : new Error(e.message === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : e.message); });
+      if (!btn.isConnected) return;
       const next = cl();
       const add = (body.items || []).filter((x) => !next.items.some((i) => lc(i.t) === lc(x.t)));
       next.items.push(...add.map((x) => ({ id: uid(), t: x.t, hint: x.hint || null, section: SEC_KEYS.includes(x.section) ? x.section : 'details', prio: PRIO_RANK[x.prio] != null ? x.prio : 'med', done: false, src: 'ai' })));
@@ -257,6 +254,7 @@ export function bindChecklist(root) {
       toast(add.length ? `Jarvis добавил пунктов: ${add.length}` : 'Jarvis считает, что всё уже учтено');
       redraw();
     } catch (err) {
+      if (isAbort(err)) return;
       toast('Не получилось: ' + (err.message || err), 'err');
       btn.disabled = false; btn.textContent = '✦ Jarvis дополнит';
     }

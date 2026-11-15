@@ -29,6 +29,8 @@ async function facts(t, c) {
   const end = t.end_date || start;
   // погода: «сейчас» + 5 дней. Значок дня — по ДНЕВНЫМ часам (от рассвета до заката), а не «худшее за сутки»:
   // иначе ночной дождь превращает солнечный день в «дождь».
+  // погода, праздники и курсы — параллельно и независимо: сбой одного источника не мешает остальным
+  const weatherJob = async () => {
   if (lat != null) {
     const tzq = encodeURIComponent(tz || 'auto');
     const ahead = (Date.parse(start) - Date.parse(today)) / 864e5;
@@ -83,6 +85,8 @@ async function facts(t, c) {
       }
     } catch (e) { out.weather = { error: String(e.message) }; }
   }
+  };
+  const holidaysJob = async () => {
   // праздники в стране поездки (± 2 дня вокруг дат)
   if (cc) {
     try {
@@ -91,6 +95,8 @@ async function facts(t, c) {
       out.holidays = all.filter((h) => h.date >= addDays(start, -2) && h.date <= addDays(end, 2)).map((h) => ({ date: h.date, name: h.localName, en: h.name, global: h.global }));
     } catch { out.holidays = []; }
   }
+  };
+  const moneyJob = async () => {
   // курсы: местная валюта ↔ валюта гостя
   const local = CUR[cc] || null;
   const home = HOME_CUR[c?.citizenship] || 'RUB';
@@ -100,6 +106,8 @@ async function facts(t, c) {
       out.money = { local, home, rate: r.rates?.[home] ?? null, eur: local === 'EUR' ? 1 : r.rates?.EUR ?? null, at: r.time_last_update_utc };
     } catch { out.money = { local, home }; }
   }
+  };
+  await Promise.allSettled([weatherJob(), holidaysJob(), moneyJob()]);
   return out;
 }
 

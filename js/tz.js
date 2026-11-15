@@ -63,7 +63,7 @@ export function guestTimeLine(c, iso) {
 }
 
 // часы в чипах тикают раз в минуту
-setInterval(() => document.querySelectorAll('[data-tz-clock]').forEach((el) => { el.textContent = timeIn(el.dataset.tzClock); }), 30e3);
+setInterval(() => !document.hidden && document.querySelectorAll('[data-tz-clock]').forEach((el) => { el.textContent = timeIn(el.dataset.tzClock); }), 30e3);
 
 // город → пояс и страна (Open-Meteo, бесплатно, без ключа)
 export async function lookupPlace(name) {

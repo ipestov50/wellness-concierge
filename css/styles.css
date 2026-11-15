@@ -1503,3 +1503,9 @@ details.g-handled .trow-wrap { opacity: .7; }
 .db.future { background: color-mix(in srgb, var(--surface) 70%, var(--soft)); }
 .db.future::before { opacity: .5; }
 .day-future .day-line-h { margin-top: 14px; }
+
+/* ---------- пояс, повтор при сбоях ---------- */
+.tz-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; background: color-mix(in srgb, var(--accent, #b08d57) 14%, transparent); color: var(--ink, inherit); white-space: nowrap; vertical-align: middle; }
+.bf-retry { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.retry-card { display: grid; gap: 8px; justify-items: start; max-width: 520px; margin: 24px auto; }
+.retry-card small { color: var(--muted, #888); }

@@ -104,8 +104,20 @@ function renderShell(session) {
     <div id="modal"></div>`;
   applyTheme(getTheme());
   render();
-  loadAll().then(startRealtime).then(() => import('./tz.js').then((m) => m.backfillTrips())).catch((e) => {
-    $('#app').innerHTML = `<div class="notice">Не удалось загрузить данные: ${esc(e.message || e)}. Обновите страницу.</div>`;
+  firstLoad();
+}
+
+// первая загрузка: при сбое — карточка с «Повторить» вместо пустого экрана
+function firstLoad() {
+  loadAll().then(() => {
+    if (state.partial?.length) toast('Часть данных не загрузилась — покажу, что есть, и обновлю позже', 'err');
+    return startRealtime();
+  }).then(() => import('./tz.js').then((m) => m.backfillTrips())).catch((e) => {
+    const app = $('#app');
+    if (!app) return;
+    app.innerHTML = `<div class="notice retry-card"><p>Не удалось загрузить данные${navigator.onLine ? '' : ' — нет интернета'}.</p><small>${esc(e.message || e)}</small>
+      <button type="button" class="btn primary" id="retryLoad">↻ Повторить</button></div>`;
+    $('#retryLoad').addEventListener('click', () => { app.innerHTML = '<div class="empty">Загружаю данные…</div>'; firstLoad(); });
   });
 }
 

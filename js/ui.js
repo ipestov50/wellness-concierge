@@ -1,4 +1,5 @@
 import { TZ } from './const.js';
+import { scope, abortScope } from './api.js';
 
 export const $ = (s, el = document) => el.querySelector(s);
 export const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -28,6 +29,16 @@ export function toParisInput(iso) {
   if (!iso) return '';
   const p = parisParts(new Date(iso));
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+// Бейдж пояса: все времена в приложении — по Парижу (IANA Europe/Paris), хранятся в UTC.
+// Если устройство консьержа в другом поясе — явно говорим об этом, чтобы не путать часы и дни.
+export const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+export function tzBadge() {
+  const dev = deviceTz();
+  const now = new Date();
+  const fmt = (tz) => now.toLocaleTimeString('ru-RU', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+  if (!dev || fmt(dev) === fmt(TZ)) return '';
+  return `<span class="tz-badge" title="Все времена — по Парижу (${TZ}). Ваше устройство: ${esc(dev)}">🕐 по Парижу · у вас ${fmt(dev)}</span>`;
 }
 // значение <input type="datetime-local"> (парижское время) -> ISO
 export function fromParisInput(v) {
@@ -87,7 +98,9 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
     </div>`;
   document.body.classList.add('modal-open');
   const form = $('#frm');
-  const close = () => { host.innerHTML = ''; document.body.classList.remove('modal-open'); };
+  // запросы окна отменяются, когда окно закрыто или открыто другое
+  const signal = scope('modal');
+  const close = () => { host.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); };
   const fail = (msg) => { const b = $('#frm-err'); b.textContent = msg; b.hidden = false; b.scrollIntoView({ block: 'nearest' }); };
   $('#cancel').onclick = close;
   $('#x').onclick = close;
@@ -114,9 +127,9 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
     $('#ok').disabled = true;
     try { await onSave(v); close(); } catch (err) { $('#ok').disabled = false; fail('Не удалось сохранить: ' + (err.message || err)); }
   };
-  return { close, form };
+  return { close, form, signal };
 }
-export const closeModal = () => { const h = $('#modal'); if (h) h.innerHTML = ''; document.body.classList.remove('modal-open'); };
+export const closeModal = () => { const h = $('#modal'); if (h) h.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); };
 
 // ---------- короткое уведомление ----------
 let toastTimer;

@@ -1,8 +1,9 @@
 // «Мой день»: мировые часы гостей, «Сейчас», список действий без таймингов, «Запрос выполнен / Шаг сделан / Позже», черновики, перетаскивание
-import { esc, toast, openModal, options, field, avatar } from '../ui.js';
+import { esc, toast, openModal, options, field, avatar, tzBadge } from '../ui.js';
 import { state, byId, save, remove, dataVersion } from '../data.js';
 import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
+import { api, isAbort } from '../api.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
 import { guestWhere, timeIn } from '../tz.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
@@ -36,7 +37,7 @@ export function currentPlan() {
 }
 let weekCache = { k: '', week: null };
 function currentWeek() {
-  const k = `${dataVersion()}|${new Date().toDateString()}`;
+  const k = `${dataVersion()}|${dayIn(OWNER_TZ, Date.now())}`;
   if (weekCache.k !== k) weekCache = { k, week: weekAgenda({ data: state, marks: state.day_items, days: 7 }) };
   return weekCache.week;
 }
@@ -121,7 +122,7 @@ export function dayView() {
   return `<div class="dayv">
     ${worldClocks()}
     <header class="day-head">
-      <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span></div>
+      <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span>${tzBadge()}</div>
       <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
@@ -286,8 +287,11 @@ function enableBlockDrag(root) {
       const over = document.elementFromPoint(rect.left + 40, y)?.closest('.db');
       if (over !== target) { target?.classList.remove('drop-on'); target = over && over !== el ? over : null; target?.classList.add('drop-on'); }
     };
+    const off = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', cancel); };
+    // отмена жеста (звонок, системный свайп) — убираем «призрак» и слушатели, ничего не меняем
+    const cancel = () => { off(); ghost?.remove(); el.classList.remove('db-lifted'); target?.classList.remove('drop-on'); };
     const up = async () => {
-      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      off();
       if (!started) return;
       ghost.remove(); el.classList.remove('db-lifted'); target?.classList.remove('drop-on');
       if (!target) return;
@@ -301,7 +305,7 @@ function enableBlockDrag(root) {
         else toast('Порядок изменён');
       } else toast('Порядок изменён');
     };
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', cancel);
   });
 }
 
@@ -313,12 +317,7 @@ async function openDraft(b) {
   const m = openModal({ title: b.kind === 'partner' ? 'Сообщение партнёру' : 'Сообщение гостю', saveLabel: 'Закрыть', body: `<div class="dr"><p class="dr-ctx">${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}</p><div class="dr-text"><span class="spin"></span> Jarvis пишет…</div></div>`, onSave: async () => {} });
   m.form.querySelector('#cancel').hidden = true;
   try {
-    const sb = await getSupabase();
-    const token = (await sb.auth.getSession()).data.session?.access_token;
-    const res = await fetch('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ kind: b.kind, title: b.title, detail: b.detail || '', request_id: r?.id || null, client_id: c?.id || null }) });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : body.error || res.status);
+    const body = await api('message', { kind: b.kind, title: b.title, detail: b.detail || '', request_id: r?.id || null, client_id: c?.id || null }, { signal: m.signal });
     const first = (c?.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
     const text = String(body.text || '').replace(/\{имя\}/g, first).replace(/\{гость\}/g, (c?.name || '').replace(/\s*\(.*?\)/g, ''));
     const phone = b.kind === 'guest' ? (c?.phone || '').replace(/[^\d]/g, '') : '';
@@ -332,7 +331,8 @@ async function openDraft(b) {
     const wa = m.form.querySelector('[data-dr-wa]');
     if (wa) wa.onclick = () => { wa.href = `https://wa.me/${phone}?text=${encodeURIComponent(area.value)}`; };
   } catch (err) {
-    m.form.querySelector('.dr-text').textContent = 'Не получилось: ' + err.message;
+    if (isAbort(err)) return;
+    m.form.querySelector('.dr-text').textContent = 'Не получилось: ' + (err.message === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : err.message);
   }
 }
 
@@ -357,4 +357,4 @@ function openSettings() {
 }
 
 // план пересобирается сам каждую минуту — «Сейчас» двигается
-setInterval(() => { if (ui.tab === 'requests' && ui.reqView === 'day' && !document.querySelector('.ov, .db-ghost, .db-menu:not([hidden])')) render(); }, 60e3);
+setInterval(() => { if (!document.hidden && ui.tab === 'requests' && ui.reqView === 'day' && !document.querySelector('.ov, .db-ghost, .db-menu:not([hidden])')) render(); }, 60e3);

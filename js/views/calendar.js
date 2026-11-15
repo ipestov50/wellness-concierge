@@ -1,6 +1,6 @@
 // Календарь: запросы, рейсы, поездки, дни рождения и даты — день, неделя, месяц
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
-import { esc, avatar, toast, fromParisInput } from '../ui.js';
+import { esc, avatar, toast, fromParisInput, tzBadge } from '../ui.js';
 import { state, byId, save } from '../data.js';
 import { ui, render } from '../router.js';
 import { isClosed, statusLabel, effectiveStatus, statusOf } from '../statuses.js';
@@ -207,7 +207,7 @@ export function calendarView(list) {
     <header class="cal-top">
       <div class="cal-nav">
         <button type="button" class="icon-btn" data-calnav="-1" aria-label="Назад">‹</button>
-        <h2 class="cal-title">${esc(title)}</h2>
+        <h2 class="cal-title">${esc(title)}</h2>${tzBadge()}
         <button type="button" class="icon-btn" data-calnav="1" aria-label="Вперёд">›</button>
         <button type="button" class="btn small" data-caltoday>Сегодня</button>
       </div>

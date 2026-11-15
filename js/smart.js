@@ -1,6 +1,6 @@
 // Jarvis: умное поле ввода. Текст → Gemini (через /api/parse) → превью → карточки.
 // Текст консьержа не теряется никогда: при любой ошибке он сохраняется как запрос «нужна проверка».
-import { getSupabase } from './supabase.js';
+import { api } from './api.js';
 import { CATEGORIES, URGENCY, CURRENCIES, TZ } from './const.js';
 import { esc, options, field, openModal, toast, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
@@ -75,15 +75,7 @@ async function run() {
   setBusy(true);
   let parsed;
   try {
-    const sb = await getSupabase();
-    const token = (await sb.auth.getSession()).data.session?.access_token;
-    const r = await fetch('/api/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ text }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || 'http_' + r.status);
+    const body = await api('parse', { text });
     parsed = body.requests;
     if (!Array.isArray(parsed) || !parsed.length) throw new Error('empty_result');
   } catch (err) {

@@ -1,5 +1,5 @@
 // «✈️ Перед вылетом»: время, погода, праздники, деньги — сразу; въезд, платежи, связь, фразы — от Jarvis с источниками
-import { getSupabase } from './supabase.js';
+import { api, isAbort } from './api.js';
 import { esc, openModal, toast, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
 import { firstKey } from './statuses.js';
@@ -14,14 +14,7 @@ const SYM = { RUB: '₽', KZT: '₸', UZS: 'сум', AZN: '₼', AMD: '֏', GEL:
 const money = (n, cur) => `${Number(n).toLocaleString('ru-RU', { maximumFractionDigits: n < 10 ? 2 : 0 })} ${SYM[cur] || cur}`;
 const ENTRY = { visa_free: ['Без визы', 'ok'], evisa: ['Электронная виза', 'mid'], visa_required: ['Нужна виза', 'bad'], unknown: ['Уточнить', 'mid'] };
 
-async function call(id, mode) {
-  const sb = await getSupabase();
-  const token = (await sb.auth.getSession()).data.session?.access_token;
-  const r = await fetch('/api/brief', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ id, mode }) });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || r.status);
-  return body;
-}
+const call = (id, mode, signal) => api('brief', { id, mode }, { signal });
 
 // советы из погоды — то, что консьерж предусмотрит заранее
 function weatherAdvice(days) {
@@ -67,7 +60,14 @@ export function openBrief(tripId) {
   const $ = (s) => m.form.querySelector(s);
 
   // ---------- факты: сразу ----------
-  call(tripId, 'facts').then((f) => {
+  // каждый виджет отдельно: сбой одного (погода, курс, праздники) не ломает остальные — у него своя кнопка «Повторить»
+  const retry = (sel, title, msg) => { const el = $(sel); if (el) el.innerHTML = `<h4>${title}</h4><div class="bf-retry"><p class="bf-sub">${esc(msg)}</p><button type="button" class="btn small" data-bf-retry>↻ Повторить</button></div>`; };
+  const part = (sel, title, fn) => { try { fn(); } catch (e) { console.error(e); retry(sel, title, 'Не удалось показать'); } };
+  const loadFacts = () => {
+  m.form.querySelectorAll('.bf-card').forEach((el) => { const h = el.querySelector('h4')?.outerHTML || ''; el.innerHTML = h + skeleton; });
+  call(tripId, 'facts', m.signal).then((f) => {
+    if (!m.form.isConnected) return;
+    part('#bf-time', '🕐 Время', () => {
     // время
     const tz = f.tz || t.tz;
     if (tz) {
@@ -79,6 +79,8 @@ export function openBrief(tripId) {
           : `<p class="bf-tip">Укажите часовой пояс гостя — Jarvis посчитает смену часов</p>`}
         <p class="bf-line muted">${(() => { const p = diffHours('Europe/Paris', tz); return p === 0 ? 'как в Париже' : `${fmtDiff(p)} к Парижу`; })()}</p>`;
     } else $('#bf-time').innerHTML = '<h4>🕐 Время</h4><p class="bf-sub">Город не найден</p>';
+    });
+    part('#bf-money', '💱 Деньги', () => {
     // деньги
     if (f.money?.rate) {
       const { local, home, rate } = f.money;
@@ -87,6 +89,8 @@ export function openBrief(tripId) {
         <label class="bf-conv"><input type="number" inputmode="decimal" value="500" min="0" step="any" id="bf-amt"><span>${SYM[local] || local} =</span><b id="bf-res">${money(500 * rate, home)}</b></label>`;
       $('#bf-amt').addEventListener('input', (e) => { $('#bf-res').textContent = money((+e.target.value || 0) * rate, home); });
     } else $('#bf-money').innerHTML = `<h4>💱 Деньги</h4><p class="bf-sub">${f.money?.local ? 'Курс недоступен' : 'Валюта страны не определена'}</p>`;
+    });
+    part('#bf-weather', '🌦 Погода', () => {
     // погода: «сейчас» + 5 дней
     const w = f.weather;
     if (w?.days?.length) {
@@ -119,14 +123,22 @@ export function openBrief(tripId) {
         </div>
         ${adv.length ? `<ul class="bf-adv">${adv.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : '<p class="bf-tip">☀️ Погода спокойная — без сюрпризов</p>'}
         <p class="wx-src">Open-Meteo · ${f.lat ? `${(+f.lat).toFixed(2)}, ${(+f.lon).toFixed(2)}` : ''} · значок дня — по дневным часам</p>`;
-    } else $('#bf-weather').innerHTML = `<h4>🌦 Погода</h4><p class="bf-sub">${t.start_date ? 'Нет данных о погоде' : 'Укажите даты поездки'}</p>`;
+    } else if (w?.error) retry('#bf-weather', '🌦 Погода', 'Погода временно недоступна');
+    else $('#bf-weather').innerHTML = `<h4>🌦 Погода</h4><p class="bf-sub">${t.start_date ? 'Нет данных о погоде' : 'Укажите даты поездки'}</p>`;
+    });
+    part('#bf-hol', '🎌 Праздники', () => {
     // праздники
     const h = f.holidays || [];
     $('#bf-hol').innerHTML = `<h4>🎌 Праздники</h4>${h.length ? `<ul class="bf-hl">${h.map((x) => `<li><b>${+x.date.slice(8)}.${x.date.slice(5, 7)}</b> ${esc(x.name)}${x.en && x.en !== x.name ? ` <small>${esc(x.en)}</small>` : ''}</li>`).join('')}</ul>
       <p class="bf-tip">Магазины и часть ресторанов закрыты — брони заранее, пробки на дорогах</p>` : `<p class="bf-sub">${f.cc ? 'В эти даты праздников нет' : 'Страна не определена'}</p>`}`;
+    });
   }).catch((e) => {
-    m.form.querySelectorAll('.bf-card').forEach((el) => { el.querySelector('.bf-skel')?.replaceWith(Object.assign(document.createElement('p'), { className: 'bf-sub', textContent: 'Не удалось загрузить: ' + e.message })); });
+    if (isAbort(e) || !m.form.isConnected) return;
+    const msg = e.message === 'unauthorized' ? 'Войдите заново' : e.status >= 500 || !e.status ? 'Сервис временно недоступен' : 'Не удалось загрузить';
+    [['#bf-time', '🕐 Время'], ['#bf-money', '💱 Деньги'], ['#bf-weather', '🌦 Погода'], ['#bf-hol', '🎌 Праздники']].forEach(([sel, t]) => retry(sel, t, msg));
   });
+  };
+  loadFacts();
 
   // ---------- Jarvis ----------
   const renderJarvis = (b, busy = false) => {
@@ -172,10 +184,11 @@ export function openBrief(tripId) {
   renderJarvis(t.brief);
 
   m.form.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-bf-retry]')) { loadFacts(); return; }
     if (e.target.closest('[data-bf-run]')) {
       renderJarvis(null, true);
-      try { const { brief } = await call(tripId, 'jarvis'); t.brief = brief; renderJarvis(brief); }
-      catch (err) { renderJarvis(t.brief); toast(err.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту' : 'Не получилось: ' + err.message, 'err'); }
+      try { const { brief } = await call(tripId, 'jarvis', m.signal); t.brief = brief; renderJarvis(brief); }
+      catch (err) { if (isAbort(err)) return; renderJarvis(t.brief); toast(err.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту' : 'Не получилось: ' + err.message, 'err'); }
     }
     const cp = e.target.closest('[data-bf-copy]');
     if (cp) { const p = t.brief.phrases[+cp.dataset.bfCopy]; await navigator.clipboard.writeText(`${p.ru}\n${p.local}${p.say ? `\n(${p.say})` : ''}`); cp.classList.add('copied'); setTimeout(() => cp.classList.remove('copied'), 900); toast('Фраза скопирована'); }

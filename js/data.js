@@ -41,10 +41,25 @@ function removeLocal(table, id) {
   version++;
 }
 
-export async function loadAll() {
+// Загрузка всех таблиц: независимо друг от друга. Без клиентов/запросов/колонок работать нельзя — это ошибка;
+// сбой второстепенной таблицы (поездки, подсказки…) оставляет прежние данные и отмечается в state.partial.
+const CRITICAL = new Set(['clients', 'requests', 'statuses']);
+let loading = null;
+export function loadAll() {
+  if (!loading) loading = doLoad().finally(() => { loading = null; });
+  return loading;
+}
+async function doLoad() {
   sb = await getSupabase();
-  const results = await Promise.all(TABLES.map((t) => sb.from(t).select('*')));
-  results.forEach((r, i) => { if (r.error) throw r.error; state[TABLES[i]] = r.data; });
+  const results = await Promise.allSettled(TABLES.map((t) => sb.from(t).select('*')));
+  const failed = [];
+  results.forEach((r, i) => {
+    const t = TABLES[i];
+    const err = r.status === 'rejected' ? r.reason : r.value.error;
+    if (err) { if (CRITICAL.has(t)) throw err; failed.push(t); return; }
+    state[t] = r.value.data;
+  });
+  state.partial = failed;
   if (!state.statuses.length) await seedStatuses();
   state.loaded = true;
   lastLoad = Date.now();

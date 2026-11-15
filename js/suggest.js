@@ -1,5 +1,6 @@
 // «Jarvis предлагает»: карточки поводов с готовым планом. Принять / Изменить / Позже / Не нужно.
 import { getSupabase } from './supabase.js';
+import { api } from './api.js';
 import { CATEGORIES, TZ } from './const.js';
 import { esc, toast, openModal, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
@@ -40,11 +41,7 @@ async function draft(s, force = false) {
   if (drafting.has(s.id) || (!force && s.payload?.tasks)) return;
   drafting.add(s.id); failed.delete(s.id); render();
   try {
-    const sb = await getSupabase();
-    const token = (await sb.auth.getSession()).data.session?.access_token;
-    const r = await fetch('/api/draft', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ id: s.id }) });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || r.status);
+    const body = await api('draft', { id: s.id });
     s.payload = body.payload;
   } catch (e) {
     failed.add(s.id);
@@ -171,8 +168,8 @@ document.addEventListener('click', async (e) => {
     else if (b.dataset.sgAccept) { b.disabled = true; await accept(s, selected(root, s)); }
     else if (b.dataset.sgEdit) edit(s, selected(root, s));
     else if (b.dataset.sgSnooze) {
-      const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(8, 0, 0, 0);
-      await save('suggestions', id, { status: 'snoozed', snooze_until: t.toISOString() });
+      const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + 864e5));
+      await save('suggestions', id, { status: 'snoozed', snooze_until: fromParisInput(`${tomorrow}T08:00`) });
       toast('Напомню завтра утром');
     } else if (b.dataset.sgDismiss) {
       await save('suggestions', id, { status: 'dismissed' });
