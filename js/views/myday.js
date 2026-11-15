@@ -108,6 +108,9 @@ export function dayView() {
   const dateLabel = new Date(P.dayStart).toLocaleDateString('ru-RU', { timeZone: OWNER_TZ, weekday: 'long', day: 'numeric', month: 'long' });
   const doneReqs = closedToday();
   const doneN = P.done.length + doneReqs.length;
+  // выбран день в «Неделе» (и это не текущий день плана) — показываем всё по нему
+  const sel = selectedDay();
+  const focus = sel && sel !== P.day ? sel : null;
   const section = (title, list, opts = {}) => list.length ? `<section class="day-line${opts.future ? ' day-future' : ''}"><h3 class="day-line-h">${title} · ${list.length}</h3>${list.map((b) => blockHtml(b, opts)).join('')}</section>` : '';
   return `<div class="dayv">
     <header class="day-head">
@@ -117,17 +120,18 @@ export function dayView() {
     </header>
     ${conflictsBlock()}
     ${weekStrip()}
+    ${focus ? dayFocus(focus, uniq, dueDay) : `
     ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
     ${section(P.tomorrow ? 'Ещё на завтра' : 'Ещё сегодня', restToday)}
     ${!todays.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
-    ${readyBlock(readyFor(P, new Set(uniq.map((b) => b.request_id).filter(Boolean))), P.tomorrow ? 'Завтра · уже готово' : 'Сегодня · уже готово')}
+    ${readyBlock(readyFor(P.day, new Set(uniq.map((b) => b.request_id).filter(Boolean))), P.tomorrow ? 'Завтра · уже готово' : 'Сегодня · уже готово')}
     ${section('На этой неделе', week, { future: true })}
     ${section('Позже', later, { future: true })}
     ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span></div>`).join('')}
       <button type="button" class="btn small" data-db-all-tomorrow>Перенести всё на завтра</button></section>` : ''}
     ${doneN ? `<details class="day-done"${doneReqs.length ? ' open' : ''}><summary>Сделано сегодня · ${doneN}</summary>
       ${doneReqs.map((r) => `<div class="day-done-i is-req"><span>✓ <s>${esc(r.summary)}</s>${byId('clients', r.client_id) ? ` · ${esc(byId('clients', r.client_id).name)}` : ''} <em>запрос выполнен</em></span><button type="button" class="link" data-db-reopen="${esc(r.id)}">вернуть в работу</button></div>`).join('')}
-      ${P.done.map((a) => `<div class="day-done-i"><span>✓ <s>${esc(a.title)}</s>${a.who ? ` · ${esc(a.who)}` : ''}</span><button type="button" class="link" data-db-undo="${esc(a.key)}">вернуть</button></div>`).join('')}</details>` : ''}
+      ${P.done.map((a) => `<div class="day-done-i"><span>✓ <s>${esc(a.title)}</s>${a.who ? ` · ${esc(a.who)}` : ''}</span><button type="button" class="link" data-db-undo="${esc(a.key)}">вернуть</button></div>`).join('')}</details>` : ''}`}
   </div>`;
 }
 
@@ -138,9 +142,9 @@ function closedToday() {
 }
 
 // запросы на этот день, по которым делать больше нечего (выполнены или подтверждены) — чтобы утром быстро перепроверить
-function readyFor(P, busy) {
+function readyFor(day, busy) {
   return state.requests
-    .filter((r) => r.deadline && dayIn(OWNER_TZ, Date.parse(r.deadline)) === P.day && !busy.has(r.id) && statusOf(r.status)?.kind !== 'archive')
+    .filter((r) => r.deadline && dayIn(OWNER_TZ, Date.parse(r.deadline)) === day && !busy.has(r.id) && statusOf(r.status)?.kind !== 'archive')
     .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline));
 }
 function readyBlock(list, title) {
@@ -163,19 +167,37 @@ const WK_ICON = { deadline: '📌', arrive: '🛬', depart: '🛫', date: '🎂'
 function weekStrip() {
   const W = currentWeek();
   const max = Math.max(3, ...W.map((d) => d.load));
-  const sel = ui.weekDay && W.some((d) => d.day === ui.weekDay) ? ui.weekDay : null;
-  const chosen = sel ? W.find((d) => d.day === sel) : null;
+  const sel = selectedDay(W);
   return `<section class="week">
-    <div class="week-head"><h3>Неделя</h3><small>нажмите на день — увидите, что там запланировано</small></div>
+    <div class="week-head"><h3>Неделя</h3><small>${sel ? 'нажмите ещё раз — вернуться к плану' : 'нажмите на день — покажу всё по этому дню, включая сделанное'}</small></div>
     <div class="week-strip">${W.map((d, i) => { const dt = new Date(d.day + 'T12:00:00Z');
-      return `<button type="button" class="wk${i === 0 ? ' today' : ''}${sel === d.day ? ' on' : ''}" data-wk="${d.day}">
+      const open = d.items.length - (d.done || 0);
+      return `<button type="button" class="wk${i === 0 ? ' today' : ''}${sel === d.day ? ' on' : ''}" data-wk="${d.day}" title="${open} в работе${d.done ? ` · ${d.done} уже сделано` : ''}">
         <small>${i === 0 ? 'сегодня' : i === 1 ? 'завтра' : WD[dt.getUTCDay()]}</small><b>${dt.getUTCDate()}</b>
         <span class="wk-bar"><i style="width:${Math.min(100, (d.load / max) * 100)}%"></i></span>
-        <em>${d.items.length ? d.items.length : '—'}</em></button>`; }).join('')}</div>
-    ${chosen ? `<div class="week-list">${chosen.items.length ? chosen.items.map((x) => `<button type="button" class="wk-i k-${x.kind}" ${x.request_id ? `data-db-open="${x.request_id}"` : ''}>
-        <span class="wk-ic">${WK_ICON[x.kind]}</span><span class="wk-x"><b>${esc(x.title)}</b>${x.who ? `<small>${esc(x.who)}</small>` : ''}</span>
-        ${x.kind === 'moved' ? '<em>перенесено сюда</em>' : x.urgency === 'critical' || x.urgency === 'high' ? '<em class="hot">срочно</em>' : ''}</button>`).join('')
-      : '<p class="muted">В этот день пока ничего — свободный день, можно перенести сюда дела.</p>'}</div>` : ''}
+        <em>${d.items.length ? `${open || ''}${d.done ? `<span class="wk-done">${open ? ' ' : ''}✓${d.done}</span>` : ''}` : '—'}</em></button>`; }).join('')}</div>
+  </section>`;
+}
+const selectedDay = (W = currentWeek()) => (ui.weekDay && W.some((d) => d.day === ui.weekDay) ? ui.weekDay : null);
+const DAY_LONG = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('ru-RU', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+
+// выбранный в «Неделе» день: всё по этому дню — дела, события и уже сделанное заранее
+function dayFocus(sel, uniq, dueDay) {
+  const W = currentWeek();
+  const d = W.find((x) => x.day === sel) || { items: [] };
+  const blocks = uniq.filter((b) => dueDay(b) === sel);
+  const inBlocks = new Set(blocks.map((b) => b.request_id).filter(Boolean));
+  const events = d.items.filter((x) => ['arrive', 'depart', 'date'].includes(x.kind) || (x.kind === 'moved' && !inBlocks.has(x.request_id)));
+  const ready = readyFor(sel, new Set(uniq.map((b) => b.request_id).filter(Boolean)));
+  const empty = !blocks.length && !events.length && !ready.length;
+  return `<section class="day-focus">
+    <div class="day-focus-h"><h3>${esc(DAY_LONG(sel))}</h3><button type="button" class="vo-btn sm" data-wk="${sel}">← Весь план</button></div>
+    ${blocks.length ? `<section class="day-line"><h3 class="day-line-h">В работе · ${blocks.length}</h3>${blocks.map((b) => blockHtml(b)).join('')}</section>` : ''}
+    ${events.length ? `<section class="day-line"><h3 class="day-line-h">События · ${events.length}</h3>${events.map((x) => `<button type="button" class="wk-i k-${x.kind}" ${x.request_id ? `data-db-open="${x.request_id}"` : ''}>
+        <span class="wk-ic">${WK_ICON[x.kind]}</span><span class="wk-x"><b>${esc(x.title)}</b>${x.who || x.time ? `<small>${[x.time, x.who].filter(Boolean).map(esc).join(' · ')}</small>` : ''}</span>
+        ${x.kind === 'moved' ? '<em>перенесено сюда</em>' : ''}</button>`).join('')}</section>` : ''}
+    ${readyBlock(ready, 'Уже готово')}
+    ${empty ? '<div class="empty calm">В этот день ничего не запланировано.</div>' : ''}
   </section>`;
 }
 

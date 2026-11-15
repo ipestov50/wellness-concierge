@@ -273,6 +273,7 @@ export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
   const today = dayIn(OWNER_TZ, now);
   const statuses = data.statuses || [];
   const closed = new Set(statuses.filter((s) => s.kind !== 'active').map((s) => s.key));
+  const doneKeys = new Set(statuses.filter((s) => s.kind === 'done').map((s) => s.key));
   const cMap = new Map(data.clients.map((c) => [c.id, c]));
   const rMap = new Map(data.requests.map((r) => [r.id, r]));
   const out = [];
@@ -322,8 +323,15 @@ export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
       const cid = r?.client_id || src.t?.client_id || src.s?.client_id;
       items.push({ kind: 'moved', t: zoned(OWNER_TZ, d, 8, 30), time: '', title, who: firstName(cMap.get(cid)), request_id: r?.id, key });
     }
+    // выполненные заранее — тоже дела этого дня (видно, что всё под контролем)
+    for (const r of data.requests) {
+      if (!r.deadline || !doneKeys.has(r.status) || r.archived_at) continue;
+      const ms = Date.parse(r.deadline);
+      if (dayIn(OWNER_TZ, ms) !== d) continue;
+      items.push({ kind: 'done', t: ms, time: hmIn(OWNER_TZ, ms) === '00:00' ? '' : hmIn(OWNER_TZ, ms), title: r.summary, who: firstName(cMap.get(r.client_id)), request_id: r.id });
+    }
     items.sort((a, b) => a.t - b.t);
-    out.push({ day: d, items, load: items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length });
+    out.push({ day: d, items, load: items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length, done: items.filter((x) => x.kind === 'done').length });
   }
   return out;
 }
