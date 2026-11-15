@@ -4,14 +4,14 @@ import { api } from './api.js';
 import { CATEGORIES, TZ } from './const.js';
 import { esc, toast, openModal, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
-import { firstKey } from './statuses.js';
+import { firstKey, isClosed, statusLabel } from './statuses.js';
 import { preview } from './smart.js';
 import { render } from './router.js';
 import { quietNote } from './tz.js';
 
 const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂', reconnect: '💬' };
 const drafting = new Set();   // какие планы сейчас составляются
-const deep = { on: false, text: '' }; // ручной запуск «Что впереди?»
+const deep = { on: false, text: '', ahead: false }; // ручной запуск «Что впереди?»; ahead — показать обзор запросов
 const failed = new Set();
 const expanded = new Set();   // у каких карточек открыт полный план
 
@@ -89,7 +89,46 @@ function card(s, { compact = false } = {}) {
   </article>`;
 }
 
+// ---------- «Что впереди?»: ваши запросы на 14 дней и чего в каждом не хватает (без ИИ, мгновенно) ----------
+const AHEAD_DAYS = 14;
+function upcoming() {
+  const now = Date.now(), to = now + AHEAD_DAYS * 864e5;
+  return state.requests
+    .filter((r) => r.deadline && !isClosed(r.status) && Date.parse(r.deadline) > now && Date.parse(r.deadline) <= to)
+    .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline));
+}
+function gaps(r) {
+  const c = byId('clients', r.client_id);
+  const out = [];
+  if (!r.client_id) out.push('не указан гость');
+  if (!r.partner_id && r.category !== 'Other') out.push('не выбран партнёр');
+  if (r.needs_approval) out.push('ждёт одобрения гостя');
+  if (r.clarifying_questions) out.push('уточнить: ' + String(r.clarifying_questions).split('\n')[0].slice(0, 90));
+  const items = r.checklist?.items || [];
+  const left = items.filter((x) => !x.done).length;
+  if (left) out.push(`чек-лист: осталось ${left} из ${items.length}`);
+  if (c && (c.allergies?.length || c.diet?.length)) out.push('⚠ учесть аллергии и диету');
+  return out;
+}
+function aheadBlock() {
+  const list = upcoming();
+  const when = (iso) => new Date(iso).toLocaleString('ru-RU', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  return `<section class="jarvis-sg ahead"><div class="sg-title"><span>✦ Впереди · ${AHEAD_DAYS} дней · запросов: ${list.length}</span><button type="button" class="link" data-ahead-close>Скрыть</button></div>
+    ${list.length ? `<div class="ah-list">${list.map((r) => { const g = gaps(r); const c = byId('clients', r.client_id);
+      return `<button type="button" class="ah" data-req="${esc(r.id)}">
+        <span class="ah-when">${esc(when(r.deadline))}</span>
+        <span class="ah-main"><b>${CATEGORIES[r.category] || '📌'} ${esc(r.summary)}</b><small>${c ? esc(c.name) + ' · ' : ''}${esc(statusLabel(r.status))}</small>
+        ${g.length ? `<span class="ah-gaps">${g.map((x) => `<i>${esc(x)}</i>`).join('')}</span>` : '<span class="ah-ok">✓ всё готово</span>'}</span></button>`; }).join('')}</div>`
+      : '<p class="muted">На ближайшие две недели запросов со сроком нет.</p>'}
+  </section>`;
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-ahead-close]')) { deep.ahead = false; render(); } });
+
 export function suggestionsBlock() {
+  if (deep.ahead) return aheadBlock() + suggestionsOnly();
+  return suggestionsOnly();
+}
+function suggestionsOnly() {
   const list = visibleSuggestions();
   if (!list.length && deep.on) return `<section class="jarvis-sg"><div class="sg-title"><span>✦ Jarvis предлагает</span><span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span></div></section>`;
   if (!list.length) return '';
@@ -186,7 +225,7 @@ export async function runDeep() {
   if (deep.on) return;
   const { ui } = await import('./router.js');
   if (ui.tab !== 'requests' || ui.reqView !== 'day') { ui.tab = 'requests'; ui.reqView = 'day'; }
-  deep.on = true; deep.text = 'Jarvis изучает гостей и ближайшие события…';
+  deep.on = true; deep.ahead = true; deep.text = 'Jarvis изучает гостей и ближайшие события…';
   render();
   document.querySelector('.jarvis-sg')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
@@ -202,8 +241,8 @@ export async function runDeep() {
       render();
       await draft(todo[i]);
     }
-    const n = visibleSuggestions().length;
-    toast(n ? `Jarvis подготовил предложений: ${n}` : 'На ближайшие недели всё под контролем ✨');
+    const n = visibleSuggestions().length, u = upcoming().length;
+    toast([u ? `Впереди запросов: ${u}` : '', n ? `новых предложений: ${n}` : ''].filter(Boolean).join(' · ') || 'На ближайшие недели всё под контролем ✨');
   } catch (e) {
     toast('Не получилось: ' + (e.message || e), 'err');
   } finally { deep.on = false; render(); }

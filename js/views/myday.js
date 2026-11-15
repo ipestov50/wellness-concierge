@@ -6,7 +6,6 @@ import { getSupabase } from '../supabase.js';
 import { api, isAbort } from '../api.js';
 import { conflictsBlock, watchTraffic } from '../conflict-actions.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
-import { guestWhere, timeIn } from '../tz.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
 import { statusLabel } from '../statuses.js';
 import { editRequest } from '../lazy.js';
@@ -43,20 +42,6 @@ function currentWeek() {
   return weekCache.week;
 }
 
-// ---------- мировые часы: города гостей прямо сейчас ----------
-function worldClocks() {
-  const seen = new Map();
-  const add = (tz, label) => { if (tz && !seen.has(tz)) seen.set(tz, label); };
-  add(OWNER_TZ, 'Вы · Париж');
-  const relevant = new Set(state.requests.filter((r) => r.client_id).map((r) => r.client_id));
-  for (const c of state.clients) { if (!relevant.has(c.id) && !c.vip) continue; const w = guestWhere(c); if (w) add(w.tz, w.place || w.tz.split('/').pop().replace(/_/g, ' ')); }
-  const list = [...seen.entries()].map(([tz, label]) => ({ tz, label, h: +hmIn(tz, Date.now()).slice(0, 2) }));
-  const off = (tz) => { const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false, day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value])); return +p.day * 1440 + (+p.hour % 24) * 60 + +p.minute; };
-  list.sort((a, b) => off(a.tz) - off(b.tz));
-  return `<div class="wclock">${list.map((x) => { const ph = x.h >= 22 || x.h < 7 ? 'night' : x.h < 9 ? 'dawn' : x.h >= 19 ? 'dusk' : 'day';
-    const ok = x.h >= (settings?.guest_from ?? 10) && x.h < (settings?.guest_to ?? 21);
-    return `<div class="wc ph-${ph}${x.tz === OWNER_TZ ? ' me' : ''}" title="${esc(x.tz)}"><b data-tz-clock="${esc(x.tz)}">${timeIn(x.tz)}</b><span>${esc(x.label)}</span>${x.tz === OWNER_TZ ? '' : `<i class="${ok ? 'ok' : 'no'}">${ok ? 'можно писать' : ph === 'night' ? 'спит' : 'не беспокоить'}</i>`}</div>`; }).join('')}</div>`;
-}
 
 // ---------- блок действия (без времени) ----------
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
@@ -122,7 +107,6 @@ export function dayView() {
   const doneN = P.done.length + doneReqs.length;
   const section = (title, list, opts = {}) => list.length ? `<section class="day-line${opts.future ? ' day-future' : ''}"><h3 class="day-line-h">${title} · ${list.length}</h3>${list.map((b) => blockHtml(b, opts)).join('')}</section>` : '';
   return `<div class="dayv">
-    ${worldClocks()}
     <header class="day-head">
       <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span>${tzBadge()}</div>
       <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
