@@ -13,7 +13,7 @@ import { columns, statusLabel, isClosed, effectiveStatus, KINDS } from '../statu
 import { esc, fmtDeadline, fmtMoney, toast, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
 import { ui, render, registerView } from '../router.js';
-import { editRequest } from '../forms.js';
+import { editRequest } from '../lazy.js';
 
 const isLate = (r) => r.deadline && !isClosed(r.status) && new Date(r.deadline) < new Date();
 const clientName = (id) => byId('clients', id)?.name || 'Без клиента';

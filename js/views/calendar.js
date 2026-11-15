@@ -5,7 +5,7 @@ import { state, byId, save } from '../data.js';
 import { ui, render } from '../router.js';
 import { isClosed, statusLabel, effectiveStatus, statusOf } from '../statuses.js';
 import { birthdayInfo } from '../birthday.js';
-import { editRequest } from '../forms.js';
+import { editRequest } from '../lazy.js';
 import { editTrip, editPerson, editDate } from '../dossier.js';
 import { currentConflicts, conflictsBlock } from '../conflict-actions.js';
 

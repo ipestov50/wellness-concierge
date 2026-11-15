@@ -1,7 +1,7 @@
 import { esc, fmtDate, avatar } from '../ui.js';
 import { state, byId } from '../data.js';
 import { ui, render, registerView } from '../router.js';
-import { restrictionsBlock } from '../forms.js';
+import { restrictionsBlock } from '../restrictions.js';
 import { isClosed } from '../statuses.js';
 import { birthdayLine, birthdayInfo } from '../birthday.js';
 import { requestCard } from './requests.js';

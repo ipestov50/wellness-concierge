@@ -5,7 +5,9 @@ import { isClosed } from './statuses.js';
 import { esc, toast, openModal } from './ui.js';
 import { TZ } from './const.js';
 import { detectScheduleConflicts, scheduleInputs } from './conflicts.js';
-import { fetchRoad, ROAD_CATS } from './road.js';
+// модуль дороги грузится только когда есть что проверять
+const ROAD_CATS = ['Dining', 'Spa & Wellness', 'Activities', 'Health & Fitness', 'Transport', 'Gifts & Events'];
+const fetchRoad = (id, o) => import('./road.js').then((m) => m.fetchRoad(id, o));
 import { render } from './router.js';
 
 const MIN = 60e3, HOUR = 60 * MIN;

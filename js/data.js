@@ -1,5 +1,4 @@
 import { getSupabase } from './supabase.js';
-import { buildChecklist } from './checklist.js';
 
 export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], day_items: [], loaded: false };
 const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions', 'day_items'];
@@ -104,7 +103,7 @@ export function patchLocal(table, id, patch) {
 export async function save(table, id, data) {
   // новый запрос сразу получает продуманный чек-лист под свой тип
   if (table === 'requests' && !id && data.checklist === undefined) {
-    try { data = { ...data, checklist: buildChecklist(data) }; } catch {}
+    try { const { buildChecklist } = await import('./checklist.js'); data = { ...data, checklist: buildChecklist(data) }; } catch {}
   }
   const q = id ? sb.from(table).update(data).eq('id', id) : sb.from(table).insert(data);
   const { data: row, error } = await q.select().single();

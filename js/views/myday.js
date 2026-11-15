@@ -9,7 +9,7 @@ import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../plann
 import { guestWhere, timeIn } from '../tz.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
 import { statusLabel } from '../statuses.js';
-import { editRequest } from '../forms.js';
+import { editRequest } from '../lazy.js';
 
 let settings = null;
 async function loadSettings() {

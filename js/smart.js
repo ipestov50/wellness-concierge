@@ -6,7 +6,7 @@ import { esc, options, field, openModal, toast, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
 import { firstKey } from './statuses.js';
 import { findClient } from './match.js';
-import { restrictionsBlock } from './forms.js';
+import { restrictionsBlock } from './restrictions.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { render } from './router.js';
 

@@ -2,7 +2,7 @@ import { getSupabase } from './supabase.js';
 import { esc, $, toast, closeModal } from './ui.js';
 import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js';
 import { ui, render, registerLazy, viewSkeleton } from './router.js';
-import { editRequest, editClient, editPartner } from './forms.js';
+import { editRequest, editClient, editPartner } from './lazy.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
 import { clearCache } from './api.js';
 import { saveSnapshot, loadSnapshot, clearSnapshot, storedSession, registerSW, warmModules } from './offline.js';

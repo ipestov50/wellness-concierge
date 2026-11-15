@@ -4,6 +4,8 @@ import { state, byId, save, remove } from './data.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
+import { restrictionsBlock } from './restrictions.js';
+export { restrictionsBlock };
 import { birthdayField, birthdayValue } from './birthday.js';
 import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
 import { roadSlot, bindRoad } from './road.js';
@@ -18,14 +20,6 @@ const nul = (v) => (v === '' || v == null ? null : v);
 // срочность — четыре цветные кнопки вместо списка
 const urgencyPicker = (val) => `<div class="seg-pick" role="radiogroup">${URGENCY.map(([k, l]) =>
   `<label class="u-opt u-${k}"><input type="radio" name="urgency" value="${k}"${k === (val || 'normal') ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
-
-export function restrictionsBlock(c) {
-  if (!c) return '';
-  const groups = [['Аллергии', c.allergies], ['Диета', c.diet], ['Здоровье', c.health], ['Избегать', c.dislikes]].filter(([, l]) => l && l.length);
-  if (!groups.length) return '';
-  return `<div class="alert"><h4>⚠ Аллергии, ограничения, стоп-лист</h4>${groups.map(([t, l]) =>
-    `<div class="alert-row"><span>${t}:</span> ${l.map((x) => `<b class="chip">${esc(x)}</b>`).join(' ')}</div>`).join('')}</div>`;
-}
 
 export function editRequest(id, presetClient, preset = {}) {
   const ex = id ? byId('requests', id) : null;
