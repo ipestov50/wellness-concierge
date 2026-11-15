@@ -1496,3 +1496,10 @@ details.g-handled .trow-wrap { opacity: .7; }
 .ev.done :is(.chip-t, .ag-main b, .ev-t) { text-decoration: line-through; }
 .ev.done { opacity: .55; }
 .ev.cancelled { opacity: .4; filter: grayscale(.6); }
+
+/* «Мой день»: будущие запросы — дата и время сразу видны, чтобы не путать с сегодняшними */
+.db-when { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.db-when span { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.db.future { background: color-mix(in srgb, var(--surface) 70%, var(--soft)); }
+.db.future::before { opacity: .5; }
+.day-future .day-line-h { margin-top: 14px; }

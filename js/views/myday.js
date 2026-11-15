@@ -60,11 +60,21 @@ function worldClocks() {
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
 // «почему» без часов: только то, что влияет на решение
 const whyClean = (b) => why(b).split(' · ').filter((x) => x && !/^у (гостя|партнёра) /.test(x) && !/^\d/.test(x) && x !== 'вы поставили это время').join(' · ');
-function blockHtml(b, { big = false } = {}) {
+// срок запроса: «ср, 18 ноября · 19:30» (время — только если указано)
+function whenLabel(iso) {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('ru-RU', { timeZone: OWNER_TZ, weekday: 'short', day: 'numeric', month: 'long' });
+  const t = hmIn(OWNER_TZ, +d);
+  const day = dayIn(OWNER_TZ, +d), today = dayIn(OWNER_TZ, Date.now());
+  const rel = day === addDays(today, 1) ? 'завтра, ' : '';
+  return `${rel}${date}${t === '00:00' ? '' : ' · ' + t}`;
+}
+function blockHtml(b, { big = false, future = false } = {}) {
   const c = byId('clients', b.client_id);
   const r = b.request_id ? byId('requests', b.request_id) : null;
   const w = whyClean(b);
-  return `<article class="db ${KIND[b.kind]?.[1] || ''}${b.late || b.missed || b.overdue ? ' warn' : ''}${big ? ' big' : ''}${r ? ' has-req' : ''}" data-db="${esc(b.key)}">
+  return `<article class="db ${KIND[b.kind]?.[1] || ''}${b.late || b.missed || b.overdue ? ' warn' : ''}${big ? ' big' : ''}${r ? ' has-req' : ''}${future ? ' future' : ''}" data-db="${esc(b.key)}">
+    ${future && r?.deadline ? `<div class="db-when">📅 ${esc(whenLabel(r.deadline))}<span>подготовить заранее</span></div>` : ''}
     ${r ? `<button type="button" class="db-check" data-db-complete="${esc(r.id)}" title="Запрос выполнен — уйдёт в «Выполнено» на доске" aria-label="Запрос выполнен: ${esc(r.summary)}">${CHECK}</button>` : '<span class="db-check-sp"></span>'}
     <div class="db-body">
       <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b></div>
@@ -92,23 +102,35 @@ export function dayView() {
   if (!settings) { loadSettings(); return `<div class="dayv"><div class="empty">Собираю ваш день…</div></div>`; }
   const P = currentPlan();
   const now = Date.now();
-  const left = P.blocks.filter((b) => b.end > now || P.tomorrow);
-  const first = left[0];
+  // одно дело на запрос: несколько шагов одного запроса не дублируются
+  const seen = new Set();
+  const uniq = P.blocks.filter((b) => { const k = b.request_id || b.key; if (seen.has(k)) return false; seen.add(k); return true; });
+  // запрос со сроком после сегодняшнего дня — в «На этой неделе» / «Позже», с датой на карточке
+  const today = P.day, weekEnd = addDays(today, 7);
+  const dueDay = (b) => { const r = b.request_id && byId('requests', b.request_id); return r?.deadline ? dayIn(OWNER_TZ, +new Date(r.deadline)) : null; };
+  const byDue = (a, b) => (dueDay(a) || '').localeCompare(dueDay(b) || '') || a.start - b.start;
+  const todays = uniq.filter((b) => !(dueDay(b) > today));
+  const week = uniq.filter((b) => dueDay(b) > today && dueDay(b) <= weekEnd).sort(byDue);
+  const later = uniq.filter((b) => dueDay(b) > weekEnd).sort(byDue);
+  const first = todays.find((b) => b.end > now || P.tomorrow) || todays[0];
+  const restToday = todays.filter((b) => b !== first);
   const dateLabel = new Date(P.dayStart).toLocaleDateString('ru-RU', { timeZone: OWNER_TZ, weekday: 'long', day: 'numeric', month: 'long' });
   const doneReqs = closedToday();
   const doneN = P.done.length + doneReqs.length;
-  const rows = P.blocks.filter((b) => b !== first).map((b) => blockHtml(b)).join('');
+  const section = (title, list, opts = {}) => list.length ? `<section class="day-line${opts.future ? ' day-future' : ''}"><h3 class="day-line-h">${title} · ${list.length}</h3>${list.map((b) => blockHtml(b, opts)).join('')}</section>` : '';
   return `<div class="dayv">
     ${worldClocks()}
     <header class="day-head">
       <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span></div>
-      <div class="day-stats"><b>${P.blocks.length}</b><small>в работе</small><b>${doneN}</b><small>сделано</small></div>
+      <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
     ${weekStrip()}
     ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
-    ${P.blocks.length > 1 ? `<section class="day-line" id="dayLine"><h3 class="day-line-h">Дальше · ${P.blocks.length - 1}</h3>${rows}</section>`
-      : !P.blocks.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
+    ${section(P.tomorrow ? 'Ещё на завтра' : 'Ещё сегодня', restToday)}
+    ${!todays.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
+    ${section('На этой неделе', week, { future: true })}
+    ${section('Позже', later, { future: true })}
     ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span></div>`).join('')}
       <button type="button" class="btn small" data-db-all-tomorrow>Перенести всё на завтра</button></section>` : ''}
     ${doneN ? `<details class="day-done"${doneReqs.length ? ' open' : ''}><summary>Сделано сегодня · ${doneN}</summary>
