@@ -34,16 +34,11 @@ const hasStatus = (k) => !!statusOf(k);
 
 // короткая строка для карточек на доске и в «Моём дне»: где сейчас запрос в цикле
 export function optionsBadge(r) {
+  // только то, чего больше нигде не видно: варианты отправлены, гость ещё не выбрал.
+  // Выбранное место видно строкой «📍 …» / «★ …», статус — колонкой доски.
   const o = r?.options;
-  if (!o) return '';
-  const v = venueOf(r)?.name || '';
-  if (o.reminded_at) return `<span class="opt-badge ok">✓ подтверждено · гостю напомнили${v ? ' · ' + esc(v) : ''}</span>`;
-  if (o.booking?.confirmed_at) return `<span class="opt-badge ok">✓ подтверждено${v ? ' · ' + esc(v) : ''}</span>`;
-  if (o.booking?.sent_at) return `<span class="opt-badge wait">⏳ ждём подтверждения${v ? ' · ' + esc(v) : ''}</span>`;
-  if (!o.items?.length) return '';
-  if (o.chosen != null) return `<span class="opt-badge ok">✓ ${esc(o.items[o.chosen]?.name || 'выбрано')} · бронируем</span>`;
-  if (o.sent_at) return `<span class="opt-badge wait">✦ ${o.items.filter((x) => x.on !== false).length} варианта · ждём выбор</span>`;
-  return '<span class="opt-badge">✦ варианты готовы</span>';
+  if (!o?.sent_at || o.chosen != null || !o.items?.length) return '';
+  return '<span class="opt-badge wait">Ждём выбор гостя</span>';
 }
 // «Гость выбрал: 1 · 2 · 3» — одним нажатием (в «Моём дне» и в окне запроса)
 export function pickChips(r) {
