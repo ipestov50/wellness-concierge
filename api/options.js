@@ -53,6 +53,9 @@ async function verify(o, near) {
   return { status: sameStreet || !o.address ? 'verified' : 'corrected', osm_address: addr, lat: best.lat, lon: best.lon };
 }
 
+// поиск по Google Картам доступен не на всех тарифах Gemini: если отказ — временно работаем через поиск Google
+let mapsOffUntil = 0;
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
@@ -158,9 +161,12 @@ export default async function handler(req, res) {
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], tools, ...extra, generationConfig: { temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } } }),
       signal: AbortSignal.timeout(70000),
     });
-    let source = 'maps';
-    let g = await ask([{ googleMaps: {} }], near ? { toolConfig: { retrievalConfig: { latLng: { latitude: near.lat, longitude: near.lon } } } } : {});
-    if (!g.ok && g.status !== 429) { source = 'search'; g = await ask([{ google_search: {} }]); }
+    let source = 'maps', g = null;
+    if (Date.now() > mapsOffUntil) {
+      g = await ask([{ googleMaps: {} }], near ? { toolConfig: { retrievalConfig: { latLng: { latitude: near.lat, longitude: near.lon } } } } : {});
+      if (!g.ok) mapsOffUntil = Date.now() + 6 * 3600e3; // Карт нет в тарифе ключа (бесплатный уровень) — 6 ч не пробуем
+    }
+    if (!g?.ok) { source = 'search'; g = await ask([{ google_search: {} }]); }
     if (!g.ok) return res.status(g.status === 429 ? 429 : 502).json({ error: g.status === 429 ? 'rate_limited' : 'gemini_error' });
     const j = await g.json();
     const cand = j.candidates?.[0];
