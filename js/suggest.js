@@ -133,8 +133,7 @@ function suggestionsOnly() {
   if (!list.length && deep.on) return `<section class="jarvis-sg"><div class="sg-title"><span>✦ Jarvis предлагает</span><span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span></div></section>`;
   if (!list.length) return '';
   const top = list.slice(0, 3);
-  // первые карточки без плана — составляем план сразу, чтобы он был готов, когда вы посмотрите
-  if (!deep.on) setTimeout(() => top.filter((s) => !s.payload?.tasks && !failed.has(s.id)).slice(0, 2).forEach((x) => draft(x)), 0);
+  // план по подсказке Jarvis составляет только по кнопке «✦ Составить план» — без фоновых трат лимита Gemini
   return `<section class="jarvis-sg">
     <div class="sg-title"><span>✦ Jarvis предлагает</span>${deep.on ? `<span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span>` : list.length > 3 ? `<button type="button" class="link" data-sg-all>Все · ${list.length}</button>` : `<span class="muted">${list.length}</span>`}</div>
     <div class="sg-list">${top.map((s) => card(s, { compact: true })).join('')}</div>
@@ -234,13 +233,7 @@ export async function runDeep() {
     try { localStorage.setItem('sugg.refreshed', String(Date.now())); } catch {}
     const { data } = await sb.from('suggestions').select('*');
     if (data) state.suggestions = data;
-    const todo = visibleSuggestions().filter((x) => !x.payload?.tasks);
-    // по одному: так не упрёмся в бесплатный лимит Gemini
-    for (let i = 0; i < todo.length; i++) {
-      deep.text = `Jarvis продумывает планы: ${i + 1} из ${todo.length}`;
-      render();
-      await draft(todo[i]);
-    }
+    // планы по подсказкам — по кнопке на каждой карточке (каждый план = обращение к Gemini)
     const n = visibleSuggestions().length, u = upcoming().length;
     toast([u ? `Впереди запросов: ${u}` : '', n ? `новых предложений: ${n}` : ''].filter(Boolean).join(' · ') || 'На ближайшие недели всё под контролем ✨');
   } catch (e) {

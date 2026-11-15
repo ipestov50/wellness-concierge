@@ -3,6 +3,8 @@
 // совпало название и место рядом с городом → «адрес подтверждён»; иначе — «проверьте».
 // Только для владельца, данные — с его токеном (RLS). Имена гостя и близких в ИИ не отправляются.
 
+import { getCache, setCache } from './_cache.js';
+
 const MODEL = 'gemini-2.5-flash';
 const UA = { 'User-Agent': 'WellnessConciergeOptions/1.0' };
 const LANG = { RU: 'русском', EN: 'английском', FR: 'французском' };
@@ -162,9 +164,11 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(70000),
     });
     let source = 'maps', g = null;
-    if (Date.now() > mapsOffUntil) {
+    // Карт нет в тарифе ключа — запоминаем на сутки (в базе, а не в памяти сервера), чтобы не тратить обращение каждый раз
+    const mapsOff = Date.now() < mapsOffUntil || !!(await getCache(auth, 'flag|maps_off', 864e5));
+    if (!mapsOff) {
       g = await ask([{ googleMaps: {} }], near ? { toolConfig: { retrievalConfig: { latLng: { latitude: near.lat, longitude: near.lon } } } } : {});
-      if (!g.ok) mapsOffUntil = Date.now() + 6 * 3600e3; // Карт нет в тарифе ключа (бесплатный уровень) — 6 ч не пробуем
+      if (!g.ok) { mapsOffUntil = Date.now() + 6 * 3600e3; await setCache(auth, 'flag|maps_off', { at: Date.now(), status: g.status }); }
     }
     if (!g?.ok) { source = 'search'; g = await ask([{ google_search: {} }]); }
     if (!g.ok) return res.status(g.status === 429 ? 429 : 502).json({ error: g.status === 429 ? 'rate_limited' : 'gemini_error' });

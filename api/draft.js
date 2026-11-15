@@ -129,7 +129,7 @@ export default async function handler(req, res) {
 
 Задачи, предупреждения и детали — по-русски. Сообщение гостю — на его языке (RU/EN/FR), 2–4 предложения, тепло и без навязчивости, без смайликов, обращение {имя}. В сообщении не упоминай чужие медицинские данные.` }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify(ctx) }] }],
-        generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 3072 } },
+        generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 1024 } },
       }),
       signal: AbortSignal.timeout(90000),
     });

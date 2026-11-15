@@ -349,26 +349,33 @@ async function openDraft(b) {
   const c = byId('clients', b.client_id);
   const r = b.request_id ? byId('requests', b.request_id) : null;
   const p = r?.partner_id ? byId('partners', r.partner_id) : null;
-  const m = openModal({ title: b.kind === 'partner' ? 'Сообщение партнёру' : 'Сообщение гостю', saveLabel: 'Закрыть', body: `<div class="dr"><p class="dr-ctx">${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}</p><div class="dr-text"><span class="spin"></span> Jarvis пишет…</div></div>`, onSave: async () => {} });
+  const m = openModal({ title: b.kind === 'partner' ? 'Сообщение партнёру' : 'Сообщение гостю', saveLabel: 'Закрыть', body: `<div class="dr"><p class="dr-ctx">${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}</p><div class="dr-body"></div></div>`, onSave: async () => {} });
   m.form.querySelector('#cancel').hidden = true;
-  try {
-    const body = await api('message', { kind: b.kind, title: b.title, detail: b.detail || '', request_id: r?.id || null, client_id: c?.id || null }, { signal: m.signal });
-    const first = (c?.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
-    const text = String(body.text || '').replace(/\{имя\}/g, first).replace(/\{гость\}/g, (c?.name || '').replace(/\s*\(.*?\)/g, ''));
-    const phone = b.kind === 'guest' ? (c?.phone || '').replace(/[^\d]/g, '') : '';
-    m.form.querySelector('.dr-text').outerHTML = `<textarea class="dr-area" rows="7">${esc(text)}</textarea>
-      <p class="dr-lang">${esc(body.lang_label || '')}${b.kind === 'partner' && p?.contact ? ` · контакт: ${esc(p.contact)}` : ''}</p>
-      <div class="dr-act"><button type="button" class="btn small primary" data-dr-copy>Скопировать</button>
-      ${phone ? `<a class="btn small" target="_blank" rel="noopener" data-dr-wa href="https://wa.me/${phone}">WhatsApp</a>` : ''}
-      ${b.kind === 'guest' && c?.telegram ? `<a class="btn small" target="_blank" rel="noopener" href="https://t.me/${esc(c.telegram.replace(/^@/, ''))}">Telegram</a>` : ''}</div>`;
-    const area = m.form.querySelector('.dr-area');
-    m.form.querySelector('[data-dr-copy]').onclick = async () => { await navigator.clipboard.writeText(area.value); toast('Скопировано'); };
-    const wa = m.form.querySelector('[data-dr-wa]');
-    if (wa) wa.onclick = () => { wa.href = `https://wa.me/${phone}?text=${encodeURIComponent(area.value)}`; };
-  } catch (err) {
-    if (isAbort(err)) return;
-    m.form.querySelector('.dr-text').textContent = 'Не получилось: ' + (err.message === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : err.message);
-  }
+  const write = async (force = false) => {
+    const box = m.form.querySelector('.dr-body');
+    box.innerHTML = '<div class="dr-text"><span class="spin"></span> Jarvis пишет…</div>';
+    try {
+      const body = await api('message', { kind: b.kind, title: b.title, detail: b.detail || '', request_id: r?.id || null, client_id: c?.id || null, force }, { signal: m.signal });
+      const first = (c?.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
+      const text = String(body.text || '').replace(/\{имя\}/g, first).replace(/\{гость\}/g, (c?.name || '').replace(/\s*\(.*?\)/g, ''));
+      const phone = b.kind === 'guest' ? (c?.phone || '').replace(/[^\d]/g, '') : '';
+      box.innerHTML = `<textarea class="dr-area" rows="7">${esc(text)}</textarea>
+        <p class="dr-lang">${esc(body.lang_label || '')}${body.cached ? ' · сохранённый черновик' : ''}${b.kind === 'partner' && p?.contact ? ` · контакт: ${esc(p.contact)}` : ''}</p>
+        <div class="dr-act"><button type="button" class="btn small primary" data-dr-copy>Скопировать</button>
+        ${phone ? `<a class="btn small" target="_blank" rel="noopener" data-dr-wa href="https://wa.me/${phone}">WhatsApp</a>` : ''}
+        ${b.kind === 'guest' && c?.telegram ? `<a class="btn small" target="_blank" rel="noopener" href="https://t.me/${esc(c.telegram.replace(/^@/, ''))}">Telegram</a>` : ''}
+        <button type="button" class="link" data-dr-redo title="Jarvis напишет другой вариант">↻ Переписать</button></div>`;
+      const area = box.querySelector('.dr-area');
+      box.querySelector('[data-dr-copy]').onclick = async () => { await navigator.clipboard.writeText(area.value); toast('Скопировано'); };
+      box.querySelector('[data-dr-redo]').onclick = () => write(true);
+      const wa = box.querySelector('[data-dr-wa]');
+      if (wa) wa.onclick = () => { wa.href = `https://wa.me/${phone}?text=${encodeURIComponent(area.value)}`; };
+    } catch (err) {
+      if (isAbort(err)) return;
+      box.querySelector('.dr-text').textContent = 'Не получилось: ' + (err.message === 'rate_limited' ? 'лимит Gemini, попробуйте через минуту' : err.message);
+    }
+  };
+  write();
 }
 
 // ---------- настройки дня ----------

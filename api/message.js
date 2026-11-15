@@ -1,6 +1,8 @@
 // Черновик сообщения для блока «Моего дня»: гостю — на его языке, партнёру — на языке страны.
 // Только для владельца. Имена в ИИ не отправляются: {имя} — обращение к гостю, {гость} — имя на брони.
 
+import { cacheKey, getCache, setCache } from './_cache.js';
+
 const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 const LANG_BY_CC = { FR: ['fr', 'французском'], MC: ['fr', 'французском'], IT: ['it', 'итальянском'], ES: ['es', 'испанском'], DE: ['de', 'немецком'], AT: ['de', 'немецком'], CH: ['fr', 'французском'], PT: ['pt', 'португальском'] };
@@ -32,6 +34,9 @@ export default async function handler(req, res) {
     const day = r?.deadline ? r.deadline.slice(0, 10) : new Date().toISOString().slice(0, 10);
     const trips = cid ? await rest(`trips?client_id=eq.${cid}&select=city,country_code,hotel,start_date,end_date&order=start_date.desc&limit=5`, auth) : [];
     const trip = trips.find((t) => t.start_date && t.start_date <= day && day <= (t.end_date || t.start_date)) || trips[0];
+    // тот же черновик для неизменившихся запроса/гостя/партнёра — из кэша (7 дней), «↻ Переписать» — заново
+    const ck = cacheKey('msg', b.kind, b.title, b.detail, r?.id, r?.updated_at, c?.id, c?.updated_at, p?.name, trip?.city, trip?.hotel);
+    if (!b.force) { const hit = await getCache(auth, ck, 7 * 864e5); if (hit?.text) return res.status(200).json({ ...hit, cached: true }); }
     const toPartner = b.kind === 'partner';
     const [lang, langLabel] = toPartner ? LANG_BY_CC[trip?.country_code] || ['en', 'английском'] : GUEST_LANG[c?.language] || GUEST_LANG.RU;
     const when = r?.deadline ? new Date(r.deadline).toLocaleString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : null;
@@ -52,7 +57,9 @@ export default async function handler(req, res) {
     if (!g.ok) return res.status(502).json({ error: g.status === 429 ? 'rate_limited' : 'gemini_error' });
     const j = await g.json();
     const text = (j.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('').trim();
-    return res.status(200).json({ text, lang, lang_label: `на ${langLabel} языке` });
+    const out = { text, lang, lang_label: `на ${langLabel} языке` };
+    if (text) await setCache(auth, ck, out);
+    return res.status(200).json(out);
   } catch (e) {
     return res.status(500).json({ error: String(e.message || e) });
   }

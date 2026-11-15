@@ -2,6 +2,8 @@
 // Ключ Gemini хранится только здесь (переменная окружения GEMINI_API_KEY в Vercel).
 // Отвечает только залогиненному владельцу. Один вызов модели на запрос, без повторов.
 
+import { cacheKey, getCache, setCache } from './_cache.js';
+
 const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 const CATEGORIES = ['Spa & Wellness', 'Dining', 'Transport', 'Accommodation', 'Activities', 'Health & Fitness', 'Gifts & Events', 'Other'];
@@ -120,6 +122,11 @@ export default async function handler(req, res) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return res.status(503).json({ error: 'no_key' });
 
+  // тот же текст в тот же день (повтор после ошибки, двойное нажатие) — из кэша
+  const auth = req.headers.authorization || '';
+  const ck = cacheKey('parse', text, new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()));
+  const hit = await getCache(auth, ck, 6 * 3600e3);
+  if (hit?.requests) return res.status(200).json({ ...hit, cached: true });
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
       method: 'POST',
@@ -172,6 +179,7 @@ export default async function handler(req, res) {
       approval_needed: !!x.approval_needed,
       needs_review: !!x.needs_review,
     }));
+    if (clean.length) await setCache(auth, ck, { requests: clean });
     return res.status(200).json({ requests: clean });
   } catch (e) {
     return res.status(504).json({ error: 'timeout' });

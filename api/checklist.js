@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 - Каждый пункт — конкретное действие, коротко, по-русски. В hint — почему это важно именно этому гостю.
 - Если добавить нечего по-настоящему ценного, верни пустой список. Лучше 2 точных пункта, чем 4 общих.` }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify(ctx) }] }],
-        generationConfig: { temperature: 0.4, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 1536 } },
+        generationConfig: { temperature: 0.4, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 512 } },
       }),
       signal: AbortSignal.timeout(60000),
     });
