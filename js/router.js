@@ -5,6 +5,20 @@ if (!['day', 'board', 'calendar'].includes(savedView)) savedView = 'day';
 export const ui = { tab: 'requests', reqView: savedView, client: null, q: '', ptype: '', pcity: '' };
 const views = {};
 export const registerView = (name, fn) => { views[name] = fn; };
+// тяжёлые разделы грузятся при первом открытии; пока грузятся — скелет вместо пустоты
+const lazy = {};
+export const registerLazy = (name, loader) => { lazy[name] = loader; };
+export const viewSkeleton = () => '<div class="vskel" aria-busy="true" aria-label="Загрузка"><i class="vs-h"></i><i></i><i></i><i></i></div>';
+const pending = new Set();
+function loadLazy(name) {
+  if (pending.has(name)) return;
+  pending.add(name);
+  lazy[name]().then(() => render()).catch(() => {
+    const app = document.getElementById('app');
+    if (app) app.innerHTML = '<div class="notice retry-card"><p>Раздел не загрузился — проверьте интернет.</p><button type="button" class="btn primary" data-retry-view>↻ Повторить</button></div>';
+  }).finally(() => pending.delete(name));
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-retry-view]')) render(); });
 
 export function render() {
   const app = document.getElementById('app');
@@ -21,6 +35,7 @@ export function render() {
   const keepId = active && app.contains(active) && active.id ? active.id : null;
   const caret = keepId && active.selectionStart != null ? active.selectionStart : null;
   const scroll = app.querySelector('.board')?.scrollLeft;
+  if (!views[ui.tab] && lazy[ui.tab]) { app.innerHTML = viewSkeleton(); loadLazy(ui.tab); return; }
   views[ui.tab]?.(app);
   // плавное появление — только при смене раздела или вида, не при каждом обновлении
   const key = ui.tab + '|' + ui.reqView + '|' + (ui.tab === 'clients' ? ui.client : '') + '|' + (ui.reqView === 'calendar' ? (ui.calMode || '') + (ui.calDate || '') : '');

@@ -3,7 +3,10 @@ import { setStatus, toggleDone, isDone } from '../actions.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
-import { calendarView, bindCalendar } from './calendar.js';
+import { viewSkeleton } from '../router.js';
+// календарь — отдельный модуль, грузится при первом открытии
+let cal$ = null, calLoading = null;
+const loadCal = () => calLoading || (calLoading = import('./calendar.js').then((m) => { cal$ = m; render(); }).catch(() => { calLoading = null; }));
 import { dayView, bindDay } from './myday.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, effectiveStatus, KINDS } from '../statuses.js';
@@ -225,7 +228,7 @@ function view(app) {
     </div>`;
   app.innerHTML = myday
     ? `<div class="stack daystack">${dayNotes()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
-    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? calendarView(list) : boardView(list)}`;
+    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : boardView(list)}`;
   if (myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
@@ -233,7 +236,7 @@ function view(app) {
     render();
   });
   if (board) enableDrag(app.querySelector('#board'));
-  if (cal) bindCalendar(app);
+  if (cal && cal$) cal$.bindCalendar(app);
   if (myday) bindDay(app);
   bindSmart(app);
 }

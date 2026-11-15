@@ -1,16 +1,14 @@
 import { getSupabase } from './supabase.js';
 import { esc, $, toast, closeModal } from './ui.js';
 import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js';
-import { ui, render } from './router.js';
+import { ui, render, registerLazy, viewSkeleton } from './router.js';
 import { editRequest, editClient, editPartner } from './forms.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
-import { openTelegram } from './telegram.js';
-import './brief.js';
 import './views/requests.js';
-import './views/clients.js';
-import './views/partners.js';
-import './views/trips.js';
-import { editTrip } from './dossier.js';
+// остальные разделы — по требованию (меньше кода на старте)
+registerLazy('clients', () => import('./views/clients.js'));
+registerLazy('partners', () => import('./views/partners.js'));
+registerLazy('trips', () => import('./views/trips.js'));
 
 const root = document.getElementById('root');
 let sb, shown = null;
@@ -100,7 +98,7 @@ function renderShell(session) {
         </div>
       </div>
     </header>
-    <main id="app"><div class="empty">Загружаю данные…</div></main>
+    <main id="app">${viewSkeleton()}</main>
     <div id="modal"></div>`;
   applyTheme(getTheme());
   render();
@@ -117,7 +115,7 @@ function firstLoad() {
     if (!app) return;
     app.innerHTML = `<div class="notice retry-card"><p>Не удалось загрузить данные${navigator.onLine ? '' : ' — нет интернета'}.</p><small>${esc(e.message || e)}</small>
       <button type="button" class="btn primary" id="retryLoad">↻ Повторить</button></div>`;
-    $('#retryLoad').addEventListener('click', () => { app.innerHTML = '<div class="empty">Загружаю данные…</div>'; firstLoad(); });
+    $('#retryLoad').addEventListener('click', () => { app.innerHTML = viewSkeleton(); firstLoad(); });
   });
 }
 
@@ -137,7 +135,7 @@ document.addEventListener('click', (e) => {
   else if (t.id === 'addBtn') {
     if (ui.tab === 'requests') editRequest(null);
     else if (ui.tab === 'clients') editClient(null);
-    else if (ui.tab === 'trips') editTrip(null, ui.client);
+    else if (ui.tab === 'trips') import('./dossier.js').then((m) => m.editTrip(null, ui.client));
     else editPartner(null);
   } else if (t.id === 'theme') {
     const next = THEMES[(THEMES.indexOf(getTheme()) + 1) % THEMES.length];
@@ -153,7 +151,7 @@ document.addEventListener('click', (e) => {
     sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? authError(error) : 'Пароль сохранён. Теперь можно входить по паролю.', error ? 'err' : ''));
   } else if (t.id === 'tgBtn') {
     if (menu) menu.hidden = true;
-    openTelegram();
+    import('./telegram.js').then((m) => m.openTelegram());
   } else if (t.id === 'backupBtn' || t.dataset.backup != null) {
     if (menu) menu.hidden = true;
     openBackup(render);
@@ -161,7 +159,14 @@ document.addEventListener('click', (e) => {
     sb.auth.signOut();
   }
 });
-document.addEventListener('input', (e) => { if (e.target.id === 'q') { ui.q = e.target.value; render(); } });
+// «Перед вылетом» — модуль брифинга грузится при первом нажатии
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-brief]');
+  if (b) { e.stopPropagation(); import('./brief.js').then((m) => m.openBrief(b.dataset.brief)); }
+});
+// поиск: перерисовка через 300 мс после последней буквы, а не на каждую
+let qTimer;
+document.addEventListener('input', (e) => { if (e.target.id === 'q') { ui.q = e.target.value; clearTimeout(qTimer); qTimer = setTimeout(render, 300); } });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'ptype') { ui.ptype = e.target.value; render(); }
   if (e.target.id === 'pcity') { ui.pcity = e.target.value; render(); }

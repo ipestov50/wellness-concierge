@@ -1,5 +1,5 @@
 // «✈️ Перед вылетом»: время, погода, праздники, деньги — сразу; въезд, платежи, связь, фразы — от Jarvis с источниками
-import { api, isAbort } from './api.js';
+import { api, isAbort, cached, TTL, agoLabel } from './api.js';
 import { esc, openModal, toast, fromParisInput } from './ui.js';
 import { state, byId, save } from './data.js';
 import { firstKey } from './statuses.js';
@@ -45,6 +45,7 @@ export function openBrief(tripId) {
           <p>${esc(fmtRange(t) || 'даты не указаны')}${t.hotel ? ` · ${esc(t.hotel)}` : ''}</p>
           <p class="bf-guest">${c ? esc(c.name) : ''}${cit ? ` · ${cit}` : c ? ' · <button type="button" class="link" data-editcl="' + c.id + '">указать гражданство</button>' : ''}</p></div>
       </header>
+      <p class="bf-upd"><span id="bf-ago"></span><button type="button" class="link" data-bf-refresh>↻ Обновить</button></p>
       <div class="bf-grid">
         <section class="bf-card" id="bf-time"><h4>🕐 Время</h4>${skeleton}</section>
         <section class="bf-card" id="bf-money"><h4>💱 Деньги</h4>${skeleton}</section>
@@ -63,10 +64,15 @@ export function openBrief(tripId) {
   // каждый виджет отдельно: сбой одного (погода, курс, праздники) не ломает остальные — у него своя кнопка «Повторить»
   const retry = (sel, title, msg) => { const el = $(sel); if (el) el.innerHTML = `<h4>${title}</h4><div class="bf-retry"><p class="bf-sub">${esc(msg)}</p><button type="button" class="btn small" data-bf-retry>↻ Повторить</button></div>`; };
   const part = (sel, title, fn) => { try { fn(); } catch (e) { console.error(e); retry(sel, title, 'Не удалось показать'); } };
-  const loadFacts = () => {
+  let agoTimer;
+  const loadFacts = (force = false) => {
   m.form.querySelectorAll('.bf-card').forEach((el) => { const h = el.querySelector('h4')?.outerHTML || ''; el.innerHTML = h + skeleton; });
-  call(tripId, 'facts', m.signal).then((f) => {
+  $('#bf-ago').textContent = '';
+  // повторное открытие в течение 15 мин — из кэша, без запросов к погоде/курсам
+  cached(`facts:${tripId}|${t.city}|${t.start_date}|${c?.citizenship || ''}`, TTL.weather, () => call(tripId, 'facts', m.signal), { force }).then(({ value: f, at }) => {
     if (!m.form.isConnected) return;
+    const tick = () => { const el = m.form.querySelector('#bf-ago'); if (!el) return clearInterval(agoTimer); el.textContent = agoLabel(at); };
+    clearInterval(agoTimer); tick(); agoTimer = setInterval(tick, 30e3);
     part('#bf-time', '🕐 Время', () => {
     // время
     const tz = f.tz || t.tz;
@@ -184,7 +190,7 @@ export function openBrief(tripId) {
   renderJarvis(t.brief);
 
   m.form.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-bf-retry]')) { loadFacts(); return; }
+    if (e.target.closest('[data-bf-retry]') || e.target.closest('[data-bf-refresh]')) { loadFacts(true); return; }
     if (e.target.closest('[data-bf-run]')) {
       renderJarvis(null, true);
       try { const { brief } = await call(tripId, 'jarvis', m.signal); t.brief = brief; renderJarvis(brief); }
@@ -215,8 +221,4 @@ export function openBrief(tripId) {
   });
 }
 
-// кнопка «Перед вылетом» на карточках поездок
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-brief]');
-  if (b) { e.stopPropagation(); openBrief(b.dataset.brief); }
-});
+// кнопка «Перед вылетом» на карточках поездок — обработчик в app.js (модуль грузится по требованию)

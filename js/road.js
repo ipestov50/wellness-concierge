@@ -4,6 +4,7 @@ import { getSupabase } from './supabase.js';
 import { esc, toast } from './ui.js';
 import { TZ } from './const.js';
 import { byId, save } from './data.js';
+import { cached, TTL, agoLabel } from './api.js';
 
 const CATS = ['Dining', 'Spa & Wellness', 'Activities', 'Health & Fitness', 'Transport', 'Gifts & Events'];
 const hm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
@@ -70,6 +71,7 @@ export async function bindRoad(root) {
     input.addEventListener('blur', () => setTimeout(close, 150));
   });
 
+  let at = 0;
   const show = (t) => {
     el.classList.remove('lvl0', 'lvl2', 'lvl3', 'muted-road');
     if (t?.error === 'no_tomtom_key') { el.remove(); return; }
@@ -97,18 +99,28 @@ export async function bindRoad(root) {
     txt.innerHTML = `<b>${t.minutes} мин</b>${t.delay ? ` <span class="road-delay">+${t.delay} пробки</span>` : ' · дорога свободна'} · ${t.km} км
       <small>${late ? '<b>выезжать сейчас</b>' : `выезжать в <b>${hm(t.leaveBy)}</b>`}${[...t.issues.map((x) => x.label), ...t.near.map((x) => x.label)].slice(0, 2).map((x) => ' · ' + esc(x)).join('')}</small>
       <small class="road-to">из <b>${esc(t.fromLabel || t.fromName || '')}</b></small>
-      <small class="road-to">в <b>${esc(t.toLabel || '')}</b>${t.guessed ? ' · найдено по названию — уточните через ✎' : ''}</small>`;
+      <small class="road-to">в <b>${esc(t.toLabel || '')}</b>${t.guessed ? ' · найдено по названию — уточните через ✎' : ''}</small>
+      <small class="road-ago">${agoLabel(at)} · <button type="button" class="link" data-road-refresh>↻ обновить</button></small>`;
+    el.querySelector('[data-road-refresh]')?.addEventListener('click', () => run(true));
     openForm(false);
   };
 
-  const run = async () => {
+  // пробки меняются быстро, но не ежесекундно: 4 минуты результат берётся из кэша (бережём лимит TomTom)
+  const run = async (force = false) => {
     ico.innerHTML = '<span class="spin"></span>';
     txt.textContent = 'Jarvis проверяет дорогу…';
     try {
-      const sb = await getSupabase();
-      const { data, error } = await sb.functions.invoke('jarvis', { body: { mode: 'traffic', id } });
-      let t = data;
-      if (error) { try { t = await error.context.json(); } catch { t = { error: 'fail' }; } }
+      const r0 = byId('requests', id);
+      const res = await cached(`road:${id}|${r0?.road_from || ''}|${r0?.road_to || ''}|${r0?.deadline || ''}`, TTL.road, async () => {
+        const sb = await getSupabase();
+        const { data, error } = await sb.functions.invoke('jarvis', { body: { mode: 'traffic', id } });
+        let t = data;
+        if (error) { try { t = await error.context.json(); } catch { t = { error: 'fail' }; } }
+        if (t?.error && t.error !== 'no_endpoints' && t.error !== 'no_tomtom_key') throw Object.assign(new Error(t.error), { body: t });
+        return t;
+      }, { force }).catch((e) => ({ value: e.body || { error: 'fail' }, at: Date.now() }));
+      at = res.at;
+      const t = res.value;
       if (el.isConnected) show(t);
     } catch { if (el.isConnected) show({ error: 'fail' }); }
   };
@@ -122,7 +134,7 @@ export async function bindRoad(root) {
     try {
       // сохраняем, только если изменилось — тогда и расписание будет следить по этим адресам
       if (from !== (r.road_from || '') || to !== (r.road_to || '')) await save('requests', id, { road_from: from, road_to: to });
-      await run();
+      await run(true);
     } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
     e.target.disabled = false;
   });

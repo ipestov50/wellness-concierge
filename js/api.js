@@ -27,3 +27,23 @@ export function scope(name) {
 }
 export const scopeSignal = (name) => scopes.get(name)?.signal;
 export const abortScope = (name) => { scopes.get(name)?.abort(); scopes.delete(name); };
+
+// Кэш живых виджетов в памяти вкладки: повторное открытие не тратит лимиты внешних API.
+// Погода/курсы/праздники — 15 мин, дорога (пробки) — 4 мин. force — обновить вручную.
+const cache = new Map();
+export const TTL = { weather: 15 * 60e3, road: 4 * 60e3 };
+export async function cached(key, ttl, fn, { force = false } = {}) {
+  const hit = cache.get(key);
+  if (!force && hit && Date.now() - hit.at < ttl) return { value: await hit.value, at: hit.at, fromCache: true };
+  const at = Date.now();
+  const value = fn();
+  cache.set(key, { at, value });
+  try { return { value: await value, at, fromCache: false }; }
+  catch (e) { if (cache.get(key)?.value === value) cache.delete(key); throw e; } // ошибки не кэшируем
+}
+export const clearCache = () => cache.clear();
+// «обновлено 3 мин назад»
+export function agoLabel(at) {
+  const m = Math.floor((Date.now() - at) / 60e3);
+  return m < 1 ? 'обновлено только что' : `обновлено ${m} мин назад`;
+}
