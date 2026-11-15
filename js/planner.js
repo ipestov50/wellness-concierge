@@ -68,8 +68,9 @@ function buildActions(now, D, settings) {
   const active = statuses.filter((s) => s.kind === 'active').map((s) => s.key);
   const closed = new Set(statuses.filter((s) => s.kind !== 'active').map((s) => s.key));
   const bookIdx = Math.max(0, active.indexOf('booking') >= 0 ? active.indexOf('booking') : active.length - 2);
-  const client = (id) => D.clients.find((c) => c.id === id);
-  const partner = (id) => D.partners.find((p) => p.id === id);
+  const cMap = new Map(D.clients.map((c) => [c.id, c])), pMap = new Map(D.partners.map((p) => [p.id, p]));
+  const client = (id) => cMap.get(id);
+  const partner = (id) => pMap.get(id);
   const today = dayIn(OWNER_TZ, now);
 
   const push = (a) => acts.push({ dur: 10, fixed: null, earliest: now, latest: null, score: 30, ...a });
@@ -155,7 +156,11 @@ export function planDay({ now = Date.now(), data, settings = {}, marks = [] }) {
   if (now >= dayEnd) { tomorrow = true; day = addDays(day, 1); dayStart = zoned(OWNER_TZ, day, S.work_from); dayEnd = zoned(OWNER_TZ, day, S.work_to); }
   const t0 = Math.max(dayStart, ceilTo(now, STEP));
   const mk = Object.fromEntries(marks.filter((m) => m.day === day).map((m) => [m.key, m]));
-  const client = (id) => data.clients.find((c) => c.id === id);
+  const cMap = new Map(data.clients.map((c) => [c.id, c]));
+  const client = (id) => cMap.get(id);
+  // поездки по гостям — один раз, а не на каждое действие
+  const tripsBy = new Map();
+  for (const t of data.trips) { if (!tripsBy.has(t.client_id)) tripsBy.set(t.client_id, []); tripsBy.get(t.client_id).push(t); }
   const lunch = [zoned(OWNER_TZ, day, S.lunch_from), zoned(OWNER_TZ, day, S.lunch_to)];
 
   let acts = buildActions(tomorrow ? dayStart : now, data, S);
@@ -169,13 +174,14 @@ export function planDay({ now = Date.now(), data, settings = {}, marks = [] }) {
   const work = [[t0, dayEnd]];
   for (const a of acts) {
     const c = client(a.client_id);
-    const g = guestTz(c, data.trips, a.fixed || t0);
+    const ct = tripsBy.get(a.client_id) || [];
+    const g = guestTz(c, ct, a.fixed || t0);
     a.guestTz = g?.tz || null; a.guestPlace = g?.place || null;
     let win = work;
     if (a.kind === 'guest' && g && !a.urgentGuest && !a.overdue) {
       win = intersect(win, localWindows(g.tz, S.guest_from, S.guest_to, t0, dayEnd));
       // в самолёте не пишем
-      for (const [f1, f2] of inFlight(c, data.trips)) win = win.flatMap(([s, e]) => (f2 <= s || f1 >= e ? [[s, e]] : [[s, f1], [f2, e]].filter(([x, y]) => y - x >= STEP)));
+      for (const [f1, f2] of inFlight(c, ct)) win = win.flatMap(([s, e]) => (f2 <= s || f1 >= e ? [[s, e]] : [[s, f1], [f2, e]].filter(([x, y]) => y - x >= STEP)));
     }
     if (a.kind === 'partner' && !a.fixed) {
       const ptz = g?.trip?.tz || OWNER_TZ;
@@ -251,4 +257,46 @@ export function why(b) {
   if (b.outside) out.push('вне рабочих часов, но важно');
   if (b.batch) out.push('вместе с другими гостями из этого пояса');
   return out.join(' · ');
+}
+
+// ---------- неделя: что ждёт по дням (для планирования вперёд) ----------
+export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
+  const today = dayIn(OWNER_TZ, now);
+  const statuses = data.statuses || [];
+  const closed = new Set(statuses.filter((s) => s.kind !== 'active').map((s) => s.key));
+  const cMap = new Map(data.clients.map((c) => [c.id, c]));
+  const rMap = new Map(data.requests.map((r) => [r.id, r]));
+  const out = [];
+  // действия, перенесённые «на потом»: последний день отметки + 1 = день, когда они вернутся
+  const lastMoved = new Map();
+  for (const m of marks) if (m.status === 'tomorrow' && m.day >= today) lastMoved.set(m.key, m.day > (lastMoved.get(m.key) || '') ? m.day : lastMoved.get(m.key));
+  for (let i = 0; i < days; i++) {
+    const d = addDays(today, i);
+    const items = [];
+    for (const r of data.requests) {
+      if (closed.has(r.status) || !r.deadline) continue;
+      const ms = Date.parse(r.deadline);
+      if (dayIn(OWNER_TZ, ms) !== d) continue;
+      const c = cMap.get(r.client_id);
+      items.push({ kind: 'deadline', t: ms, time: hmIn(OWNER_TZ, ms) === '00:00' ? '' : hmIn(OWNER_TZ, ms), title: r.summary, who: firstName(c), request_id: r.id, urgency: r.urgency, category: r.category });
+    }
+    for (const t of data.trips) {
+      const c = cMap.get(t.client_id);
+      if (t.flight_in_at && dayIn(OWNER_TZ, Date.parse(t.flight_in_at)) === d) items.push({ kind: 'arrive', t: Date.parse(t.flight_in_at), time: hmIn(OWNER_TZ, Date.parse(t.flight_in_at)), title: `Прилёт${t.flight_in ? ' ' + t.flight_in : ''} · ${t.city}`, who: firstName(c), trip_id: t.id });
+      else if (!t.flight_in_at && t.start_date === d) items.push({ kind: 'arrive', t: zoned(OWNER_TZ, d, 9), time: '', title: `Заезд · ${t.city}`, who: firstName(c), trip_id: t.id });
+      if (t.flight_out_at && dayIn(OWNER_TZ, Date.parse(t.flight_out_at)) === d) items.push({ kind: 'depart', t: Date.parse(t.flight_out_at), time: hmIn(OWNER_TZ, Date.parse(t.flight_out_at)), title: `Вылет${t.flight_out ? ' ' + t.flight_out : ''} · ${t.city}`, who: firstName(c), trip_id: t.id });
+    }
+    const md = d.slice(5);
+    for (const c of data.clients) if (c.birthday?.slice(5) === md) items.push({ kind: 'date', t: zoned(OWNER_TZ, d, 8), time: '', title: 'День рождения', who: firstName(c), client_id: c.id });
+    for (const p of data.people || []) if (p.birthday?.slice(5) === md) items.push({ kind: 'date', t: zoned(OWNER_TZ, d, 8), time: '', title: `ДР · ${p.name}`, who: firstName(cMap.get(p.client_id)), client_id: p.client_id });
+    for (const x of data.client_dates || []) if (x.date?.slice(5) === md) items.push({ kind: 'date', t: zoned(OWNER_TZ, d, 8), time: '', title: x.title, who: firstName(cMap.get(x.client_id)), client_id: x.client_id });
+    // вернутся в этот день после переноса
+    for (const [key, last] of lastMoved) if (addDays(last, 1) === d) {
+      const r = rMap.get(key.split(':')[1]);
+      items.push({ kind: 'moved', t: zoned(OWNER_TZ, d, 8, 30), time: '', title: r ? r.summary : 'Перенесённое действие', who: firstName(cMap.get(r?.client_id)), request_id: r?.id, key });
+    }
+    items.sort((a, b) => a.t - b.t);
+    out.push({ day: d, items, load: items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length });
+  }
+  return out;
 }

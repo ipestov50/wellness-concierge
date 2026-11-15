@@ -7,17 +7,38 @@ const listeners = new Set();
 let sb, channel;
 
 export const onChange = (fn) => listeners.add(fn);
-const emit = () => listeners.forEach((fn) => fn());
+// версия данных: растёт при любом изменении — по ней кэшируются план дня и индексы
+let version = 0;
+export const dataVersion = () => version;
+// перерисовка не чаще одного раза за кадр, сколько бы событий ни пришло
+let queued = false;
+const emit = () => {
+  version++;
+  if (queued) return;
+  queued = true;
+  (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : setTimeout)(() => { queued = false; listeners.forEach((fn) => fn()); });
+};
 
-export const byId = (table, id) => state[table].find((x) => x.id === id) || null;
+// поиск по id через индекс (Map), а не перебором — пересобирается только после изменений
+const idx = {};
+export const byId = (table, id) => {
+  if (!id) return null;
+  let m = idx[table];
+  if (!m || m.v !== version || m.list !== state[table]) {
+    m = idx[table] = { v: version, list: state[table], map: new Map(state[table].map((x) => [x.id, x])) };
+  }
+  return m.map.get(id) || null;
+};
 
 function upsertLocal(table, row) {
   const list = state[table];
   const i = list.findIndex((x) => x.id === row.id);
   if (i >= 0) list[i] = row; else list.push(row);
+  version++;
 }
 function removeLocal(table, id) {
   state[table] = state[table].filter((x) => x.id !== id);
+  version++;
 }
 
 export async function loadAll() {
@@ -26,6 +47,7 @@ export async function loadAll() {
   results.forEach((r, i) => { if (r.error) throw r.error; state[TABLES[i]] = r.data; });
   if (!state.statuses.length) await seedStatuses();
   state.loaded = true;
+  lastLoad = Date.now();
   emit();
 }
 
@@ -47,8 +69,9 @@ export async function startRealtime() {
 }
 
 // Когда вкладка снова видна (телефон проснулся) — освежаем данные
+let lastLoad = 0;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && state.loaded) loadAll().catch(() => {});
+  if (document.visibilityState === 'visible' && state.loaded && Date.now() - lastLoad > 60e3) loadAll().catch(() => {});
 });
 
 export async function save(table, id, data) {

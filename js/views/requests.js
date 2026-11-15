@@ -4,7 +4,9 @@ import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
 import { ring } from '../checklist.js';
 import { calendarView, bindCalendar } from './calendar.js';
-import { dayView, bindDay } from './myday.js';
+import { dayView, bindDay, requestDayInfo } from './myday.js';
+import { hmIn as hmP } from '../planner.js';
+const hmIn = (ms) => hmP('Europe/Paris', ms);
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
@@ -119,7 +121,7 @@ function shortWhen(iso) {
   return t === '00:00' ? day : `${day} · ${t}`;
 }
 
-function rowHtml(r, group) {
+function rowHtml(r, group, info = null) {
   const c = byId('clients', r.client_id);
   const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
   const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
@@ -135,6 +137,9 @@ function rowHtml(r, group) {
             <span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span></span>
           <span class="tline"><span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span>
             <span class="tstatus">${ring(r, 14)}${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
+          ${info?.next ? `<span class="tnext" data-goto-day title="Открыть «Мой день»">⏰ ${hmIn(info.next.start)} · ${esc(info.next.title)}</span>`
+            : info?.handled ? '<span class="tnext ok">✓ на сегодня по плану всё сделано</span>'
+            : info?.moved ? '<span class="tnext moved">↪︎ перенесено из плана на другой день</span>' : ''}
         </span>
       </button>
     </div>
@@ -146,7 +151,9 @@ function summary(today) {
   const now = new Date();
   const late = open.filter((r) => r.deadline && new Date(r.deadline) < now).length;
   const todayN = open.filter((r) => r.deadline && parisDay(new Date(r.deadline)) === today && new Date(r.deadline) >= now).length;
-  const done = state.requests.filter((r) => r.status === doneKey() && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
+  const doneReq = state.requests.filter((r) => r.status === doneKey() && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
+  const doneActs = state.day_items.filter((m) => m.day === today && m.status === 'done').length;
+  const done = doneReq + doneActs;
   const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now) % 24;
   const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
   const date = now.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
@@ -171,9 +178,19 @@ function todayView(list) {
   const by = {};
   for (const r of open) (by[groupOf(r, today, tomorrow, weekEnd)] ||= []).push(r);
   const sort = (a, b) => (a.deadline || '9').localeCompare(b.deadline || '9') || URG_ORDER[a.urgency] - URG_ORDER[b.urgency];
+  // связь с «Моим днём»: что уже сделано по плану — уходит вниз, у остального видно ближайшее действие
+  const D = requestDayInfo();
+  const handled = [];
+  for (const g of Object.keys(by)) by[g] = by[g].filter((r) => {
+    if (D.done.has(r.id) && !D.next.has(r.id)) { handled.push(r); return false; }
+    return true;
+  });
+  const info = (r) => ({ next: D.next.get(r.id), moved: D.moved.has(r.id) && !D.next.has(r.id), handled: false });
   const html = GROUPS.filter(([g]) => by[g]?.length).map(([g, label]) =>
     `<section class="tgroup g-${g}"><h3>${label}<span>${by[g].length}</span></h3>
-      <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g)).join('')}</div></section>`).join('');
+      <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g, info(r))).join('')}</div></section>`).join('')
+    + (handled.length ? `<details class="tgroup g-handled"><summary><h3>✓ Сегодня сделано по плану<span>${handled.length}</span></h3></summary>
+      <div class="tlist">${handled.sort(sort).map((r) => rowHtml(r, groupOf(r, today, tomorrow, weekEnd), { handled: true })).join('')}</div></details>` : '');
   return (html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`) +
     (html ? '<p class="hint swipe-hint">На телефоне: смахните строку вправо — «Сделано», влево — «На завтра».</p>' : '');
 }
@@ -318,6 +335,7 @@ function view(app) {
   bindSmart(app);
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
   if (!board && !cal && !myday) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
+  app.querySelectorAll('[data-goto-day]').forEach((el) => el.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); ui.reqView = 'day'; try { localStorage.setItem('reqView', 'day'); } catch {} render(); scrollTo(0, 0); }));
 }
 
 

@@ -1,9 +1,9 @@
 // «Мой день»: мировые часы гостей, «Сейчас», шкала дня по часам, «Сделано / Позже / Завтра», черновики, перетаскивание
 import { esc, toast, openModal, options, field, avatar } from '../ui.js';
-import { state, byId, save, remove } from '../data.js';
+import { state, byId, save, remove, dataVersion } from '../data.js';
 import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
-import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ } from '../planner.js';
+import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
 import { guestWhere, timeIn, flag } from '../tz.js';
 import { editRequest } from '../forms.js';
 
@@ -18,10 +18,41 @@ async function loadSettings() {
   return settings;
 }
 const hm = (ms) => hmIn(OWNER_TZ, ms);
+const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const addDays = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+// дни для переноса: послезавтра … через 6 дней
+const nextDays = () => { const t = dayIn(OWNER_TZ, Date.now()); return [2, 3, 4, 5, 6].map((i) => { const d = addDays(t, i); const dt = new Date(d + 'T12:00:00Z'); return [d, `${WD[dt.getUTCDay()]} ${dt.getUTCDate()}`]; }); };
 const KIND = { guest: ['Гость', 'k-guest'], partner: ['Партнёр', 'k-partner'], check: ['Проверка', 'k-check'], prep: ['Подготовка', 'k-prep'] };
 
+// план кэшируется: пересчёт только если изменились данные, настройки или наступила новая минута
+let cache = { k: '', plan: null };
 export function currentPlan() {
-  return planDay({ now: Date.now(), data: state, settings: settings || {}, marks: state.day_items });
+  if (!settings) loadSettings();
+  const k = `${dataVersion()}|${Math.floor(Date.now() / 60e3)}|${settings ? JSON.stringify([settings.work_from, settings.work_to, settings.lunch_from, settings.lunch_to, settings.guest_from, settings.guest_to]) : ''}`;
+  if (cache.k !== k) cache = { k, plan: planDay({ now: Date.now(), data: state, settings: settings || {}, marks: state.day_items }) };
+  return cache.plan;
+}
+let weekCache = { k: '', week: null };
+function currentWeek() {
+  const k = `${dataVersion()}|${new Date().toDateString()}`;
+  if (weekCache.k !== k) weekCache = { k, week: weekAgenda({ data: state, marks: state.day_items, days: 7 }) };
+  return weekCache.week;
+}
+
+// связь с «Сегодня»: что по каждому запросу в плане дня
+export function requestDayInfo() {
+  const P = currentPlan();
+  const today = dayIn(OWNER_TZ, Date.now());
+  const next = new Map(), done = new Set(), moved = new Set();
+  if (!P.tomorrow) for (const b of P.blocks) if (b.request_id && b.end > Date.now() && !next.has(b.request_id)) next.set(b.request_id, b);
+  for (const m of state.day_items) {
+    if (m.day !== today) continue;
+    const id = /^[gbpfc]:/.test(m.key) ? m.key.split(':')[1] : null;
+    if (!id) continue;
+    if (m.status === 'done') done.add(id);
+    if (m.status === 'tomorrow') moved.add(id);
+  }
+  return { next, done, moved, tomorrow: P.tomorrow };
 }
 
 // ---------- мировые часы: города гостей прямо сейчас ----------
@@ -58,7 +89,8 @@ function blockHtml(b, now, { big = false } = {}) {
         ${r ? `<button type="button" class="btn small ghostish" data-db-open="${esc(r.id)}">Открыть</button>` : ''}
         <span class="db-sp"></span>
         <div class="db-later"><button type="button" class="btn small ghostish" data-db-later="${esc(b.key)}">⏭ Позже</button>
-          <div class="db-menu" hidden><button type="button" data-db-snooze="30">+30 минут</button><button type="button" data-db-snooze="lunch">После обеда</button><button type="button" data-db-snooze="tomorrow">Завтра</button></div></div>
+          <div class="db-menu" hidden><button type="button" data-db-snooze="30">+30 минут</button><button type="button" data-db-snooze="lunch">После обеда</button><button type="button" data-db-snooze="tomorrow">Завтра</button>
+            <div class="db-days">${nextDays().map(([d, l]) => `<button type="button" data-db-moveto="${d}">${l}</button>`).join('')}</div></div></div>
         <button type="button" class="btn small primary" data-db-done="${esc(b.key)}">✓ Сделано</button>
       </div>
     </div>
@@ -92,6 +124,7 @@ export function dayView() {
       <div class="day-stats"><b>${P.blocks.length}</b><small>действий</small><b>${Math.floor(total / 60)} ч ${total % 60} мин</b><small>работы</small><b>${P.done.length}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
+    ${weekStrip()}
     ${nowB && !P.tomorrow ? `<section class="day-now"><span class="day-now-l">${nowB.start <= now ? 'Сейчас' : `Дальше · в ${hm(nowB.start)}`}</span>${blockHtml(nowB, now, { big: true })}</section>` : ''}
     ${P.blocks.length ? `<section class="day-line" id="dayLine">${rows}</section>` : `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>`}
     ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span><small>${esc(a.why)}</small></div>`).join('')}
@@ -100,12 +133,41 @@ export function dayView() {
   </div>`;
 }
 
+// ---------- неделя: что впереди, чтобы распланировать ----------
+const WK_ICON = { deadline: '📌', arrive: '🛬', depart: '🛫', date: '🎂', moved: '↪︎' };
+function weekStrip() {
+  const W = currentWeek();
+  const max = Math.max(3, ...W.map((d) => d.load));
+  const sel = ui.weekDay && W.some((d) => d.day === ui.weekDay) ? ui.weekDay : null;
+  const chosen = sel ? W.find((d) => d.day === sel) : null;
+  return `<section class="week">
+    <div class="week-head"><h3>Неделя</h3><small>нажмите на день — увидите, что там запланировано</small></div>
+    <div class="week-strip">${W.map((d, i) => { const dt = new Date(d.day + 'T12:00:00Z');
+      return `<button type="button" class="wk${i === 0 ? ' today' : ''}${sel === d.day ? ' on' : ''}" data-wk="${d.day}">
+        <small>${i === 0 ? 'сегодня' : i === 1 ? 'завтра' : WD[dt.getUTCDay()]}</small><b>${dt.getUTCDate()}</b>
+        <span class="wk-bar"><i style="width:${Math.min(100, (d.load / max) * 100)}%"></i></span>
+        <em>${d.items.length ? d.items.length : '—'}</em></button>`; }).join('')}</div>
+    ${chosen ? `<div class="week-list">${chosen.items.length ? chosen.items.map((x) => `<button type="button" class="wk-i k-${x.kind}" ${x.request_id ? `data-db-open="${x.request_id}"` : ''}>
+        <span class="wk-t">${x.time || '·'}</span><span class="wk-ic">${WK_ICON[x.kind]}</span><span class="wk-x"><b>${esc(x.title)}</b>${x.who ? `<small>${esc(x.who)}</small>` : ''}</span>
+        ${x.kind === 'moved' ? '<em>перенесено сюда</em>' : x.urgency === 'critical' || x.urgency === 'high' ? '<em class="hot">срочно</em>' : ''}</button>`).join('')
+      : '<p class="muted">В этот день пока ничего — свободный день, можно перенести сюда дела.</p>'}</div>` : ''}
+  </section>`;
+}
+
 // ---------- отметки ----------
 async function mark(key, status, at = null) {
   const P = currentPlan();
   const ex = state.day_items.find((x) => x.day === P.day && x.key === key);
   const row = { day: P.day, key, status, at };
   if (ex) await save('day_items', ex.id, row); else await save('day_items', null, row);
+}
+async function moveTo(key, target) {
+  const P = currentPlan();
+  for (let d = P.day; d < target; d = addDays(d, 1)) {
+    const ex = state.day_items.find((x) => x.day === d && x.key === key);
+    const row = { day: d, key, status: 'tomorrow', at: null };
+    if (ex) await save('day_items', ex.id, row); else await save('day_items', null, row);
+  }
 }
 async function unmark(key) {
   const P = currentPlan();
@@ -162,6 +224,16 @@ export function bindDay(app) {
       }
       return;
     }
+    const mv = t.closest('[data-db-moveto]');
+    if (mv) {
+      const key = mv.closest('.db').dataset.db;
+      await moveTo(key, mv.dataset.dbMoveto);
+      const dt = new Date(mv.dataset.dbMoveto + 'T12:00:00Z');
+      toast(`Перенесено на ${WD[dt.getUTCDay()]} ${dt.getUTCDate()}`);
+      return;
+    }
+    const wk = t.closest('[data-wk]');
+    if (wk) { ui.weekDay = ui.weekDay === wk.dataset.wk ? null : wk.dataset.wk; render(); return; }
     const undo = t.closest('[data-db-undo]');
     if (undo) { await unmark(undo.dataset.dbUndo); return; }
     if (t.closest('[data-db-all-tomorrow]')) { for (const a of P.overflow) await mark(a.key, 'tomorrow'); toast('Перенесено на завтра'); return; }
