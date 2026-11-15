@@ -4,6 +4,7 @@ import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
 import { ring } from '../checklist.js';
 import { calendarView, bindCalendar } from './calendar.js';
+import { dayView, bindDay } from './myday.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
@@ -284,9 +285,11 @@ function view(app) {
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
   const board = ui.reqView === 'board';
   const cal = ui.reqView === 'calendar';
+  const myday = ui.reqView === 'day';
   const toolbar = `<div class="bar toolbar">
       <div class="seg" role="tablist" aria-label="Вид">
-        <button type="button" data-view="today" aria-selected="${!board && !cal}">Сегодня</button>
+        <button type="button" data-view="today" aria-selected="${!board && !cal && !myday}">Сегодня</button>
+        <button type="button" data-view="day" aria-selected="${myday}">Мой день</button>
         <button type="button" data-view="board" aria-selected="${board}">Доска</button>
         <button type="button" data-view="calendar" aria-selected="${cal}">Календарь</button>
       </div>
@@ -295,12 +298,14 @@ function view(app) {
         <button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
     </div>`;
   // «Сегодня» — одна центрированная колонка: приветствие → Jarvis → переключатель и поиск → список
-  app.innerHTML = cal
+  app.innerHTML = myday
+    ? `<div class="stack daystack">${toolbar.replace(/<div class="grow search">[\s\S]*?<\/div>/, '')}${dayView()}</div>`
+    : cal
     ? `<div class="board-top">${smartBar()}${toolbar}</div>${calendarView(list)}`
     : board
     ? `<div class="board-top">${smartBar()}${toolbar}</div>${boardView(list)}`
     : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${ui.q ? '' : suggestionsBlock()}${smartBar()}${toolbar}${todayView(list)}</div>`;
-  if (!board && !cal) refreshSuggestions();
+  if (!board && !cal && !myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}
@@ -309,9 +314,10 @@ function view(app) {
   app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
   if (cal) bindCalendar(app);
+  if (myday) bindDay(app);
   bindSmart(app);
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
-  if (!board && !cal) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
+  if (!board && !cal && !myday) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
 }
 
 

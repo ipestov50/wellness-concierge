@@ -1,8 +1,8 @@
 import { getSupabase } from './supabase.js';
 import { buildChecklist } from './checklist.js';
 
-export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], loaded: false };
-const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions'];
+export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], day_items: [], loaded: false };
+const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions', 'day_items'];
 const listeners = new Set();
 let sb, channel;
 

@@ -6,6 +6,7 @@
 //   setup    — один раз (x-cron-secret): регистрирует вебхук и команды бота
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { generateSuggestions } from './suggest.ts';
+import { planDay, why, hmIn as hmP } from './planner.js';
 import { tomtomReady, checkRequest, geocode, route, incidentsNear, resolveRoute, places } from './traffic.ts';
 
 const TZ = 'Europe/Paris';
@@ -107,7 +108,7 @@ async function loadOwner(owner: string) {
     partnersFull: new Map((par.data || []).map((p: any) => [p.id, p])),
     activeKeys: new Set(active.map((s: any) => s.key)), earlyKeys: new Set(active.slice(0, cut).map((s: any) => s.key)),
     label: new Map(statuses.map((s: any) => [s.key, s.label])), doneKey: statuses.find((s: any) => s.kind === 'done')?.key || null,
-    clientsList: cli.data || [], trips: tr.data || [], people: pe.data || [], dates: dt.data || [],
+    clientsList: cli.data || [], trips: tr.data || [], people: pe.data || [], dates: dt.data || [], statusesList: statuses,
   };
 }
 const logged = async (owner: string, key: string) =>
@@ -196,10 +197,35 @@ async function runCron() {
       }
     }
 
-    // утренний бриф
+    // ⏰ «Мой день»: напоминание за ~15 минут до блока
     const today = parisDay(new Date(now));
+    const { plan } = await ownerPlan(s.owner_id, D, s, now);
+    if (s.day_remind !== false && !plan.tomorrow) {
+      for (const b of plan.blocks.filter((x: any) => x.start > now + 4 * 60e3 && x.start <= now + 19 * 60e3)) {
+        const key = `day:${plan.day}:${b.key}`;
+        if (await logged(s.owner_id, key)) continue;
+        const w = why(b);
+        await tg('sendMessage', { chat_id: s.tg_chat_id, parse_mode: 'HTML', disable_web_page_preview: true,
+          text: `⏰ <b>${hmP('Europe/Paris', b.start)}</b> · ${b.icon} <b>${esc(b.title)}</b>${b.who ? ' · ' + esc(b.who) : ''}${b.detail ? `\n${esc(b.detail)}` : ''}${w ? `\n<i>${esc(w)}</i>` : ''}`,
+          reply_markup: { inline_keyboard: [[{ text: '✓ Сделано', callback_data: `dd:${b.key}`.slice(0, 64) }, { text: '⏭ +30 мин', callback_data: `ds:${b.key}`.slice(0, 64) }, { text: 'Открыть', url: SITE }]] } });
+        await log(s.owner_id, key); sent++;
+      }
+    }
+
+    // 🌙 итог дня в конце рабочего дня
+    if (hour === (s.work_to ?? 20) && !(await logged(s.owner_id, `dayend:${today}`))) {
+      const { plan: tmr, marks } = await ownerPlan(s.owner_id, D, s, now + 60e3);
+      const doneToday = marks.filter((m: any) => m.day === today && m.status === 'done').length;
+      const movedToday = marks.filter((m: any) => m.day === today && m.status === 'tomorrow').length;
+      const lines = [`🌙 <b>Итог дня</b>`, `Сделано: <b>${doneToday}</b>${movedToday ? ` · перенесено: ${movedToday}` : ''}`];
+      if (tmr.blocks.length) lines.push('', `📋 <b>Завтра · ${tmr.blocks.length} действ.</b>`, ...tmr.blocks.slice(0, 6).map(blockLine));
+      await send(s.tg_chat_id, lines.join('\n'));
+      await log(s.owner_id, `dayend:${today}`); sent++;
+    }
+
+    // утренний бриф
     if (hour === s.brief_hour && !(await logged(s.owner_id, `brief:${today}`))) {
-      await send(s.tg_chat_id, brief(D, now, await openSuggestions(s.owner_id)));
+      await send(s.tg_chat_id, brief(D, now, await openSuggestions(s.owner_id), plan));
       await log(s.owner_id, `brief:${today}`); sent++;
     }
     report[s.owner_id] = sent;
@@ -224,12 +250,23 @@ function trafficText(r: any, D: any, t: any) {
   return lines.join('\n');
 }
 
+// «Мой день»: тот же планировщик, что на сайте
+async function ownerPlan(owner: string, D: any, s: any, now = Date.now()) {
+  const [{ data: marks }, { data: sugg }] = await Promise.all([
+    db.from('day_items').select('*').eq('owner_id', owner),
+    db.from('suggestions').select('*').eq('owner_id', owner).in('status', ['new', 'snoozed']),
+  ]);
+  const data = { requests: D.requests, clients: D.clientsList, partners: [...D.partnersFull.values()], trips: D.trips, people: D.people, client_dates: D.dates, statuses: D.statusesList, suggestions: sugg || [] };
+  return { plan: planDay({ now, data, settings: s, marks: marks || [] }), marks: marks || [] };
+}
+const blockLine = (b: any) => `${hmP('Europe/Paris', b.start)} ${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}${b.guestLocal ? ` <i>(у гостя ${b.guestLocal})</i>` : b.partnerLocal ? ` <i>(у партнёра ${b.partnerLocal})</i>` : ''}`;
+
 async function openSuggestions(owner: string) {
   const { data } = await db.from('suggestions').select('title,status,snooze_until,due_at').eq('owner_id', owner).in('status', ['new', 'snoozed']).order('due_at');
   return (data || []).filter((x: any) => x.status === 'new' || (x.snooze_until && new Date(x.snooze_until) < new Date()));
 }
 
-function brief(D: any, now: number, sugg: any[] = []) {
+function brief(D: any, now: number, sugg: any[] = [], plan: any = null) {
   const today = parisDay(new Date(now));
   const open = D.requests.filter((r: any) => D.activeKeys.has(r.status) || !D.label.has(r.status));
   const late = open.filter((r: any) => r.deadline && effectiveDeadline(r.deadline) < now);
@@ -269,6 +306,7 @@ function brief(D: any, now: number, sugg: any[] = []) {
   if (arrivals.length || departures.length) out.push('', '✈️ <b>Прилёты и вылеты сегодня</b>', ...arrivals, ...departures);
   if (tomorrowArr.length) out.push('', '🗓 <b>Завтра прилетают</b>', ...tomorrowArr);
   if (bdays.length) out.push('', '🎂 <b>Даты на неделе</b>', ...bdays.map((x: any) => `${x.what} ${x.name} — ${x.days === 0 ? '<b>сегодня</b>' : x.days === 1 ? 'завтра' : `${x.d} ${MON[x.m - 1]}`}`));
+  if (plan?.blocks?.length) out.push('', `📋 <b>План дня · ${plan.blocks.length} действ.</b>`, ...plan.blocks.slice(0, 10).map(blockLine), plan.blocks.length > 10 ? `<i>…и ещё ${plan.blocks.length - 10} — во вкладке «Мой день»</i>` : '');
   if (sugg.length) out.push('', `✨ <b>Jarvis предлагает: ${sugg.length}</b>`, ...sugg.slice(0, 4).map((x: any) => esc(x.title)), '<i>Планы готовы на сайте — откройте «Сегодня».</i>');
   if (!late.length && !risk.length && !todays.length && !arrivals.length && !departures.length && !sugg.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
   return out.join('\n');
@@ -293,7 +331,8 @@ async function onTelegram(u: any) {
     if (!me) { await tg('sendMessage', { chat_id: chat, text: 'Это личный бот. Подключение — только с сайта владельца.' }); return; }
     if (cmd === '/brief' || cmd === '/today') {
       const D = await loadOwner(me.owner_id);
-      await send(chat, brief(D, Date.now(), await openSuggestions(me.owner_id)));
+      const { plan } = await ownerPlan(me.owner_id, D, me);
+      await send(chat, brief(D, Date.now(), await openSuggestions(me.owner_id), plan));
     } else {
       await tg('sendMessage', { chat_id: chat, text: 'Команды: /brief — бриф на сегодня.' });
     }
@@ -309,6 +348,17 @@ async function onTelegram(u: any) {
     const { error } = await db.from('requests').update({ status: D.doneKey }).eq('id', id).eq('owner_id', me.owner_id);
     await tg('answerCallbackQuery', { callback_query_id: q.id, text: error ? 'Не удалось' : 'Готово ✓' });
     if (!error) await tg('editMessageReplyMarkup', { chat_id: q.message.chat.id, message_id: q.message.message_id, reply_markup: { inline_keyboard: [[{ text: '✅ Выполнено', callback_data: 'noop' }]] } });
+  } else if (q?.data?.startsWith('dd:') || q?.data?.startsWith('ds:')) {
+    const { data: me } = await db.from('app_settings').select('*').eq('tg_chat_id', q.message.chat.id).maybeSingle();
+    if (!me) return tg('answerCallbackQuery', { callback_query_id: q.id, text: 'Нет доступа' });
+    const key = q.data.slice(3);
+    const day = parisDay(new Date());
+    const doneIt = q.data.startsWith('dd:');
+    const at = doneIt ? null : new Date(Math.ceil((Date.now() + 30 * 60e3) / 3e5) * 3e5).toISOString();
+    const { error } = await db.from('day_items').upsert({ owner_id: me.owner_id, day, key, status: doneIt ? 'done' : 'snoozed', at }, { onConflict: 'owner_id,day,key' });
+    await tg('answerCallbackQuery', { callback_query_id: q.id, text: error ? 'Не удалось' : doneIt ? 'Готово ✓' : 'Напомню через 30 минут' });
+    if (!error) await tg('editMessageReplyMarkup', { chat_id: q.message.chat.id, message_id: q.message.message_id,
+      reply_markup: { inline_keyboard: [[{ text: doneIt ? '✅ Сделано' : `⏭ Перенесено на ${hmP('Europe/Paris', Date.parse(at!))}`, callback_data: 'noop' }]] } });
   } else if (q) await tg('answerCallbackQuery', { callback_query_id: q.id });
 }
 
@@ -392,7 +442,8 @@ Deno.serve(async (req) => {
     const { data: s } = await db.from('app_settings').select('*').eq('owner_id', u.user.id).maybeSingle();
     if (!s?.tg_chat_id) return json({ error: 'not_linked' }, 400);
     const D = await loadOwner(u.user.id);
-    const r = await send(s.tg_chat_id, brief(D, Date.now(), await openSuggestions(u.user.id)));
+    const { plan } = await ownerPlan(u.user.id, D, s);
+    const r = await send(s.tg_chat_id, brief(D, Date.now(), await openSuggestions(u.user.id), plan));
     return json({ ok: !!r.ok });
   }
   return json({ error: 'bad_request' }, 400);
