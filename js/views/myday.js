@@ -5,7 +5,7 @@ import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
 import { api, isAbort } from '../api.js';
 import { conflictsBlock, watchTraffic } from '../conflict-actions.js';
-import { optionsBadge, pickChips } from '../options.js';
+import { optionsBadge, pickChips, stageButton } from '../options.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
 import { statusLabel } from '../statuses.js';
@@ -71,9 +71,9 @@ function blockHtml(b, { big = false, future = false } = {}) {
       ${r && !future ? `${optionsBadge(r)}${pickChips(r)}` : ''}
       ${w ? `<p class="db-why">${esc(w)}</p>` : ''}
       <div class="db-actions">
-        ${b.kind === 'guest' || b.kind === 'partner' ? `<button type="button" class="btn small" data-db-draft="${esc(b.key)}">✍ Черновик</button>` : ''}
+        ${r && stageButton(r) ? stageButton(r) : b.kind === 'guest' || b.kind === 'partner' ? `<button type="button" class="btn small" data-db-draft="${esc(b.key)}">✍ Черновик</button>` : ''}
         ${r ? `<button type="button" class="btn small ghostish" data-db-open="${esc(r.id)}">Открыть</button>` : ''}
-        ${r && !r.options?.sent_at ? `<button type="button" class="btn small" data-options="${esc(r.id)}">✦ Варианты</button>` : ''}
+        ${r && !r.options?.sent_at && !r.options?.booking ? `<button type="button" class="btn small" data-options="${esc(r.id)}">✦ Варианты</button>` : ''}
         ${/^t:.+:(chk|out)$/.test(b.key) ? `<button type="button" class="btn small" data-flight-delay="${esc(b.key.split(':')[1])}" data-dir="${b.key.endsWith(':out') ? 'out' : 'in'}">⏱ Рейс задерживается</button>` : ''}
         <span class="db-sp"></span>
         <div class="db-later"><button type="button" class="btn small ghostish" data-db-later="${esc(b.key)}">⏭ Позже</button>

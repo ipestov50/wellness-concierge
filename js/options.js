@@ -23,11 +23,16 @@ const TPL = {
 const first = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/)[0] || '';
 const hasStatus = (k) => !!statusOf(k);
 
-// короткая строка для карточек на доске и в «Моём дне»
+// короткая строка для карточек на доске и в «Моём дне»: где сейчас запрос в цикле
 export function optionsBadge(r) {
   const o = r?.options;
-  if (!o?.items?.length) return '';
-  if (o.chosen != null) return `<span class="opt-badge ok">✓ ${esc(o.items[o.chosen]?.name || 'выбрано')}</span>`;
+  if (!o) return '';
+  const v = venueOf(r)?.name || '';
+  if (o.reminded_at) return `<span class="opt-badge ok">✓ подтверждено · гостю напомнили${v ? ' · ' + esc(v) : ''}</span>`;
+  if (o.booking?.confirmed_at) return `<span class="opt-badge ok">✓ подтверждено${v ? ' · ' + esc(v) : ''}</span>`;
+  if (o.booking?.sent_at) return `<span class="opt-badge wait">⏳ ждём подтверждения${v ? ' · ' + esc(v) : ''}</span>`;
+  if (!o.items?.length) return '';
+  if (o.chosen != null) return `<span class="opt-badge ok">✓ ${esc(o.items[o.chosen]?.name || 'выбрано')} · бронируем</span>`;
   if (o.sent_at) return `<span class="opt-badge wait">✦ ${o.items.filter((x) => x.on !== false).length} варианта · ждём выбор</span>`;
   return '<span class="opt-badge">✦ варианты готовы</span>';
 }
@@ -170,4 +175,150 @@ document.addEventListener('click', (e) => {
   if (o) { e.stopPropagation(); e.preventDefault(); openOptions(o.dataset.options); return; }
   const p = e.target.closest('[data-opt-pick]');
   if (p && !p.closest('#opt')) { e.stopPropagation(); e.preventDefault(); pickOption(p.dataset.optPick, +p.dataset.i); }
+});
+
+// ================== после выбора гостя: партнёр → подтверждение → напоминание ==================
+// место брони: выбранный гостем вариант, иначе партнёр запроса
+export function venueOf(r) {
+  const x = r?.options?.chosen != null ? r.options.items?.[r.options.chosen] : null;
+  const p = byId('partners', x?.partner_id || r?.partner_id);
+  if (!x && !p) return null;
+  return { name: x?.name || p?.name, address: x?.address || p?.address || '', maps: x?.maps || (p ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([p.name, p.address, p.city].filter(Boolean).join(', '))}` : ''), website: x?.website || '', contact: p?.contact || '', partner: p };
+}
+const stageOf = (r) => {
+  const o = r?.options || {};
+  if (isClosedLike(r)) return null;
+  if (o.booking?.confirmed_at || r.status === 'confirmed') return o.reminded_at ? null : 'remind';
+  if (o.booking?.sent_at) return 'confirm';
+  if (r.status === 'booking' && venueOf(r)) return 'partner';
+  return null;
+};
+const isClosedLike = (r) => { const k = statusOf(r?.status)?.kind; return k && k !== 'active'; };
+
+// кнопка следующего шага — одинаковая в окне запроса, на блоке «Моего дня» и в профиле
+export function stageButton(r, cls = 'btn small primary') {
+  const s = stageOf(r);
+  if (s === 'partner') return `<button type="button" class="${cls}" data-stage="partner" data-id="${esc(r.id)}">✉ Партнёру: забронировать</button>`;
+  if (s === 'confirm') return `<button type="button" class="${cls}" data-stage="confirm" data-id="${esc(r.id)}">✓ Партнёр подтвердил</button>`;
+  if (s === 'remind' && r.deadline && Date.parse(r.deadline) > Date.now()) return `<button type="button" class="${cls}" data-stage="remind" data-id="${esc(r.id)}">🔔 Напомнить гостю</button>`;
+  return '';
+}
+
+const phoneOf = (s) => { const m = String(s || '').match(/\+?\d[\d\s().-]{7,}\d/); return m ? m[0].replace(/[^\d]/g, '') : ''; };
+const emailOf = (s) => String(s || '').match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0] || '';
+const guestsFrom = (r) => +(String(`${r.summary} ${r.original_message || ''}`).match(/(\d+)\s*(перс|чел|гост|pers|people|guest|pax)/i)?.[1] || 0) || 2;
+const fullName = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').trim();
+
+// 1) сообщение партнёру на его языке (Jarvis переводит и учитывает аллергии; имя гостя подставляем только здесь)
+export function openPartnerMsg(id) {
+  const r = byId('requests', id);
+  const v = venueOf(r);
+  if (!r || !v) return toast('Сначала выберите место', 'err');
+  const c = byId('clients', r.client_id);
+  const bk = r.options?.booking || {};
+  const m = openModal({ title: '✉ Бронь у партнёра', saveLabel: 'Закрыть', body: `<div class="opt" id="pm">
+    <p class="opt-ctx"><b>${esc(v.name)}</b>${v.address ? ' · ' + esc(v.address) : ''}</p>
+    <div class="pm-row"><label class="f"><span>Гостей</span><input type="number" id="pm-n" min="1" max="40" value="${bk.guests || guestsFrom(r)}"></label>
+      <label class="f grow"><span>Пожелания (по-русски — Jarvis переведёт)</span><input id="pm-wish" value="${esc(bk.wish || '')}" placeholder="столик у окна, тихий зал, торт на десерт…"></label></div>
+    <button type="button" class="btn small" data-pm-gen>✦ Составить сообщение</button>
+    <div id="pm-out"></div></div>`, onSave: async () => {} });
+  m.form.querySelector('#cancel').hidden = true;
+  const out = m.form.querySelector('#pm-out');
+  const gen = async () => {
+    out.innerHTML = '<div class="bf-busy"><span class="spin"></span> Jarvis пишет партнёру на его языке…</div>';
+    const n = +m.form.querySelector('#pm-n').value || 2, wish = m.form.querySelector('#pm-wish').value.trim();
+    try {
+      const res = await api('message', { kind: 'partner', title: `Забронировать: ${v.name}`, detail: `Место: ${v.name}${v.address ? ', ' + v.address : ''}. Гостей: ${n}.${wish ? ' Пожелания: ' + wish + '.' : ''} Попросить подтвердить бронь ответным сообщением.`, request_id: id, client_id: r.client_id }, { signal: m.signal });
+      const text = String(res.text || '').replace(/\{гость\}/g, fullName(c)).replace(/\{имя\}/g, fullName(c));
+      const phone = phoneOf(v.contact), email = emailOf(v.contact);
+      out.innerHTML = `<label class="f"><span>Сообщение ${esc(res.lang_label || '')}</span><textarea id="pm-text" rows="8">${esc(text)}</textarea></label>
+        <div class="opt-act"><button type="button" class="btn primary" data-pm-send="copy">Скопировать</button>
+          ${phone ? `<button type="button" class="btn" data-pm-send="wa" data-phone="${phone}">WhatsApp</button>` : ''}
+          ${email ? `<button type="button" class="btn" data-pm-send="mail" data-email="${esc(email)}">Почта</button>` : ''}
+          ${!phone && !email ? `<span class="muted">Контакт: ${v.website ? `<a href="${esc(v.website)}" target="_blank" rel="noopener">сайт</a> · ` : ''}<a href="${esc(v.maps)}" target="_blank" rel="noopener">телефон в Google Maps</a></span>` : ''}</div>`;
+    } catch (e) {
+      if (isAbort(e)) return;
+      out.innerHTML = `<p class="muted">${e.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту.' : 'Не получилось составить сообщение.'}</p>`;
+    }
+  };
+  m.form.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-pm-gen]')) return gen();
+    const s = e.target.closest('[data-pm-send]');
+    if (!s) return;
+    const text = m.form.querySelector('#pm-text').value;
+    try { await navigator.clipboard.writeText(text); } catch {}
+    if (s.dataset.pmSend === 'wa') window.open(`https://wa.me/${s.dataset.phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    if (s.dataset.pmSend === 'mail') location.href = `mailto:${s.dataset.email}?subject=${encodeURIComponent('Réservation / Booking')}&body=${encodeURIComponent(text)}`;
+    const cur = byId('requests', id);
+    const booking = { sent_at: new Date().toISOString(), guests: +m.form.querySelector('#pm-n').value || 2, wish: m.form.querySelector('#pm-wish').value.trim() };
+    try {
+      await save('requests', id, { options: { ...(cur.options || {}), booking } });
+      if (hasStatus('booking') && cur.status !== 'booking' && statusOf(cur.status)?.kind === 'active') await setStatus(id, 'booking', { quiet: true });
+      toast('Отправлено партнёру · ждём подтверждения');
+      m.close();
+    } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
+  });
+  gen();
+}
+
+// 2) партнёр подтвердил → «Подтверждено»
+export async function confirmBooking(id) {
+  const r = byId('requests', id);
+  if (!r) return;
+  const o = r.options || {};
+  try {
+    await save('requests', id, { options: { ...o, booking: { ...(o.booking || {}), confirmed_at: new Date().toISOString() } } });
+    if (hasStatus('confirmed')) await setStatus(id, 'confirmed', { quiet: true });
+    toast('✓ Бронь подтверждена — накануне напомню гостю', '', { label: 'Отменить', fn: async () => { await save('requests', id, { options: o }); if (hasStatus('booking')) await setStatus(id, 'booking', { quiet: true }); } });
+  } catch (e) { toast('Не сохранилось: ' + (e.message || e), 'err'); }
+}
+
+// 3) напоминание гостю: когда, где, карта — на его языке, без ИИ (точные данные из запроса)
+const REM = {
+  RU: (f, when, v, n) => `${f ? f + ', н' : 'Н'}апоминаю: ${when} — ${v.name}.${n ? ` Столик на ${n}.` : ''}`,
+  EN: (f, when, v, n) => `${f ? f + ', a' : 'A'} quick reminder: ${when} — ${v.name}.${n ? ` Table for ${n}.` : ''}`,
+  FR: (f, when, v, n) => `${f ? f + ', p' : 'P'}etit rappel : ${when} — ${v.name}.${n ? ` Table pour ${n}.` : ''}`,
+};
+const REM_END = { RU: 'Если планы изменятся — напишите, всё перенесу.', EN: 'If your plans change, just let me know and I will rearrange everything.', FR: 'Si vos plans changent, écrivez-moi, je m’occupe de tout.' };
+export function openReminder(id) {
+  const r = byId('requests', id);
+  const v = venueOf(r);
+  if (!r) return;
+  const c = byId('clients', r.client_id);
+  const lang = (c?.language && REM[c.language]) ? c.language : 'RU';
+  const d = new Date(r.deadline);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
+  const dDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(d);
+  const time = d.toLocaleTimeString(LOC[lang], { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
+  const rel = { RU: dDay === today ? 'сегодня' : 'завтра', EN: dDay === today ? 'today' : 'tomorrow', FR: dDay === today ? 'aujourd’hui' : 'demain' }[lang];
+  const at = { RU: `${rel} в ${time}`, EN: `${rel} at ${time}`, FR: `${rel} à ${time}` }[lang];
+  const venue = v || { name: r.summary, address: '', maps: '' };
+  const n = r.options?.booking?.guests;
+  const text = [REM[lang](first(c), at, venue, n), venue.address ? `📍 ${venue.address}` : '', venue.maps || '', REM_END[lang]].filter(Boolean).join('\n\n');
+  const phone = (c?.phone || '').replace(/[^\d]/g, '');
+  const m = openModal({ title: '🔔 Напоминание гостю', saveLabel: 'Закрыть', body: `<div class="opt">
+    <label class="f"><span>Сообщение · ${lang === 'RU' ? 'по-русски' : lang === 'EN' ? 'по-английски' : 'по-французски'}</span><textarea id="rm-text" rows="8">${esc(text)}</textarea></label>
+    <div class="opt-act"><button type="button" class="btn primary" data-rm="copy">Скопировать</button>
+      ${phone ? '<button type="button" class="btn" data-rm="wa">WhatsApp</button>' : ''}${c?.telegram ? '<button type="button" class="btn" data-rm="tg">Telegram</button>' : ''}</div></div>`, onSave: async () => {} });
+  m.form.querySelector('#cancel').hidden = true;
+  m.form.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-rm]');
+    if (!b) return;
+    const t = m.form.querySelector('#rm-text').value;
+    try { await navigator.clipboard.writeText(t); } catch {}
+    if (b.dataset.rm === 'wa') window.open(`https://wa.me/${phone}?text=${encodeURIComponent(t)}`, '_blank', 'noopener');
+    if (b.dataset.rm === 'tg') window.open(`https://t.me/${encodeURIComponent(c.telegram.replace(/^@/, ''))}`, '_blank', 'noopener');
+    try { const cur = byId('requests', id); await save('requests', id, { options: { ...(cur.options || {}), reminded_at: new Date().toISOString() } }); toast('Напоминание отправлено'); m.close(); }
+    catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-stage]');
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  const id = b.dataset.id;
+  if (b.dataset.stage === 'partner') openPartnerMsg(id);
+  else if (b.dataset.stage === 'confirm') { b.disabled = true; confirmBooking(id); }
+  else if (b.dataset.stage === 'remind') openReminder(id);
 });

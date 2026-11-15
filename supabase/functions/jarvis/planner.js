@@ -91,6 +91,9 @@ function buildActions(now, D, settings) {
     const who = firstName(c) || '';
     const base = { request_id: r.id, client_id: r.client_id, summary: r.summary, latest: dl ? dl - (r.category === 'Transport' ? 6 : 4) * HOUR : null, score, overdue: hoursLeft != null && hoursLeft < 0 };
     const pType = p?.type || CAT_TO_TYPE[r.category] || 'other';
+    // место, которое выбрал гость (из «Вариантов для гостя»), иначе партнёр запроса
+    const venue = (r.options?.chosen != null && r.options.items?.[r.options.chosen]?.name) || p?.name || '';
+    const bk = r.options?.booking;
     switch (r.status) {
       case 'new':
         push({ ...base, key: `g:${r.id}:new`, kind: 'guest', icon: '💬', title: 'Уточнить детали', who, detail: r.clarifying_questions || r.summary, next: active[idx + 1] || null, dur: 10 }); break;
@@ -102,10 +105,16 @@ function buildActions(now, D, settings) {
       case 'awaiting_approval':
         push({ ...base, key: `g:${r.id}:appr`, kind: 'guest', icon: '💬', title: 'Напомнить об одобрении', who, detail: r.summary, dur: 5 }); break;
       case 'booking':
-        push({ ...base, key: `b:${r.id}:book`, kind: 'partner', icon: '📞', title: `Забронировать${p ? ' · ' + p.name : ''}`, who, detail: r.summary, pType, partner_id: r.partner_id, next: active[idx + 1] || null, dur: 15 }); break;
+        if (bk?.sent_at && !bk.confirmed_at) push({ ...base, key: `b:${r.id}:wait`, kind: 'partner', icon: '⏳', title: `Ждём подтверждение${venue ? ' · ' + venue : ''}`, who, detail: r.summary, pType, partner_id: r.partner_id, dur: 5, score: score - 10 });
+        else push({ ...base, key: `b:${r.id}:book`, kind: 'partner', icon: '📞', title: `Забронировать${venue ? ' · ' + venue : ''}`, who, detail: r.summary, pType, partner_id: r.partner_id, next: active[idx + 1] || null, dur: 15 }); break;
       default:
         if (early) push({ ...base, key: `g:${r.id}:${r.status}`, kind: 'guest', icon: '💬', title: 'Продвинуть запрос', who, detail: r.summary, dur: 10 });
         else if (r.status !== 'confirmed') push({ ...base, key: `b:${r.id}:${r.status}`, kind: 'partner', icon: '📞', title: `Связаться с партнёром${p ? ' · ' + p.name : ''}`, who, detail: r.summary, pType, partner_id: r.partner_id, dur: 10 });
+    }
+    // подтверждено: накануне (или утром в тот же день, если бронь «на сегодня») — напомнить гостю: время, адрес, карта
+    if (r.status === 'confirmed' && dl && dl > now && !r.options?.reminded_at) {
+      const dDay = dayIn(OWNER_TZ, dl);
+      if (today === addDays(dDay, -1) || today === dDay) push({ ...base, key: `f:${r.id}:remind`, kind: 'guest', icon: '🔔', title: `Напомнить гостю${venue ? ' · ' + venue : ''}`, who, detail: `${today === dDay ? 'сегодня' : 'завтра'} в ${hmIn(OWNER_TZ, dl)} · ${r.summary}`, dur: 5, score: score + 15 });
     }
     // в день визита: переподтвердить бронь за 3 часа и напомнить гостю о выезде за час
     if (dl && dayIn(OWNER_TZ, dl) === today && dl > now && !early && ['Dining', 'Spa & Wellness', 'Activities', 'Health & Fitness'].includes(r.category)) {

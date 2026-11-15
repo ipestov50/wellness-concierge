@@ -6,6 +6,6 @@
     "node": "24.x"
   },
   "scripts": {
-    "test": "node scripts/test-conflicts.mjs && node scripts/test-week.mjs"
+    "test": "node scripts/test-conflicts.mjs && node scripts/test-week.mjs && node scripts/test-booking.mjs"
   }
 }
