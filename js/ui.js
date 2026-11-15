@@ -80,7 +80,7 @@ export function toList(text) {
 }
 
 // ---------- всплывающее окно ----------
-export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохранить' }) {
+export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохранить', onClose = null }) {
   const host = $('#modal');
   host.innerHTML = `
     <div class="ov" id="ov">
@@ -100,7 +100,8 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
   const form = $('#frm');
   // запросы окна отменяются, когда окно закрыто или открыто другое
   const signal = scope('modal');
-  const close = () => { host.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); };
+  // onClose — например, вернуться в карточку запроса, из которой открыли это окно
+  const close = () => { host.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); onClose?.(); };
   const fail = (msg) => { const b = $('#frm-err'); b.textContent = msg; b.hidden = false; b.scrollIntoView({ block: 'nearest' }); };
   $('#cancel').onclick = close;
   $('#x').onclick = close;

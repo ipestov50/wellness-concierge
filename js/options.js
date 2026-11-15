@@ -49,8 +49,7 @@ export async function pickOption(id, i) {
   const r = byId('requests', id);
   const x = r?.options?.items?.[i];
   if (!x) return;
-  const patch = { options: { ...r.options, chosen: i, chosen_at: new Date().toISOString() },
-    venue: { kind: x.partner_id ? 'partner' : 'place', partner_id: x.partner_id || null, name: x.name, address: x.address || '', website: x.website || '', maps: x.maps || '', check: x.check || null, from: 'options' } };
+  const patch = { options: { ...r.options, chosen: i, chosen_at: new Date().toISOString() } };
   if (x.partner_id) patch.partner_id = x.partner_id;
   if (x.address && !r.road_to) patch.road_to = `${x.name}, ${x.address}`;
   try {
@@ -60,7 +59,7 @@ export async function pickOption(id, i) {
   } catch (e) { toast('Не сохранилось: ' + (e.message || e), 'err'); }
 }
 
-export function openOptions(id) {
+export function openOptions(id, { back = null } = {}) {
   const r = byId('requests', id);
   if (!r) return;
   const c = byId('clients', r.client_id);
@@ -68,7 +67,7 @@ export function openOptions(id) {
   const whenG = r.deadline ? new Date(r.deadline).toLocaleString(LOC[lang], { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
   let st = r.options?.items?.length ? structuredClone(r.options) : null;
   let manual = false; // сообщение правили руками — не перезаписываем
-  const m = openModal({ title: '✦ Варианты для гостя', saveLabel: 'Закрыть', body: '<div class="opt" id="opt"></div>', onSave: async () => {} });
+  const m = openModal({ title: '✦ Варианты для гостя', saveLabel: 'Закрыть', body: '<div class="opt" id="opt"></div>', onSave: async () => {}, onClose: back });
   m.form.classList.add('wide');
   m.form.querySelector('#cancel').hidden = true;
   const box = m.form.querySelector('#opt');
@@ -170,10 +169,12 @@ export function openOptions(id) {
   if (st) draw(); else fetchOptions();
 }
 
+// открыли из карточки запроса → «Закрыть» возвращает в эту карточку, а не закрывает всё
+const backTo = (el) => { const f = el.closest('[data-req-id]'); if (!f) return null; const rid = f.dataset.reqId; return () => import('./lazy.js').then((l) => l.editRequest(rid)); };
 // общий обработчик кнопок: «✦ Варианты» и «Гость выбрал N» — работают на доске, в «Моём дне» и в профиле
 document.addEventListener('click', (e) => {
   const o = e.target.closest('[data-options]');
-  if (o) { e.stopPropagation(); e.preventDefault(); openOptions(o.dataset.options); return; }
+  if (o) { e.stopPropagation(); e.preventDefault(); openOptions(o.dataset.options, { back: backTo(o) }); return; }
   const p = e.target.closest('[data-opt-pick]');
   if (p && !p.closest('#opt')) { e.stopPropagation(); e.preventDefault(); pickOption(p.dataset.optPick, +p.dataset.i); }
 });
@@ -181,14 +182,6 @@ document.addEventListener('click', (e) => {
 // ================== после выбора гостя: партнёр → подтверждение → напоминание ==================
 // место брони: выбранный гостем вариант, иначе партнёр запроса
 export function venueOf(r) {
-  // 1) место, записанное в запросе (партнёр или «другое место»)
-  const vv = r?.venue;
-  if (vv?.name) {
-    const p = vv.kind === 'partner' ? byId('partners', vv.partner_id) : null;
-    return { name: p?.name || vv.name, address: p?.address || vv.address || '', maps: vv.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([vv.name, vv.address || p?.city].filter(Boolean).join(', '))}`,
-      website: vv.website || '', contact: p?.contact || [vv.phone, vv.email].filter(Boolean).join(' '), partner: p, kind: vv.kind, check: vv.check };
-  }
-  // 2) выбранный гостем вариант, 3) партнёр запроса
   const x = r?.options?.chosen != null ? r.options.items?.[r.options.chosen] : null;
   const p = byId('partners', x?.partner_id || r?.partner_id);
   if (!x && !p) return null;
@@ -199,37 +192,15 @@ const stageOf = (r) => {
   if (isClosedLike(r)) return null;
   if (o.booking?.confirmed_at || r.status === 'confirmed') return o.reminded_at ? null : 'remind';
   if (o.booking?.sent_at) return 'confirm';
-  if (venueOf(r)) return 'partner';
+  if (r.status === 'booking' && venueOf(r)) return 'partner';
   return null;
 };
-// этапы запроса для дорожки в карточке: место → бронь → подтверждено → напомнили
-export function stepper(r) {
-  const o = r?.options || {};
-  const v = venueOf(r);
-  const done = [!!v, !!o.booking?.sent_at, !!(o.booking?.confirmed_at || r.status === 'confirmed'), !!o.reminded_at];
-  const cur = done.indexOf(false);
-  const labels = ['Место', 'Бронь', 'Подтверждено', 'Напомнили гостю'];
-  const waiting = o.sent_at && o.chosen == null && !v;
-  const hint = cur === -1 ? 'Всё готово — после визита отметьте ✓ «Сделано».'
-    : cur === 0 ? (waiting ? 'Варианты отправлены — отметьте, что выбрал гость:' : 'Подберите место с Jarvis или укажите его ниже в блоке «Место».')
-    : cur === 1 ? `Напишите ${v?.kind === 'place' ? 'в заведение' : 'партнёру'} — Jarvis составит сообщение на его языке.`
-    : cur === 2 ? 'Когда ответят «подтверждаем» — отметьте.'
-    : 'Накануне визита отправьте гостю напоминание с адресом и картой.';
-  const action = cur === 0
-    ? (waiting ? pickChips(r) : `<button type="button" class="btn small primary" data-options="${esc(r.id)}">✦ Подобрать варианты с Jarvis</button>`)
-    : cur === 3 ? `<button type="button" class="btn small primary" data-stage="remind" data-id="${esc(r.id)}">🔔 Напомнить гостю</button>` : stageButton(r);
-  return `<section class="steps">
-    <ol class="steps-line">${labels.map((l, i) => `<li class="${done[i] ? 'done' : i === cur ? 'cur' : ''}"><span>${done[i] ? '✓' : i + 1}</span>${l}</li>`).join('')}</ol>
-    ${v ? `<p class="steps-venue">${v.kind === 'place' ? '📍' : v.partner ? '★' : '📍'} <b>${esc(v.name)}</b>${v.address ? ' · ' + esc(v.address) : ''}${v.maps ? ` · <a href="${esc(v.maps)}" target="_blank" rel="noopener">карта</a>` : ''}</p>` : ''}
-    <p class="steps-hint">${esc(hint)}</p>${action ? `<div class="steps-act">${action}</div>` : ''}
-  </section>`;
-}
 const isClosedLike = (r) => { const k = statusOf(r?.status)?.kind; return k && k !== 'active'; };
 
 // кнопка следующего шага — одинаковая в окне запроса, на блоке «Моего дня» и в профиле
 export function stageButton(r, cls = 'btn small primary') {
   const s = stageOf(r);
-  if (s === 'partner') return `<button type="button" class="${cls}" data-stage="partner" data-id="${esc(r.id)}">✉ ${venueOf(r)?.partner ? 'Партнёру' : 'В заведение'}: забронировать</button>`;
+  if (s === 'partner') return `<button type="button" class="${cls}" data-stage="partner" data-id="${esc(r.id)}">✉ Партнёру: забронировать</button>`;
   if (s === 'confirm') return `<button type="button" class="${cls}" data-stage="confirm" data-id="${esc(r.id)}">✓ Партнёр подтвердил</button>`;
   if (s === 'remind' && r.deadline && Date.parse(r.deadline) > Date.now()) return `<button type="button" class="${cls}" data-stage="remind" data-id="${esc(r.id)}">🔔 Напомнить гостю</button>`;
   return '';
@@ -241,18 +212,18 @@ const guestsFrom = (r) => +(String(`${r.summary} ${r.original_message || ''}`).m
 const fullName = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').trim();
 
 // 1) сообщение партнёру на его языке (Jarvis переводит и учитывает аллергии; имя гостя подставляем только здесь)
-export function openPartnerMsg(id) {
+export function openPartnerMsg(id, { back = null } = {}) {
   const r = byId('requests', id);
   const v = venueOf(r);
   if (!r || !v) return toast('Сначала выберите место', 'err');
   const c = byId('clients', r.client_id);
   const bk = r.options?.booking || {};
-  const m = openModal({ title: v.partner ? '✉ Бронь у партнёра' : '✉ Бронь в заведении', saveLabel: 'Закрыть', body: `<div class="opt" id="pm">
+  const m = openModal({ title: '✉ Бронь у партнёра', saveLabel: 'Закрыть', body: `<div class="opt" id="pm">
     <p class="opt-ctx"><b>${esc(v.name)}</b>${v.address ? ' · ' + esc(v.address) : ''}</p>
     <div class="pm-row"><label class="f"><span>Гостей</span><input type="number" id="pm-n" min="1" max="40" value="${bk.guests || guestsFrom(r)}"></label>
       <label class="f grow"><span>Пожелания (по-русски — Jarvis переведёт)</span><input id="pm-wish" value="${esc(bk.wish || '')}" placeholder="столик у окна, тихий зал, торт на десерт…"></label></div>
     <button type="button" class="btn small" data-pm-gen>✦ Составить сообщение</button>
-    <div id="pm-out"></div></div>`, onSave: async () => {} });
+    <div id="pm-out"></div></div>`, onSave: async () => {}, onClose: back });
   m.form.querySelector('#cancel').hidden = true;
   const out = m.form.querySelector('#pm-out');
   const gen = async () => {
@@ -284,7 +255,7 @@ export function openPartnerMsg(id) {
     const booking = { sent_at: new Date().toISOString(), guests: +m.form.querySelector('#pm-n').value || 2, wish: m.form.querySelector('#pm-wish').value.trim() };
     try {
       await save('requests', id, { options: { ...(cur.options || {}), booking } });
-      if (hasStatus('booking') && statusOf(cur.status)?.kind === 'active' && (statusOf(cur.status)?.position ?? 0) < statusOf('booking').position) await setStatus(id, 'booking', { quiet: true });
+      if (hasStatus('booking') && cur.status !== 'booking' && statusOf(cur.status)?.kind === 'active') await setStatus(id, 'booking', { quiet: true });
       toast('Отправлено партнёру · ждём подтверждения');
       m.close();
     } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
@@ -311,7 +282,7 @@ const REM = {
   FR: (f, when, v, n) => `${f ? f + ', p' : 'P'}etit rappel : ${when} — ${v.name}.${n ? ` Table pour ${n}.` : ''}`,
 };
 const REM_END = { RU: 'Если планы изменятся — напишите, всё перенесу.', EN: 'If your plans change, just let me know and I will rearrange everything.', FR: 'Si vos plans changent, écrivez-moi, je m’occupe de tout.' };
-export function openReminder(id) {
+export function openReminder(id, { back = null } = {}) {
   const r = byId('requests', id);
   const v = venueOf(r);
   if (!r) return;
@@ -330,7 +301,7 @@ export function openReminder(id) {
   const m = openModal({ title: '🔔 Напоминание гостю', saveLabel: 'Закрыть', body: `<div class="opt">
     <label class="f"><span>Сообщение · ${lang === 'RU' ? 'по-русски' : lang === 'EN' ? 'по-английски' : 'по-французски'}</span><textarea id="rm-text" rows="8">${esc(text)}</textarea></label>
     <div class="opt-act"><button type="button" class="btn primary" data-rm="copy">Скопировать</button>
-      ${phone ? '<button type="button" class="btn" data-rm="wa">WhatsApp</button>' : ''}${c?.telegram ? '<button type="button" class="btn" data-rm="tg">Telegram</button>' : ''}</div></div>`, onSave: async () => {} });
+      ${phone ? '<button type="button" class="btn" data-rm="wa">WhatsApp</button>' : ''}${c?.telegram ? '<button type="button" class="btn" data-rm="tg">Telegram</button>' : ''}</div></div>`, onSave: async () => {}, onClose: back });
   m.form.querySelector('#cancel').hidden = true;
   m.form.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-rm]');
@@ -349,7 +320,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
   const id = b.dataset.id;
-  if (b.dataset.stage === 'partner') openPartnerMsg(id);
-  else if (b.dataset.stage === 'confirm') { b.disabled = true; confirmBooking(id); }
-  else if (b.dataset.stage === 'remind') openReminder(id);
+  if (b.dataset.stage === 'partner') openPartnerMsg(id, { back: backTo(b) });
+  else if (b.dataset.stage === 'confirm') { b.disabled = true; confirmBooking(id).then(() => { const back = backTo(b); if (back) back(); }); }
+  else if (b.dataset.stage === 'remind') openReminder(id, { back: backTo(b) });
 });

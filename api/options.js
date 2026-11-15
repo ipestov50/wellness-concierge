@@ -62,18 +62,8 @@ export default async function handler(req, res) {
   const user = await u.json();
   const owner = (process.env.OWNER_EMAIL || '').toLowerCase();
   if (owner && (user.email || '').toLowerCase() !== owner) return res.status(401).json({ error: 'unauthorized' });
-  const b = req.body || {};
-  // проверка места, которое ввели вручную: есть ли оно на карте по этому адресу
-  if (b.mode === 'verify') {
-    const o = { name: str(b.name, 100), address: str(b.address, 200), city: str(b.city, 80) };
-    if (!o.name) return res.status(400).json({ error: 'no_name' });
-    let near = null;
-    if (o.city) { const [f] = await photon(o.city, null, 1); if (f) near = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }; }
-    const v = await verify(o, near);
-    const address = v.status === 'corrected' || (!o.address && v.osm_address) ? v.osm_address : o.address;
-    return res.status(200).json({ check: v.status, address, address_given: o.address, maps: mapsUrl(o.name, address || o.city), lat: v.lat ?? null, lon: v.lon ?? null });
-  }
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'no_key' });
+  const b = req.body || {};
   const id = String(b.id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) return res.status(400).json({ error: 'bad_id' });
   const notes = str(b.notes, 800);

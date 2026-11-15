@@ -92,7 +92,7 @@ function buildActions(now, D, settings) {
     const base = { request_id: r.id, client_id: r.client_id, summary: r.summary, latest: dl ? dl - (r.category === 'Transport' ? 6 : 4) * HOUR : null, score, overdue: hoursLeft != null && hoursLeft < 0 };
     const pType = p?.type || CAT_TO_TYPE[r.category] || 'other';
     // место, которое выбрал гость (из «Вариантов для гостя»), иначе партнёр запроса
-    const venue = r.venue?.name || (r.options?.chosen != null && r.options.items?.[r.options.chosen]?.name) || p?.name || '';
+    const venue = (r.options?.chosen != null && r.options.items?.[r.options.chosen]?.name) || p?.name || '';
     const bk = r.options?.booking;
     switch (r.status) {
       case 'new':

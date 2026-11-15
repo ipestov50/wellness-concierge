@@ -1,6 +1,6 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { setStatus, toggleDone, isDone, archiveRequests } from '../actions.js';
-import { optionsBadge, openOptions, venueOf } from '../options.js';
+import { optionsBadge, openOptions } from '../options.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
@@ -35,7 +35,7 @@ export function requestCard(r, { showClient = true } = {}) {
       <span class="pill u-${esc(r.urgency)}">${esc(URGENCY_LABEL[r.urgency] || '')}</span>
       ${r.deadline ? `<span class="${late ? 'late' : ''}">${late ? 'Просрочено · ' : ''}${esc(fmtDeadline(r.deadline))}</span>` : ''}
       ${r.budget_amount != null ? `<span>${esc(fmtMoney(r.budget_amount, r.currency))}</span>` : ''}
-      ${(() => { const v = venueOf(r); return v ? `<span class="card-venue">· ${v.partner ? '★' : '📍'} ${esc(v.name)}</span>` : ''; })()}
+      ${p ? `<span>· ${esc(p.name)}</span>` : ''}
     </div>
     ${optionsBadge(r) ? `<div class="flags">${optionsBadge(r)}</div>` : ''}
     ${allergic || r.needs_review || r.needs_approval ? `<div class="flags">
