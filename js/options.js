@@ -59,7 +59,9 @@ export async function pickOption(id, i) {
   const x = r?.options?.items?.[i];
   if (!x) return;
   const patch = { options: { ...r.options, chosen: i, chosen_at: new Date().toISOString() } };
-  if (x.partner_id) patch.partner_id = x.partner_id;
+  // партнёр → в поле «Партнёр»; любое другое место → в ячейку «Место»
+  if (x.partner_id) { patch.partner_id = x.partner_id; patch.venue = null; }
+  else patch.venue = { kind: 'place', name: x.name, address: x.address || '', maps: x.maps || '', phone: x.phone || '', website: x.website || '', rating: x.rating ?? null, reviews: x.reviews ?? null, from: 'options' };
   if (x.address && !r.road_to) patch.road_to = `${x.name}, ${x.address}`;
   try {
     await save('requests', id, patch);
@@ -218,12 +220,15 @@ document.addEventListener('click', (e) => {
   const o = e.target.closest('[data-options]');
   if (o) { e.stopPropagation(); e.preventDefault(); openOptions(o.dataset.options, { back: backTo(o) }); return; }
   const p = e.target.closest('[data-opt-pick]');
-  if (p && !p.closest('#opt')) { e.stopPropagation(); e.preventDefault(); pickOption(p.dataset.optPick, +p.dataset.i); }
+  if (p && !p.closest('#opt')) { e.stopPropagation(); e.preventDefault(); const back = backTo(p); pickOption(p.dataset.optPick, +p.dataset.i).then(() => back?.()); }
 });
 
 // ================== после выбора гостя: партнёр → подтверждение → напоминание ==================
 // место брони: выбранный гостем вариант, иначе партнёр запроса
 export function venueOf(r) {
+  // место, выбранное гостем (не партнёр) — из ячейки «Место»
+  const vv = r?.venue;
+  if (vv?.name) return { name: vv.name, address: vv.address || '', maps: vv.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([vv.name, vv.address].filter(Boolean).join(', '))}`, website: vv.website || '', contact: vv.phone || '', partner: null };
   const x = r?.options?.chosen != null ? r.options.items?.[r.options.chosen] : null;
   const p = byId('partners', x?.partner_id || r?.partner_id);
   if (!x && !p) return null;

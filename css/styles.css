@@ -1710,3 +1710,13 @@ details.g-handled .trow-wrap { opacity: .7; }
 .vo-card.skel i:first-child { height: 24px; width: 70%; } .vo-card.skel i:nth-child(2) { width: 45%; } .vo-card.skel i:nth-child(3) { height: 52px; } .vo-card.skel i:last-child { margin-top: auto; height: 32px; width: 60%; }
 .vo-error { display: grid; gap: 10px; justify-items: start; padding: 20px; border-radius: 16px; border: 1px dashed var(--line); }
 @media (max-width: 560px) { .vo-grid { grid-template-columns: 1fr; } .vo-foot .btn { flex: 1; } .vo-sent { width: 100%; margin: 0; } }
+
+/* ---------- «Партнёр» и «Место» рядом ---------- */
+.venue-pair { align-items: start; }
+.vcell { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.vcell.empty { color: var(--muted); font-size: 13px; padding: 10px 12px; border-style: dashed; background: transparent; }
+.vcell-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.vcell-main b { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vcell-main small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vcell-act { display: flex; gap: 6px; flex: none; }
+.vo-btn.icon { width: 32px; padding: 0; justify-content: center; }

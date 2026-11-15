@@ -22,6 +22,15 @@ const nul = (v) => (v === '' || v == null ? null : v);
 const urgencyPicker = (val) => `<div class="seg-pick" role="radiogroup">${URGENCY.map(([k, l]) =>
   `<label class="u-opt u-${k}"><input type="radio" name="urgency" value="${k}"${k === (val || 'normal') ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
 
+// ячейка «Место»: что выбрал гость из вариантов, если это не ваш партнёр
+function venueCell(r) {
+  const v = r.venue;
+  if (!v?.name) return `<div class="vcell empty" id="f-venue_keep"><span>Появится, когда гость выберет вариант не из партнёров</span><input type="hidden" name="venue_keep" value=""></div>`;
+  return `<div class="vcell" id="f-venue_keep"><div class="vcell-main"><b>${esc(v.name)}</b>${v.address ? `<small>${esc(v.address)}</small>` : ''}</div>
+    <div class="vcell-act">${v.maps ? `<a class="vo-btn" href="${esc(v.maps)}" target="_blank" rel="noopener">Карта</a>` : ''}<button type="button" class="vo-btn icon" data-venue-clear title="Убрать место" aria-label="Убрать место">✕</button></div>
+    <input type="hidden" name="venue_keep" value="1"></div>`;
+}
+
 export function editRequest(id, presetClient, preset = {}) {
   const ex = id ? byId('requests', id) : null;
   if (ex && !ex.checklist) {
@@ -49,7 +58,7 @@ export function editRequest(id, presetClient, preset = {}) {
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
     field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
-    field('partner_id', 'Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —'))) +
+    `<div class="f2 venue-pair">${field('partner_id', '★ Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —')))}${field('venue_keep', '📍 Место (не партнёр)', venueCell(r))}</div>` +
     field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions)) +
     field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message)) +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
@@ -73,6 +82,7 @@ export function editRequest(id, presetClient, preset = {}) {
         client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
+        ...(r.venue && (!v.venue_keep || (nul(v.partner_id) && nul(v.partner_id) !== r.partner_id)) ? { venue: null } : {}),
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
         needs_approval: v.needs_approval, needs_review: v.needs_review,
       });
@@ -81,6 +91,11 @@ export function editRequest(id, presetClient, preset = {}) {
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
   if (id) m.form.dataset.reqId = id; // окна, открытые отсюда, по «Закрыть» вернутся в карточку
+  m.form.querySelector('[data-venue-clear]')?.addEventListener('click', (e) => {
+    const cell = e.target.closest('.vcell');
+    cell.classList.add('empty');
+    cell.innerHTML = '<span>Место убрано — сохраните запрос</span><input type="hidden" name="venue_keep" value="">';
+  });
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);

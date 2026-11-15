@@ -154,7 +154,7 @@ export function bindChecklist(root) {
   };
 
   const setOpen = (open) => { box.classList.toggle('open', open); box.querySelector('[data-cl-toggle]').setAttribute('aria-expanded', String(open)); };
-  setOpen((r()?.checklist?.items || []).some((i) => !i.done));
+  setOpen(false); // свёрнут, пока не откроете сами — в карточке и так много информации
   box.querySelector('[data-cl-toggle]').addEventListener('click', () => setOpen(!box.classList.contains('open')));
 
   const refreshHead = () => {
