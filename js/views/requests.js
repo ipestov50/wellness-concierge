@@ -1,5 +1,6 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { setStatus, toggleDone, isDone, archiveRequests } from '../actions.js';
+import { optionsBadge, openOptions } from '../options.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
@@ -36,6 +37,7 @@ export function requestCard(r, { showClient = true } = {}) {
       ${r.budget_amount != null ? `<span>${esc(fmtMoney(r.budget_amount, r.currency))}</span>` : ''}
       ${p ? `<span>· ${esc(p.name)}</span>` : ''}
     </div>
+    ${optionsBadge(r) ? `<div class="flags">${optionsBadge(r)}</div>` : ''}
     ${allergic || r.needs_review || r.needs_approval ? `<div class="flags">
       ${allergic ? '<span class="flag warn">⚠ ограничения</span>' : ''}
       ${r.needs_review ? '<span class="flag">проверить</span>' : ''}
@@ -54,6 +56,7 @@ function openCardMenu(id, anchor) {
   m.id = 'cardmenu'; m.className = 'popover'; m.setAttribute('role', 'menu');
   m.innerHTML = `<div class="pop-title">${esc(r.summary)}</div>
     <button type="button" role="menuitem" data-act="edit">✎ Изменить</button>
+    ${!isClosed(r.status) ? `<button type="button" role="menuitem" data-act="options">✦ Варианты для гостя</button>` : ''}
     <div class="pop-label">Перенести в</div>
     <div class="pop-statuses">${columns().map(({ key: s, label: l }) =>
       `<button type="button" role="menuitem" data-act="status" data-status="${esc(s)}"${s === r.status ? ' aria-current="true" disabled' : ''}>${s === r.status ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
@@ -81,6 +84,7 @@ function openCardMenu(id, anchor) {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     if (b.dataset.act === 'edit') { closeCardMenu(); editRequest(id); }
+    else if (b.dataset.act === 'options') { closeCardMenu(); openOptions(id); }
     else if (b.dataset.act === 'archive') { closeCardMenu(); archiveRequests([id]).catch(() => {}); }
     else if (b.dataset.act === 'status') {
       closeCardMenu();

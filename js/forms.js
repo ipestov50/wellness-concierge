@@ -1,6 +1,7 @@
 import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast } from './ui.js';
 import { state, byId, save, remove } from './data.js';
+import { optionsBadge, pickChips } from './options.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
@@ -33,6 +34,7 @@ export function editRequest(id, presetClient, preset = {}) {
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
+    (id ? `<div class="req-opts"><button type="button" class="btn small primary" data-options="${esc(id)}">✦ Варианты для гостя</button>${optionsBadge(r)}${pickChips(r)}</div>` : '') +
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
     roadSlot(r) +
     checklistSection(r) +
