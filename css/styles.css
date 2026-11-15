@@ -1735,3 +1735,17 @@ details.g-handled .trow-wrap { opacity: .7; }
 .vpop-f input { width: 100%; min-width: 0; }
 .vpop-act { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 520px) { .vpop { grid-template-columns: 1fr; } }
+
+/* ---------- «Сегодня · уже готово» ---------- */
+.day-ready { display: grid; gap: 6px; }
+.ready-i { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 60%, transparent); color: inherit; cursor: pointer; opacity: .78; transition: opacity .15s, background .15s, border-color .15s; }
+.ready-i:hover { opacity: 1; background: var(--surface); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.ready-t { font-family: var(--f-head); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ready-main { min-width: 0; display: grid; gap: 1px; }
+.ready-main b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ready-main small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ready-i.done .ready-main b { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.ready-st { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.ready-i.done .ready-st { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+@media (max-width: 520px) { .ready-i { grid-template-columns: 44px 1fr; } .ready-st { grid-column: 2; justify-self: start; } }

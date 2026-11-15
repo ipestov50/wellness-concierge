@@ -8,7 +8,7 @@ import { conflictsBlock, watchTraffic } from '../conflict-actions.js';
 import { optionsBadge, pickChips, stageButton } from '../options.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
-import { statusLabel } from '../statuses.js';
+import { statusLabel, statusOf } from '../statuses.js';
 import { editRequest } from '../lazy.js';
 
 let settings = null;
@@ -120,6 +120,7 @@ export function dayView() {
     ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
     ${section(P.tomorrow ? 'Ещё на завтра' : 'Ещё сегодня', restToday)}
     ${!todays.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
+    ${readyBlock(readyFor(P, new Set(uniq.map((b) => b.request_id).filter(Boolean))), P.tomorrow ? 'Завтра · уже готово' : 'Сегодня · уже готово')}
     ${section('На этой неделе', week, { future: true })}
     ${section('Позже', later, { future: true })}
     ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span></div>`).join('')}
@@ -134,6 +135,27 @@ export function dayView() {
 function closedToday() {
   const today = dayIn(OWNER_TZ, Date.now());
   return state.requests.filter((r) => isDone(r) && r.updated_at && dayIn(OWNER_TZ, +new Date(r.updated_at)) === today);
+}
+
+// запросы на этот день, по которым делать больше нечего (выполнены или подтверждены) — чтобы утром быстро перепроверить
+function readyFor(P, busy) {
+  return state.requests
+    .filter((r) => r.deadline && dayIn(OWNER_TZ, Date.parse(r.deadline)) === P.day && !busy.has(r.id) && statusOf(r.status)?.kind !== 'archive')
+    .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline));
+}
+function readyBlock(list, title) {
+  if (!list.length) return '';
+  return `<section class="day-ready"><h3 class="day-line-h">${title} · ${list.length}</h3>
+    ${list.map((r) => {
+      const c = byId('clients', r.client_id), p = byId('partners', r.partner_id);
+      const done = isDone(r);
+      const t = hmIn(OWNER_TZ, Date.parse(r.deadline));
+      const where = [p && `★ ${p.name}`, r.venue?.name && `📍 ${r.venue.name}`].filter(Boolean).join(' · ');
+      return `<button type="button" class="ready-i${done ? ' done' : ''}" data-db-open="${esc(r.id)}" title="Открыть запрос и перепроверить детали">
+        <span class="ready-t">${t === '00:00' ? '—' : t}</span>
+        <span class="ready-main"><b>${esc(r.summary)}</b><small>${[c?.name, where].filter(Boolean).map(esc).join(' · ')}</small></span>
+        <span class="ready-st">${done ? '✓ ' : ''}${esc(statusLabel(r.status))}</span></button>`;
+    }).join('')}</section>`;
 }
 
 // ---------- неделя: что впереди, чтобы распланировать ----------
