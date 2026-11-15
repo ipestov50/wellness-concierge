@@ -247,8 +247,7 @@ const isClosedLike = (r) => { const k = statusOf(r?.status)?.kind; return k && k
 // кнопка следующего шага — одинаковая в окне запроса, на блоке «Моего дня» и в профиле
 export function stageButton(r, cls = 'btn small primary') {
   const s = stageOf(r);
-  if (s === 'partner') return `<button type="button" class="${cls}" data-stage="partner" data-id="${esc(r.id)}">✉ Партнёру: забронировать</button>`;
-  if (s === 'confirm') return `<button type="button" class="${cls}" data-stage="confirm" data-id="${esc(r.id)}">✓ Партнёр подтвердил</button>`;
+  // бронь у партнёра вы делаете сами — здесь только напоминание гостю накануне (в «Моём дне»)
   if (s === 'remind' && r.deadline && Date.parse(r.deadline) > Date.now()) return `<button type="button" class="${cls}" data-stage="remind" data-id="${esc(r.id)}">🔔 Напомнить гостю</button>`;
   return '';
 }
@@ -371,3 +370,11 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.stage === 'confirm') { b.disabled = true; confirmBooking(id).then(() => { const back = backTo(b); if (back) back(); }); }
   else if (b.dataset.stage === 'remind') openReminder(id, { back: backTo(b) });
 });
+
+// верх карточки запроса: только факты. Кнопка подбора — неброская; пока гость выбирает — «ждём выбор» и номера
+export function requestOptionsBar(r) {
+  const o = r?.options;
+  if (o?.sent_at && o.chosen == null) return `<div class="req-opts"><span class="opt-badge wait">Ждём выбор гостя</span>${pickChips(r)}</div>`;
+  if (o?.chosen != null || r?.venue?.name) return '';
+  return `<div class="req-opts"><button type="button" class="vo-btn" data-options="${esc(r.id)}">✦ Варианты для гостя</button></div>`;
+}

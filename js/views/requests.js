@@ -35,7 +35,7 @@ export function requestCard(r, { showClient = true } = {}) {
       <span class="pill u-${esc(r.urgency)}">${esc(URGENCY_LABEL[r.urgency] || '')}</span>
       ${r.deadline ? `<span class="${late ? 'late' : ''}">${late ? 'Просрочено · ' : ''}${esc(fmtDeadline(r.deadline))}</span>` : ''}
       ${r.budget_amount != null ? `<span>${esc(fmtMoney(r.budget_amount, r.currency))}</span>` : ''}
-      ${p ? `<span>· ★ ${esc(p.name)}</span>` : r.venue?.name ? `<span>· 📍 ${esc(r.venue.name)}</span>` : ''}
+      ${p ? `<span>· ★ ${esc(p.name)}</span>` : ''}${r.venue?.name ? `<span class="card-venue">· 📍 ${esc(r.venue.name)}</span>` : ''}
     </div>
     ${optionsBadge(r) ? `<div class="flags">${optionsBadge(r)}</div>` : ''}
     ${allergic || r.needs_review || r.needs_approval ? `<div class="flags">

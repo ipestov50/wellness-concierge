@@ -58,7 +58,7 @@ button { cursor: pointer; }
 }
 .icon-btn:hover { border-color: var(--accent); }
 input[type=search], input[type=text], input[type=email], input[type=password], input[type=date],
-input[type=datetime-local], input[type=number], select, textarea {
+input[type=datetime-local], input[type=number], input[type=tel], input[type=url], select, textarea {
   width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; font-size: 16px; /* 16px — iPhone не приближает поле */
   min-height: 44px;
@@ -1713,10 +1713,25 @@ details.g-handled .trow-wrap { opacity: .7; }
 
 /* ---------- «Партнёр» и «Место» рядом ---------- */
 .venue-pair { align-items: start; }
-.vcell { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.vcell.empty { color: var(--muted); font-size: 13px; padding: 10px 12px; border-style: dashed; background: transparent; }
-.vcell-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.vcell-main b { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vcell-main small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vcell-act { display: flex; gap: 6px; flex: none; }
-.vo-btn.icon { width: 32px; padding: 0; justify-content: center; }
+.vcell { display: grid; gap: 6px; min-height: 44px; padding: 10px 10px 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.vcell.empty { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 6px 6px 12px; border-style: dashed; background: transparent; color: var(--muted); font-size: 14px; }
+.vcell-top { display: flex; align-items: flex-start; gap: 8px; }
+.vcell-name { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.vcell-tools { display: flex; gap: 4px; flex: none; margin: -2px -2px 0 0; }
+.vcell-addr { color: var(--muted); font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.vcell-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.vo-btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.vo-btn.icon { width: 32px; padding: 0; justify-content: center; } .vo-btn.icon.sm { width: 28px; }
+.req-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.req-opts .opt-pick { margin: 0; }
+/* окошко «Место» */
+.vpop { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface)); box-shadow: 0 10px 30px rgba(0,0,0,.10); animation: rise .25s var(--ease); }
+.vpop[hidden] { display: none; }
+.vpop-h { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; } .vpop-h b { font-family: var(--f-head); font-size: 17px; font-weight: 600; } .vpop-h small { color: var(--muted); font-size: 12.5px; }
+.vpop-f { display: grid; gap: 4px; min-width: 0; } .vpop-f.full { grid-column: 1 / -1; }
+.vpop-f span { font-size: 12.5px; font-weight: 600; color: var(--muted); } .vpop-f em { font-style: normal; font-weight: 400; opacity: .8; }
+.vpop-f input { width: 100%; min-width: 0; }
+.vpop-act { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 520px) { .vpop { grid-template-columns: 1fr; } }

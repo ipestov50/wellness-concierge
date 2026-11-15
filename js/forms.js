@@ -1,7 +1,7 @@
 import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast } from './ui.js';
 import { state, byId, save, remove } from './data.js';
-import { optionsBadge, pickChips, stageButton } from './options.js';
+import { requestOptionsBar } from './options.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
@@ -22,13 +22,62 @@ const nul = (v) => (v === '' || v == null ? null : v);
 const urgencyPicker = (val) => `<div class="seg-pick" role="radiogroup">${URGENCY.map(([k, l]) =>
   `<label class="u-opt u-${k}"><input type="radio" name="urgency" value="${k}"${k === (val || 'normal') ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
 
-// ячейка «Место»: что выбрал гость из вариантов, если это не ваш партнёр
-function venueCell(r) {
-  const v = r.venue;
-  if (!v?.name) return `<div class="vcell empty" id="f-venue_keep"><span>Появится, когда гость выберет вариант не из партнёров</span><input type="hidden" name="venue_keep" value=""></div>`;
-  return `<div class="vcell" id="f-venue_keep"><div class="vcell-main"><b>${esc(v.name)}</b>${v.address ? `<small>${esc(v.address)}</small>` : ''}</div>
-    <div class="vcell-act">${v.maps ? `<a class="vo-btn" href="${esc(v.maps)}" target="_blank" rel="noopener">Карта</a>` : ''}<button type="button" class="vo-btn icon" data-venue-clear title="Убрать место" aria-label="Убрать место">✕</button></div>
-    <input type="hidden" name="venue_keep" value="1"></div>`;
+// ячейка «Место (не партнёр)»: выбор гостя из вариантов или место, указанное вручную
+const mapsLink = (v) => v.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([v.name, v.address].filter(Boolean).join(', '))}`;
+function venueCell(v) {
+  const json = esc(v?.name ? JSON.stringify(v) : '');
+  if (!v?.name) return `<div class="vcell empty" id="f-venue_json"><span>Не выбрано</span><button type="button" class="vo-btn" data-venue-edit>+ Указать</button><input type="hidden" name="venue_json" value=""></div>`;
+  const tel = (v.phone || '').replace(/[^\d+]/g, '');
+  const links = [`<a class="vo-btn sm" href="${esc(mapsLink(v))}" target="_blank" rel="noopener">Карта</a>`,
+    tel && `<a class="vo-btn sm" href="tel:${esc(tel)}">Позвонить</a>`,
+    v.website && `<a class="vo-btn sm" href="${esc(v.website)}" target="_blank" rel="noopener">Сайт</a>`,
+    v.email && `<a class="vo-btn sm" href="mailto:${esc(v.email)}">Почта</a>`].filter(Boolean).join('');
+  return `<div class="vcell" id="f-venue_json">
+    <div class="vcell-top"><b class="vcell-name">${esc(v.name)}</b>
+      <span class="vcell-tools"><button type="button" class="vo-btn icon sm" data-venue-edit title="Изменить" aria-label="Изменить место">✎</button><button type="button" class="vo-btn icon sm" data-venue-clear title="Убрать" aria-label="Убрать место">✕</button></span></div>
+    ${v.address ? `<small class="vcell-addr">${esc(v.address)}</small>` : ''}
+    <div class="vcell-links">${links}</div>
+    <input type="hidden" name="venue_json" value="${json}"></div>`;
+}
+// окошко ввода места — прямо в карточке, чтобы не терять остальные поля формы
+const venuePop = () => `<div class="vpop" id="vpop" hidden>
+  <div class="vpop-h"><b>Место</b><small>не из ваших партнёров</small></div>
+  <label class="vpop-f full"><span>Название</span><input id="vp-name" type="text" autocomplete="off" placeholder="Le Comptoir du Marché"></label>
+  <label class="vpop-f full"><span>Адрес</span><input id="vp-address" type="text" autocomplete="off" placeholder="8 Rue du Marché, 06300 Nice"></label>
+  <label class="vpop-f"><span>Телефон</span><input id="vp-phone" type="tel" autocomplete="off" placeholder="+33 4 93 00 00 00"></label>
+  <label class="vpop-f"><span>Сайт</span><input id="vp-website" type="text" autocomplete="off" placeholder="example.com"></label>
+  <label class="vpop-f full"><span>Почта <em>необязательно</em></span><input id="vp-email" type="email" autocomplete="off" placeholder="booking@example.com"></label>
+  <div class="vpop-act"><button type="button" class="btn small" data-vp-cancel>Отмена</button><button type="button" class="btn small primary" data-vp-ok>Готово</button></div>
+</div>`;
+function bindVenue(form) {
+  const cellBox = () => form.querySelector('#f-venue_json');
+  const pop = form.querySelector('#vpop');
+  const cur = () => { try { return JSON.parse(cellBox().querySelector('[name="venue_json"]').value || 'null'); } catch { return null; } };
+  const setCell = (v) => { cellBox().outerHTML = venueCell(v); };
+  const f = (k) => pop.querySelector('#vp-' + k);
+  form.addEventListener('click', (e) => {
+    if (e.target.closest('[data-venue-edit]')) {
+      const v = cur() || {};
+      ['name', 'address', 'phone', 'website', 'email'].forEach((k) => { f(k).value = v[k] || ''; });
+      pop.hidden = false; f('name').focus();
+      pop.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (e.target.closest('[data-venue-clear]')) setCell(null);
+    else if (e.target.closest('[data-vp-cancel]')) pop.hidden = true;
+    else if (e.target.closest('[data-vp-ok]')) {
+      const name = f('name').value.trim();
+      if (!name) { f('name').focus(); return toast('Впишите название места', 'err'); }
+      let website = f('website').value.trim();
+      if (website && !/^https?:\/\//i.test(website)) website = 'https://' + website;
+      const email = f('email').value.trim();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { f('email').focus(); return toast('Проверьте почту', 'err'); }
+      const prev = cur() || {};
+      const v = { ...prev, kind: 'place', name, address: f('address').value.trim(), phone: f('phone').value.trim(), website, email, from: prev.name === name ? prev.from || 'manual' : 'manual' };
+      v.maps = prev.name === name && prev.address === v.address && prev.maps ? prev.maps : mapsLink({ name, address: v.address });
+      setCell(v);
+      pop.hidden = true;
+    }
+  });
+  pop.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pop.querySelector('[data-vp-ok]').click(); } });
 }
 
 export function editRequest(id, presetClient, preset = {}) {
@@ -43,7 +92,7 @@ export function editRequest(id, presetClient, preset = {}) {
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
-    (id ? `<div class="req-opts">${stageButton(r) || (r.options?.booking?.confirmed_at ? '' : `<button type="button" class="btn small primary" data-options="${esc(id)}">✦ Варианты для гостя</button>`)}${optionsBadge(r)}${pickChips(r)}</div>` : '') +
+    (id ? requestOptionsBar(r) : '') +
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
     roadSlot(r) +
     checklistSection(r) +
@@ -58,7 +107,7 @@ export function editRequest(id, presetClient, preset = {}) {
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
     field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
-    `<div class="f2 venue-pair">${field('partner_id', '★ Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —')))}${field('venue_keep', '📍 Место (не партнёр)', venueCell(r))}</div>` +
+    `<div class="f2 venue-pair">${field('partner_id', '★ Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —')))}${field('venue_json', '📍 Место (не партнёр)', venueCell(r.venue))}</div>` + venuePop() +
     field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions)) +
     field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message)) +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
@@ -82,7 +131,7 @@ export function editRequest(id, presetClient, preset = {}) {
         client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
-        ...(r.venue && (!v.venue_keep || (nul(v.partner_id) && nul(v.partner_id) !== r.partner_id)) ? { venue: null } : {}),
+        venue: (() => { try { return v.venue_json ? JSON.parse(v.venue_json) : null; } catch { return r.venue || null; } })(),
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
         needs_approval: v.needs_approval, needs_review: v.needs_review,
       });
@@ -91,11 +140,7 @@ export function editRequest(id, presetClient, preset = {}) {
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
   if (id) m.form.dataset.reqId = id; // окна, открытые отсюда, по «Закрыть» вернутся в карточку
-  m.form.querySelector('[data-venue-clear]')?.addEventListener('click', (e) => {
-    const cell = e.target.closest('.vcell');
-    cell.classList.add('empty');
-    cell.innerHTML = '<span>Место убрано — сохраните запрос</span><input type="hidden" name="venue_keep" value="">';
-  });
+  bindVenue(m.form);
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
