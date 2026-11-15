@@ -171,11 +171,11 @@ function weekStrip() {
   return `<section class="week">
     <div class="week-head"><h3>Неделя</h3><small>${sel ? 'нажмите ещё раз — вернуться к плану' : 'нажмите на день — покажу всё по этому дню, включая сделанное'}</small></div>
     <div class="week-strip">${W.map((d, i) => { const dt = new Date(d.day + 'T12:00:00Z');
-      const open = d.items.length - (d.done || 0);
-      return `<button type="button" class="wk${i === 0 ? ' today' : ''}${sel === d.day ? ' on' : ''}" data-wk="${d.day}" title="${open} в работе${d.done ? ` · ${d.done} уже сделано` : ''}">
+      const open = d.open || 0, done = d.done || 0;
+      return `<button type="button" class="wk${i === 0 ? ' today' : ''}${sel === d.day ? ' on' : ''}" data-wk="${d.day}" title="${done ? `сделано: ${done}` : ''}${done && open ? ' · ' : ''}${open ? `в работе: ${open}` : ''}${!done && !open ? 'дел нет' : ''}">
         <small>${i === 0 ? 'сегодня' : i === 1 ? 'завтра' : WD[dt.getUTCDay()]}</small><b>${dt.getUTCDate()}</b>
         <span class="wk-bar"><i style="width:${Math.min(100, (d.load / max) * 100)}%"></i></span>
-        <em>${d.items.length ? `${open || ''}${d.done ? `<span class="wk-done">${open ? ' ' : ''}✓${d.done}</span>` : ''}` : '—'}</em></button>`; }).join('')}</div>
+        <em>${done || open ? `${done ? `<span class="wk-done">✓${done}</span>` : ''}${done && open ? ' ' : ''}${open || ''}` : '—'}</em></button>`; }).join('')}</div>
   </section>`;
 }
 const selectedDay = (W = currentWeek()) => (ui.weekDay && W.some((d) => d.day === ui.weekDay) ? ui.weekDay : null);

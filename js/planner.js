@@ -325,13 +325,14 @@ export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
     }
     // выполненные заранее — тоже дела этого дня (видно, что всё под контролем)
     for (const r of data.requests) {
-      if (!r.deadline || !doneKeys.has(r.status) || r.archived_at) continue;
+      if (!r.deadline || !doneKeys.has(r.status)) continue; // и архивные — это тоже дела этого дня
       const ms = Date.parse(r.deadline);
       if (dayIn(OWNER_TZ, ms) !== d) continue;
       items.push({ kind: 'done', t: ms, time: hmIn(OWNER_TZ, ms) === '00:00' ? '' : hmIn(OWNER_TZ, ms), title: r.summary, who: firstName(cMap.get(r.client_id)), request_id: r.id });
     }
     items.sort((a, b) => a.t - b.t);
-    out.push({ day: d, items, load: items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length, done: items.filter((x) => x.kind === 'done').length });
+    const open = items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length;
+    out.push({ day: d, items, load: open, open, done: items.filter((x) => x.kind === 'done').length });
   }
   return out;
 }
