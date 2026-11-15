@@ -1,7 +1,8 @@
 import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast } from './ui.js';
 import { state, byId, save, remove } from './data.js';
-import { optionsBadge, pickChips, stageButton } from './options.js';
+import { stepper } from './options.js';
+import { venueBlock, bindVenue, readVenue } from './venue.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
@@ -32,9 +33,8 @@ export function editRequest(id, presetClient, preset = {}) {
   const r = id ? byId('requests', id) : { client_id: presetClient || '', status: firstKey(), urgency: 'normal', category: 'Other', currency: 'EUR', ...preset };
   if (!r) return;
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
-  const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
-    (id ? `<div class="req-opts">${stageButton(r) || (r.options?.booking?.confirmed_at ? '' : `<button type="button" class="btn small primary" data-options="${esc(id)}">✦ Варианты для гостя</button>`)}${optionsBadge(r)}${pickChips(r)}</div>` : '') +
+    (id ? stepper(r) : '') +
     `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
     roadSlot(r) +
     checklistSection(r) +
@@ -49,7 +49,7 @@ export function editRequest(id, presetClient, preset = {}) {
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
     field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
-    field('partner_id', 'Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —'))) +
+    venueBlock(r) +
     field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions)) +
     field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message)) +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
@@ -72,7 +72,7 @@ export function editRequest(id, presetClient, preset = {}) {
       await save('requests', id, {
         client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
-        currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
+        currency: v.budget_amount === '' ? nul(v.currency) : v.currency, ...readVenue(v, r),
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
         needs_approval: v.needs_approval, needs_review: v.needs_review,
       });
@@ -83,6 +83,7 @@ export function editRequest(id, presetClient, preset = {}) {
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
+  bindVenue(m.form, r);
   // «для гостя — 22:00 по Москве»: обновляем при смене срока или гостя
   const gtime = () => {
     const el = m.form.querySelector('#req-gtime');
