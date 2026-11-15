@@ -1645,3 +1645,27 @@ details.g-handled .trow-wrap { opacity: .7; }
 .gd-partner { white-space: nowrap; font-size: 12px; color: #b08d57; }
 .gd-del { flex: none; }
 @media (max-width: 560px) { .gd-row2 { grid-template-columns: minmax(0, 1fr); } .bf-guide-cta { flex-direction: column; align-items: stretch; } }
+
+/* ---------- конструктор лукбука ---------- */
+.dlg.gb-dlg { max-width: min(1200px, 97vw); }
+.gb { display: grid; gap: 10px; position: relative; }
+.gb-bar { position: sticky; top: -1px; z-index: 5; background: var(--surface); padding: 6px 0 8px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.gb-pages { display: flex; flex-wrap: wrap; gap: 6px; }
+.gd-sec.sm { padding: 5px 10px; font-size: 12.5px; }
+.gb-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gb-tools #gb-status { margin-right: auto; font-size: 12.5px; }
+.gb-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.gb-stage { overflow: auto; background: color-mix(in srgb, var(--soft) 60%, var(--bg)); border-radius: 14px; padding: 18px; max-height: 72vh; }
+.gb-stage .lb-book { display: grid; gap: 24px; justify-content: center; }
+.gb-stage .lb-page { box-shadow: 0 6px 30px rgba(0,0,0,.18); }
+.gb-photo { position: fixed; z-index: 90; right: 16px; top: 80px; bottom: 16px; width: min(380px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.3); padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.gb-photo[hidden] { display: none; }
+.gb-ph-head { display: flex; justify-content: space-between; align-items: center; }
+.gb-ph-search, .gb-ph-url { display: flex; gap: 6px; } .gb-ph-search input, .gb-ph-url input { flex: 1; min-width: 0; }
+.gb-ph-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.gb-ph { border: 0; padding: 0; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; cursor: pointer; background: var(--soft); }
+.gb-ph img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s; }
+.gb-ph:hover img { transform: scale(1.05); }
+.gb-credit { font-size: 11px; color: var(--muted); margin: 0; }
+@media (max-width: 760px) { .gb-stage { padding: 8px; max-height: none; } }
+.gb-pages .gd-sec span, .gd-secs .gd-sec span { white-space: nowrap; }

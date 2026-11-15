@@ -1,102 +1,166 @@
-// «📘 Путеводитель» для гостя: ваши указания → черновик Jarvis → правки → PDF.
-// Черновик хранится в поездке (trips.guide). PDF — через системное «Сохранить как PDF» (бесплатно, без сервисов).
+// «📘 Путеводитель-лукбук»: ваши указания → Jarvis собирает книгу (тексты, фото, карта) →
+// конструктор: правка прямо на страницах, замена фото, вкл/выкл страниц → «Экспорт PDF» (A4, страница = лист).
+// Книга хранится в поездке (trips.guide). Имя гостя в ИИ не уходит — подставляется только здесь.
 import { esc, openModal, toast } from './ui.js';
 import { state, byId, save } from './data.js';
 import { api, isAbort } from './api.js';
-import { fmtRange } from './dossier.js';
+import { renderBook, PAGE_KEYS, pageLabel, get, set, mapHtml, MAP_W, MAP_H } from './lookbook.js';
+import { mapShot } from './mapshot.js';
 
-const SECTIONS = [
-  ['dining', '🍽 Рестораны и кафе'], ['wellness', '💆 Спа и велнес'], ['places', '🏛 Прогулки и места'], ['shopping', '🛍 Шопинг'],
-  ['kids', '🧸 С детьми'], ['nightlife', '🌙 Вечером'], ['transport', '🚇 Как передвигаться'], ['useful', '💡 Полезно знать'],
-];
-const ICON = Object.fromEntries(SECTIONS.map(([k, l]) => [k, l.split(' ')[0]]));
-const firstName = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
-const fill = (s, c) => String(s || '').replace(/\{имя\}/g, firstName(c) || 'дорогой гость');
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const clean = (n) => (n || '').replace(/\s*\(.*?\)/g, '').trim();
+const rangeLong = (t) => {
+  if (!t.start_date) return '';
+  const a = new Date(t.start_date + 'T12:00:00Z'), b = t.end_date ? new Date(t.end_date + 'T12:00:00Z') : null;
+  if (!b || +a === +b) return `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]} ${a.getUTCFullYear()}`;
+  return a.getUTCMonth() === b.getUTCMonth() ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]} ${b.getUTCFullYear()}` : `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]} – ${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]} ${b.getUTCFullYear()}`;
+};
+const loadCss = () => { if (!document.getElementById('lb-css')) document.head.insertAdjacentHTML('beforeend', '<link id="lb-css" rel="stylesheet" href="/css/lookbook.css">'); };
+const savedContact = () => { try { return JSON.parse(localStorage.getItem('lb.contact') || 'null'); } catch { return null; } };
+const thumb = (u) => u.replace(/\/(\d{3,4})px-/, '/400px-');
+const photoGrid = (list) => list.length
+  ? list.map((x) => `<button type="button" class="gb-ph" data-gb-use="${esc(x.url)}" title="${esc(x.credit || '')}"><img src="${esc(thumb(x.url))}" alt="" referrerpolicy="no-referrer"></button>`).join('')
+  : '<p class="muted">Ничего не нашлось — попробуйте другие слова (лучше по-английски).</p>';
 
 export function openGuide(tripId) {
   const t = state.trips.find((x) => x.id === tripId);
   if (!t) return;
+  loadCss();
   const c = byId('clients', t.client_id);
+  const ctx = () => {
+    const g = t.guide || {};
+    return { city: t.city || '', guest: clean(c?.name) || 'гостя', first: clean(c?.name).split(/\s+/)[0] || '', dates: rangeLong(t),
+      initials: (g.contact?.name || 'W C').split(/\s+/).map((x) => x[0] || '').join('').slice(0, 2).toUpperCase() };
+  };
   const m = openModal({ title: '📘 Путеводитель для гостя', saveLabel: 'Закрыть', body: '<div class="gd" id="gd"></div>', onSave: async () => {} });
-  m.form.classList.add('wide');
+  m.form.classList.add('wide', 'gb-dlg');
   m.form.querySelector('#cancel').hidden = true;
   const box = m.form.querySelector('#gd');
-  const back = `<button type="button" class="link" data-gd-back>← к «Перед вылетом»</button>`;
+  const back = '<button type="button" class="link" data-gd-back>← к «Перед вылетом»</button>';
 
-  // ---------- 1. ваши указания ----------
-  const composer = () => {
-    const g = t.guide;
-    const kids = /дет|сын|доч|реб/i.test(t.companions || '');
-    const on = new Set(g?.sections_req || SECTIONS.map(([k]) => k).filter((k) => k !== 'kids' || kids));
+  // ---------- 1. указания Jarvis ----------
+  const composer = (msg = '') => {
+    const g = t.guide || {};
+    const on = new Set(g.pages || PAGE_KEYS);
     box.innerHTML = `${back}
-      <p class="gd-lead">${esc(t.city)}${fmtRange(t) ? ' · ' + esc(fmtRange(t)) : ''} — Jarvis учтёт предпочтения гостя, аллергии, ваших партнёров в городе и брифинг «Перед вылетом». Имя гостя в ИИ не уходит.</p>
+      ${msg ? `<p class="bf-stale">${esc(msg)}</p>` : ''}
+      <p class="gd-lead">${esc(t.city)}${rangeLong(t) ? ' · ' + esc(rangeLong(t)) : ''} — Jarvis соберёт книгу в стиле бутик-лукбука: обложку, письмо гостю, план по дням с вашими запросами из календаря, карту, отель и велнес, рекомендации. Учтёт предпочтения, аллергии и ваших партнёров. Имя гостя в ИИ не уходит.</p>
       <label class="f"><span>Ваши указания Jarvis</span>
-        <textarea id="gd-notes" rows="4" placeholder="Например: акцент на рыбные рестораны с видом на море, без глютена; один день в Монако; спа только с хаммамом; ничего шумного по вечерам">${esc(g?.notes || '')}</textarea></label>
-      <div class="gd-secs">${SECTIONS.map(([k, l]) => `<label class="gd-sec"><input type="checkbox" value="${k}"${on.has(k) ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>
-      <div class="gd-act"><button type="button" class="btn primary" data-gd-run>✦ Собрать черновик</button>
-        ${g ? '<button type="button" class="btn" data-gd-edit>Открыть сохранённый черновик</button>' : ''}</div>`;
+        <textarea id="gd-notes" rows="4" placeholder="Например: акцент на рыбные рестораны с видом на море, без глютена; день в Монако; спа с хаммамом; вечером — тихие места">${esc(g.notes || '')}</textarea></label>
+      <div class="gd-secs">${PAGE_KEYS.map((k) => `<label class="gd-sec"><input type="checkbox" value="${k}"${on.has(k) ? ' checked' : ''}><span>${pageLabel(k)}</span></label>`).join('')}</div>
+      <div class="gd-act"><button type="button" class="btn primary" data-gd-run>✦ Собрать путеводитель</button>
+        ${g.v === 2 ? '<button type="button" class="btn" data-gd-open>Открыть конструктор</button>' : ''}</div>`;
   };
 
-  // ---------- 2. черновик: всё можно поправить ----------
-  const itemHtml = (x = {}) => `<div class="gd-item">
-      <div class="gd-row"><input class="gd-name" value="${esc(x.name || '')}" placeholder="Название">${x.partner ? '<span class="gd-partner" title="Ваш партнёр">★ партнёр</span>' : ''}<button type="button" class="icon-btn gd-del" data-gd-del aria-label="Убрать">✕</button></div>
-      <textarea class="gd-what" rows="2" placeholder="Что это и чем хорошо">${esc(x.what || '')}</textarea>
-      <textarea class="gd-why" rows="1" placeholder="Почему для этого гостя">${esc(x.why || '')}</textarea>
-      <div class="gd-row2"><input class="gd-area" value="${esc(x.area || '')}" placeholder="Район / адрес"><input class="gd-tip" value="${esc(x.tip || '')}" placeholder="Совет: что заказать, дресс-код, бронь"></div>
-      <input type="hidden" class="gd-p" value="${x.partner ? 1 : ''}"></div>`;
-  const editor = () => {
+  // ---------- 2. конструктор ----------
+  let zoom = Math.min(0.8, Math.max(0.38, (Math.min(innerWidth, 1180) - 70) / 794));
+  let timer = null;
+  const status = (s) => { const el = box.querySelector('#gb-status'); if (el) el.textContent = s; };
+  const persist = async () => { clearTimeout(timer); timer = null; try { await save('trips', tripId, { guide: t.guide }); status('✓ сохранено'); } catch (e) { status('не сохранилось'); toast('Не сохранилось: ' + e.message, 'err'); } };
+  const autosave = () => { status('…'); clearTimeout(timer); timer = setTimeout(persist, 1200); };
+  // карта рисуется отдельно (несколько секунд) и подставляется, не перерисовывая страницы
+  let shot = null;
+  const refreshMap = () => {
+    if (!(t.guide.pages || PAGE_KEYS).includes('map')) return;
+    mapShot(t.guide.map, MAP_W, MAP_H).then((s) => {
+      shot = s;
+      const el = box.querySelector('#gb-book .lb-mapbox');
+      if (el) el.outerHTML = mapHtml(t.guide.map, MAP_W, MAP_H, s);
+    }).catch(() => { const el = box.querySelector('#gb-book .lb-mapbox span'); if (el) el.innerHTML = 'Карта не нарисовалась<br><button type="button" class="btn small" data-gb-map>↻ Нарисовать карту</button>'; });
+  };
+  const draw = () => { const b = box.querySelector('#gb-book'); if (b) { b.innerHTML = renderBook(t.guide, { ...ctx(), map: shot }, { editable: true }); b.style.zoom = zoom; refreshMap(); } };
+  const builder = () => {
     const g = t.guide;
-    box.innerHTML = `${back}
-      <div class="gd-top"><input id="gd-title" class="gd-title" value="${esc(g.title || '')}">
-        <span class="muted">${g.generated_at ? 'черновик от ' + new Date(g.generated_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : ''}</span></div>
-      <label class="f"><span>Вступление · «{имя}» заменится на имя гостя</span><textarea id="gd-intro" rows="3">${esc(g.intro || '')}</textarea></label>
-      ${(g.sections || []).map((s, i) => `<section class="gd-s" data-key="${esc(s.key)}">
-        <div class="gd-row"><span class="gd-ic">${ICON[s.key] || '📍'}</span><input class="gd-stitle" value="${esc(s.title)}"><button type="button" class="icon-btn" data-gd-sdel="${i}" aria-label="Убрать раздел">✕</button></div>
-        <div class="gd-items">${s.items.map(itemHtml).join('')}</div>
-        <button type="button" class="btn small ghostish" data-gd-add>＋ Добавить место</button></section>`).join('')}
-      <label class="f"><span>💡 Советы (по одному в строке)</span><textarea id="gd-tips" rows="4">${esc((g.tips || []).join('\n'))}</textarea></label>
-      ${(g.sources || []).length ? `<p class="bf-src">Источники: ${g.sources.map((s) => `<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || 'ссылка')}</a>`).join(' · ')}</p>` : ''}
-      <div class="gd-act sticky"><button type="button" class="btn" data-gd-save>💾 Сохранить правки</button>
-        <button type="button" class="btn" data-gd-redo>↻ Пересобрать с указаниями</button>
-        <button type="button" class="btn primary" data-gd-pdf>📄 Скачать PDF</button></div>`;
+    g.contact = g.contact || savedContact() || { name: '', role: 'Личный консьерж' };
+    const on = new Set(g.pages || PAGE_KEYS);
+    box.innerHTML = `<div class="gb">
+      <div class="gb-bar">${back}
+        <div class="gb-pages">${PAGE_KEYS.map((k) => `<label class="gd-sec sm"><input type="checkbox" data-gb-page="${k}"${on.has(k) ? ' checked' : ''}><span>${pageLabel(k)}</span></label>`).join('')}</div>
+        <div class="gb-tools"><button type="button" class="icon-btn" data-gb-zoom="-1" aria-label="Мельче">−</button><button type="button" class="icon-btn" data-gb-zoom="1" aria-label="Крупнее">＋</button>
+          <span class="muted" id="gb-status">✓ сохранено</span>
+          <button type="button" class="btn small" data-gd-redo>↻ Пересобрать</button>
+          <button type="button" class="btn small primary" data-gb-pdf>📄 Экспорт PDF</button></div>
+        <p class="gb-hint">Нажмите на любой текст, чтобы исправить; на фото — чтобы заменить. Всё сохраняется само.</p></div>
+      <div class="gb-stage"><div class="lb-book editing" id="gb-book"></div></div>
+      <div class="gb-photo" id="gb-photo" hidden></div></div>`;
+    draw();
   };
-  // собрать то, что сейчас в полях
-  const collect = () => ({
-    ...t.guide,
-    title: box.querySelector('#gd-title').value.trim(),
-    intro: box.querySelector('#gd-intro').value.trim(),
-    tips: box.querySelector('#gd-tips').value.split('\n').map((x) => x.trim()).filter(Boolean),
-    sections: [...box.querySelectorAll('.gd-s')].map((s) => ({
-      key: s.dataset.key, title: s.querySelector('.gd-stitle').value.trim(),
-      items: [...s.querySelectorAll('.gd-item')].map((it) => ({
-        name: it.querySelector('.gd-name').value.trim(), what: it.querySelector('.gd-what').value.trim(), why: it.querySelector('.gd-why').value.trim(),
-        area: it.querySelector('.gd-area').value.trim(), tip: it.querySelector('.gd-tip').value.trim(), partner: !!it.querySelector('.gd-p').value,
-      })).filter((x) => x.name || x.what),
-    })).filter((s) => s.items.length),
-    edited_at: new Date().toISOString(),
-  });
-  const persist = async () => { const g = collect(); await save('trips', tripId, { guide: g }); t.guide = g; return g; };
 
+  // ---------- выбор фото ----------
+  const photoPanel = (path) => {
+    const p = box.querySelector('#gb-photo');
+    p.hidden = false;
+    p.dataset.path = path;
+    p.innerHTML = `<div class="gb-ph-head"><b>Фото</b><button type="button" class="icon-btn" data-gb-close aria-label="Закрыть">✕</button></div>
+      <div class="gb-ph-search"><input type="search" id="gb-q" placeholder="Найти: Nice old town, spa pool…" value="${esc(t.city || '')}"><button type="button" class="btn small" data-gb-find>Найти</button></div>
+      <div class="gb-ph-grid" id="gb-grid">${photoGrid(t.guide.photos || [])}</div>
+      <div class="gb-ph-url"><input type="url" id="gb-url" placeholder="или вставьте ссылку на фото https://…"><button type="button" class="btn small" data-gb-url>Вставить</button></div>
+      <button type="button" class="link" data-gb-use="">Убрать фото</button>
+      <p class="gb-credit">Фото: Wikimedia Commons (свободные лицензии).</p>`;
+  };
+  const setPhoto = (u) => { set(t.guide, box.querySelector('#gb-photo').dataset.path, u); box.querySelector('#gb-photo').hidden = true; draw(); autosave(); };
+
+  box.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-k]');
+    if (!el) return;
+    set(t.guide, el.dataset.k, el.innerText.replace(/\n{3,}/g, '\n\n').trim());
+    if (el.dataset.k.startsWith('contact.')) { try { localStorage.setItem('lb.contact', JSON.stringify(t.guide.contact)); } catch {} }
+    autosave();
+  });
+  box.addEventListener('change', (e) => {
+    if (!e.target.closest('[data-gb-page]')) return;
+    t.guide.pages = [...box.querySelectorAll('[data-gb-page]:checked')].map((x) => x.dataset.gbPage);
+    draw(); autosave();
+  });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'gb-q') { e.preventDefault(); box.querySelector('[data-gb-find]').click(); } });
   box.addEventListener('click', async (e) => {
     const el = e.target;
-    if (el.closest('[data-gd-back]')) { const g = box.querySelector('#gd-title') && collect(); if (g) save('trips', tripId, { guide: g }).catch(() => {}); import('./brief.js').then((b) => b.openBrief(tripId)); return; }
-    if (el.closest('[data-gd-edit]')) return editor();
-    if (el.closest('[data-gd-redo]')) { await persist().catch(() => {}); return composer(); }
-    if (el.closest('[data-gd-del]')) return el.closest('.gd-item').remove();
-    if (el.closest('[data-gd-sdel]')) return el.closest('.gd-s').remove();
-    if (el.closest('[data-gd-add]')) { el.closest('.gd-s').querySelector('.gd-items').insertAdjacentHTML('beforeend', itemHtml()); return; }
-    if (el.closest('[data-gd-save]')) { try { await persist(); toast('Путеводитель сохранён'); } catch (err) { toast('Не сохранилось: ' + err.message, 'err'); } return; }
-    if (el.closest('[data-gd-pdf]')) { let g; try { g = await persist(); } catch { g = collect(); } return printGuide(g, t, c); }
-    const run = el.closest('[data-gd-run]');
-    if (run) {
-      const notes = box.querySelector('#gd-notes').value.trim();
-      const sections = [...box.querySelectorAll('.gd-sec input:checked')].map((x) => x.value);
-      if (!sections.length) return toast('Выберите хотя бы один раздел', 'err');
-      box.innerHTML = `<div class="bf-busy"><span class="spin"></span> Jarvis ищет места в ${esc(t.city)} и собирает путеводитель под гостя… обычно 20–60 секунд</div><div class="bf-skel"><i></i><i></i><i></i></div>`;
+    if (el.closest('[data-gd-back]')) { if (timer) await persist(); import('./brief.js').then((b) => b.openBrief(tripId)); return; }
+    if (el.closest('[data-gd-open]')) return builder();
+    if (el.closest('[data-gd-redo]')) { if (timer) await persist(); return composer(); }
+    if (el.closest('[data-gb-map]')) { el.closest('.lb-mapbox').querySelector('span').textContent = 'Рисую карту…'; return refreshMap(); }
+    const z = el.closest('[data-gb-zoom]');
+    if (z) { zoom = Math.min(1.2, Math.max(0.3, zoom + 0.1 * +z.dataset.gbZoom)); box.querySelector('#gb-book').style.zoom = zoom; return; }
+    const del = el.closest('[data-del]');
+    if (del) { const ks = del.dataset.del.split('.'); const i = +ks.pop(); get(t.guide, ks.join('.')).splice(i, 1); draw(); autosave(); return; }
+    const img = el.closest('[data-img]');
+    if (img) return photoPanel(img.dataset.img);
+    if (el.closest('[data-gb-close]')) { box.querySelector('#gb-photo').hidden = true; return; }
+    const use = el.closest('[data-gb-use]');
+    if (use) return setPhoto(use.dataset.gbUse);
+    if (el.closest('[data-gb-url]')) {
+      const u = box.querySelector('#gb-url').value.trim();
+      if (!/^https:\/\/\S+$/.test(u)) return toast('Нужна ссылка, начинающаяся с https://', 'err');
+      return setPhoto(u);
+    }
+    if (el.closest('[data-gb-find]')) {
+      const q = box.querySelector('#gb-q').value.trim();
+      if (!q) return;
+      const gridEl = box.querySelector('#gb-grid');
+      gridEl.innerHTML = '<p class="muted"><span class="spin"></span> ищу…</p>';
       try {
-        const { guide } = await api('guide', { id: tripId, notes, sections }, { signal: m.signal });
+        const { photos } = await api('guide', { id: tripId, mode: 'photos', q }, { signal: m.signal });
+        t.guide.photos = [...photos, ...(t.guide.photos || []).filter((x) => !photos.some((p) => p.url === x.url))].slice(0, 60);
+        gridEl.innerHTML = photoGrid(photos);
+      } catch (err) { if (!isAbort(err)) gridEl.innerHTML = '<p class="muted">Поиск не удался</p>'; }
+      return;
+    }
+    if (el.closest('[data-gb-pdf]')) {
+      if (timer) await persist();
+      let map = shot;
+      if ((t.guide.pages || PAGE_KEYS).includes('map') && !map) { toast('Дорисовываю карту…'); map = await mapShot(t.guide.map, MAP_W, MAP_H).catch(() => null); }
+      return printBook(t.guide, { ...ctx(), map });
+    }
+    if (el.closest('[data-gd-run]')) {
+      const notes = box.querySelector('#gd-notes').value.trim();
+      const pages = [...box.querySelectorAll('.gd-sec input:checked')].map((x) => x.value);
+      if (!pages.length) return toast('Выберите хотя бы одну страницу', 'err');
+      box.innerHTML = `<div class="bf-busy"><span class="spin"></span> Jarvis ищет места в ${esc(t.city)}, подбирает фото и карту… обычно 40–90 секунд</div><div class="bf-skel"><i></i><i></i><i></i></div>`;
+      try {
+        const { guide } = await api('guide', { id: tripId, notes, pages }, { signal: m.signal });
+        guide.contact = t.guide?.contact || savedContact() || guide.contact;
         t.guide = guide;
-        if (m.form.isConnected) editor();
+        if (m.form.isConnected) builder();
       } catch (err) {
         if (isAbort(err) || !m.form.isConnected) return;
         toast(err.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту' : 'Не получилось: ' + err.message, 'err');
@@ -105,45 +169,25 @@ export function openGuide(tripId) {
       }
     }
   });
-  if (t.guide) editor(); else composer();
+  if (t.guide?.v === 2) builder(); else composer(t.guide ? 'Путеводитель теперь собирается как лукбук — нажмите «Собрать», ваши указания сохранены.' : '');
 }
 
-// ---------- PDF: отдельная страница с печатной вёрсткой → «Сохранить как PDF» ----------
-function printGuide(g, t, c) {
+// ---------- PDF: та же вёрстка в отдельном окне → «Сохранить как PDF» ----------
+function printBook(g, ctx) {
   const w = window.open('', '_blank');
   if (!w) return toast('Браузер заблокировал окно — разрешите всплывающие окна для сайта', 'err');
-  const dates = fmtRange(t);
-  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${esc(fill(g.title, c))}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
-<style>
-  @page { size: A4; margin: 18mm 16mm; }
-  * { box-sizing: border-box; }
-  body { font-family: Inter, system-ui, sans-serif; color: #1f1b16; font-size: 10.5pt; line-height: 1.5; margin: 0; }
-  .cover { border-bottom: 2px solid #1d6b66; padding-bottom: 14px; margin-bottom: 18px; }
-  .brand { font-size: 8.5pt; letter-spacing: .18em; text-transform: uppercase; color: #1d6b66; font-weight: 600; }
-  h1 { font-family: Newsreader, Georgia, serif; font-size: 28pt; font-weight: 600; margin: 6px 0 2px; line-height: 1.1; }
-  .sub { color: #6b6257; }
-  .intro { font-size: 11.5pt; margin: 0 0 18px; }
-  h2 { font-family: Newsreader, Georgia, serif; font-size: 16pt; margin: 22px 0 8px; break-after: avoid; color: #1d6b66; }
-  .it { padding: 8px 0 10px; border-bottom: 1px solid #e8e0d2; break-inside: avoid; }
-  .it b { font-size: 11pt; } .star { color: #b08d57; font-size: 8.5pt; margin-left: 6px; }
-  .it p { margin: 2px 0; } .why { color: #4a6b68; font-style: italic; } .meta { color: #6b6257; font-size: 9pt; }
-  .tips { background: #f6f1e8; border-radius: 10px; padding: 10px 14px 10px 28px; margin-top: 18px; break-inside: avoid; }
-  .foot { margin-top: 22px; font-size: 8.5pt; color: #8a8175; }
-</style></head><body>
-  <div class="cover"><div class="brand">Wellness Concierge</div><h1>${esc(fill(g.title, c))}</h1>
-    <div class="sub">${esc(t.city)}${t.country ? ', ' + esc(t.country) : ''}${dates ? ' · ' + esc(dates) : ''}${t.hotel ? ' · ' + esc(t.hotel) : ''}</div></div>
-  ${g.intro ? `<p class="intro">${esc(fill(g.intro, c))}</p>` : ''}
-  ${(g.sections || []).map((s) => `<h2>${ICON[s.key] || '📍'} ${esc(s.title)}</h2>${s.items.map((x) => `<div class="it">
-    <b>${esc(x.name)}</b>${x.partner ? '<span class="star">★ рекомендуем</span>' : ''}
-    ${x.what ? `<p>${esc(fill(x.what, c))}</p>` : ''}${x.why ? `<p class="why">${esc(fill(x.why, c))}</p>` : ''}
-    ${x.area || x.tip ? `<p class="meta">${[x.area && '📍 ' + esc(x.area), x.tip && '💡 ' + esc(fill(x.tip, c))].filter(Boolean).join(' · ')}</p>` : ''}</div>`).join('')}`).join('')}
-  ${(g.tips || []).length ? `<ul class="tips">${g.tips.map((x) => `<li>${esc(fill(x, c))}</li>`).join('')}</ul>` : ''}
-  <p class="foot">Подготовлено вашим консьержем · ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}. Часы работы и цены могут меняться — бронирование через консьержа.</p>
-</body></html>`;
-  w.document.open(); w.document.write(html); w.document.close();
-  const go = () => { try { w.focus(); w.print(); } catch {} };
-  // ждём шрифты, чтобы PDF был красивым
-  (w.document.fonts?.ready || Promise.resolve()).then(() => setTimeout(go, 200));
-  toast('В окне печати выберите «Сохранить как PDF»');
+  w.document.open();
+  w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${esc((g.cover?.title || ctx.city) + ' · путеводитель')}</title>
+    <link rel="stylesheet" href="${location.origin}/css/lookbook.css"><style>body{margin:0;background:#fff}</style></head>
+    <body><div class="lb-book">${renderBook(g, ctx)}</div></body></html>`);
+  w.document.close();
+  toast('Готовлю PDF… в окне печати выберите «Сохранить как PDF»');
+  // ждём стили, шрифты и фото, чтобы в PDF ничего не пропало
+  const ready = async () => {
+    const imgs = [...w.document.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; })));
+    await Promise.race([Promise.all(imgs), new Promise((r) => setTimeout(r, 12000))]);
+    try { await w.document.fonts.ready; } catch {}
+    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 300);
+  };
+  if (w.document.readyState === 'complete') ready(); else w.addEventListener('load', ready);
 }
