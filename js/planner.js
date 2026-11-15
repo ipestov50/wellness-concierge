@@ -270,11 +270,24 @@ export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
   // действия, перенесённые «на потом»: последний день отметки + 1 = день, когда они вернутся
   const lastMoved = new Map();
   for (const m of marks) if (m.status === 'tomorrow' && m.day >= today) lastMoved.set(m.key, m.day > (lastMoved.get(m.key) || '') ? m.day : lastMoved.get(m.key));
+  // перенос показываем, только пока источник жив: запрос открыт и не в архиве, поездка/повод существуют,
+  // и шаг не отмечен «сделано» позже переноса. Иначе отметка — просто след, её не видно нигде.
+  const tMap = new Map((data.trips || []).map((t) => [t.id, t]));
+  const sMap = new Map((data.suggestions || []).map((s) => [s.id, s]));
+  const doneAfter = (key, day) => marks.some((m) => m.key === key && m.status === 'done' && m.day >= day);
+  const alive = (key, day) => {
+    const [kind, id] = key.split(':');
+    if (doneAfter(key, day)) return null;
+    if ('gpbfc'.includes(kind)) { const r = rMap.get(id); return r && !closed.has(r.status) && !r.archived_at ? { r } : null; }
+    if (kind === 't') { const t = tMap.get(id); return t ? { t } : null; }
+    if (kind === 's') { const s = sMap.get(id); return s && s.status !== 'dismissed' && s.status !== 'accepted' ? { s } : null; }
+    return {};
+  };
   for (let i = 0; i < days; i++) {
     const d = addDays(today, i);
     const items = [];
     for (const r of data.requests) {
-      if (closed.has(r.status) || !r.deadline) continue;
+      if (closed.has(r.status) || r.archived_at || !r.deadline) continue;
       const ms = Date.parse(r.deadline);
       if (dayIn(OWNER_TZ, ms) !== d) continue;
       const c = cMap.get(r.client_id);
@@ -292,8 +305,13 @@ export function weekAgenda({ now = Date.now(), data, marks = [], days = 7 }) {
     for (const x of data.client_dates || []) if (x.date?.slice(5) === md) items.push({ kind: 'date', t: zoned(OWNER_TZ, d, 8), time: '', title: x.title, who: firstName(cMap.get(x.client_id)), client_id: x.client_id });
     // вернутся в этот день после переноса
     for (const [key, last] of lastMoved) if (addDays(last, 1) === d) {
-      const r = rMap.get(key.split(':')[1]);
-      items.push({ kind: 'moved', t: zoned(OWNER_TZ, d, 8, 30), time: '', title: r ? r.summary : 'Перенесённое действие', who: firstName(cMap.get(r?.client_id)), request_id: r?.id, key });
+      const src = alive(key, last);
+      if (!src) continue;
+      const r = src.r;
+      if (r && items.some((x) => x.kind === 'deadline' && x.request_id === r.id)) continue; // срок и так в этот день
+      const title = r ? r.summary : src.t ? `Поездка · ${src.t.city}` : src.s ? src.s.title : 'Перенесённое действие';
+      const cid = r?.client_id || src.t?.client_id || src.s?.client_id;
+      items.push({ kind: 'moved', t: zoned(OWNER_TZ, d, 8, 30), time: '', title, who: firstName(cMap.get(cid)), request_id: r?.id, key });
     }
     items.sort((a, b) => a.t - b.t);
     out.push({ day: d, items, load: items.filter((x) => x.kind === 'deadline' || x.kind === 'moved').length });
