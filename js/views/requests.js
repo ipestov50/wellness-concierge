@@ -1,15 +1,13 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
+import { setStatus, toggleDone, isDone } from '../actions.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
-import { ring } from '../checklist.js';
 import { calendarView, bindCalendar } from './calendar.js';
-import { dayView, bindDay, requestDayInfo } from './myday.js';
-import { hmIn as hmP } from '../planner.js';
-const hmIn = (ms) => hmP('Europe/Paris', ms);
+import { dayView, bindDay } from './myday.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
-import { columns, statusLabel, isClosed, doneKey, effectiveStatus, KINDS } from '../statuses.js';
-import { esc, fmtDeadline, fmtMoney, toast, avatar, fromParisInput, field, options, openModal } from '../ui.js';
+import { columns, statusLabel, isClosed, effectiveStatus, KINDS } from '../statuses.js';
+import { esc, fmtDeadline, fmtMoney, toast, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
 import { ui, render, registerView } from '../router.js';
 import { editRequest } from '../forms.js';
@@ -22,7 +20,9 @@ export function requestCard(r, { showClient = true } = {}) {
   const p = byId('partners', r.partner_id);
   const late = isLate(r);
   const allergic = c && (c.allergies?.length || c.diet?.length || c.health?.length);
-  return `<div class="card-wrap"><button class="card" data-req="${r.id}" type="button">
+  const done = isDone(r);
+  const closed = isClosed(r.status);
+  return `<div class="card-wrap${done ? ' is-done' : closed ? ' is-closed' : ''}"><button class="card" data-req="${r.id}" type="button">
     <div class="who"><span class="cat" title="${esc(r.category)}">${CATEGORIES[r.category] || '📌'}</span>${showClient ? esc(clientName(r.client_id)) : esc(r.summary)}${c?.vip && showClient ? ' <span class="vip">★</span>' : ''}</div>
     ${showClient ? `<div class="sum">${esc(r.summary)}</div>` : ''}
     <div class="meta">
@@ -36,7 +36,7 @@ export function requestCard(r, { showClient = true } = {}) {
       ${r.needs_review ? '<span class="flag">проверить</span>' : ''}
       ${r.needs_approval ? '<span class="flag">одобрение гостя</span>' : ''}</div>` : ''}
     ${(r.checklist?.items || []).length ? `<span class="card-cl"><i style="width:${(r.checklist.items.filter((x) => x.done).length / r.checklist.items.length) * 100}%"></i></span>` : ''}
-  </button><button class="card-menu" data-cardmenu="${r.id}" type="button" aria-label="Действия с запросом" aria-haspopup="menu">⋯</button></div>`;
+  </button><button class="card-check${done ? ' on' : ''}" data-complete="${r.id}" type="button" title="${done ? 'Вернуть в работу' : 'Отметить «Сделано»'}" aria-pressed="${done}" aria-label="${done ? 'Вернуть в работу' : 'Сделано'}: ${esc(r.summary)}">${CHECK}</button><button class="card-menu" data-cardmenu="${r.id}" type="button" aria-label="Действия с запросом" aria-haspopup="menu">⋯</button></div>`;
 }
 
 // ---------- меню карточки: изменить, статус, удалить ----------
@@ -69,11 +69,7 @@ function openCardMenu(id, anchor) {
     if (b.dataset.act === 'edit') { closeCardMenu(); editRequest(id); }
     else if (b.dataset.act === 'status') {
       closeCardMenu();
-      const before = r.status;
-      try {
-        await save('requests', id, { status: b.dataset.status });
-        toast(`${statusLabel(b.dataset.status)}: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { status: before }) });
-      } catch (err) { toast('Не удалось: ' + (err.message || err), 'err'); }
+      setStatus(id, b.dataset.status).catch(() => {});
     } else if (b.dataset.act === 'delete') {
       if (!armed) { armed = true; b.textContent = 'Точно удалить? Нажмите ещё раз'; b.classList.add('armed'); return; }
       closeCardMenu();
@@ -82,7 +78,10 @@ function openCardMenu(id, anchor) {
     }
   });
 }
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
 document.addEventListener('click', (e) => {
+  const ck = e.target.closest('[data-complete]');
+  if (ck) { e.stopPropagation(); e.preventDefault(); toggleDone(ck.dataset.complete)?.catch?.(() => {}); return; }
   const t = e.target.closest('[data-cardmenu]');
   if (t) { e.stopPropagation(); openCardMenu(t.dataset.cardmenu, t); return; }
   const cm = e.target.closest('[data-colmenu]');
@@ -95,119 +94,18 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMenu(); });
 addEventListener('resize', closeCardMenu);
 
-// ---------- режим «Сегодня»: открытые запросы по срокам ----------
-const parisDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-const URG_ORDER = { critical: 0, high: 1, normal: 2, low: 3 };
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
-
-function groupOf(r, today, tomorrow, weekEnd) {
-  if (!r.deadline) return 'none';
-  const day = parisDay(new Date(r.deadline));
-  if (new Date(r.deadline) < new Date() && day < today) return 'late';
-  if (day === today) return new Date(r.deadline) < new Date() && fmtTime(r.deadline) !== '00:00' ? 'late' : 'today';
-  if (day === tomorrow) return 'tomorrow';
-  if (day <= weekEnd) return 'week';
-  return 'later';
-}
-const GROUPS = [['late', 'Просрочено'], ['today', 'Сегодня'], ['tomorrow', 'Завтра'], ['week', 'На этой неделе'], ['later', 'Позже'], ['none', 'Без срока']];
-
-const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
-
-// «пт 20.11 · 20:30» — коротко, чтобы имя гостя помещалось целиком
-function shortWhen(iso) {
-  const d = new Date(iso);
-  const day = d.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit' }).replace(',', '');
-  const t = fmtTime(iso);
-  return t === '00:00' ? day : `${day} · ${t}`;
-}
-
-function rowHtml(r, group, info = null) {
-  const c = byId('clients', r.client_id);
-  const warn = c && (c.allergies?.length || c.diet?.length || c.health?.length);
-  const when = !r.deadline ? '' : (group === 'today' || group === 'tomorrow')
-    ? (fmtTime(r.deadline) === '00:00' ? '' : fmtTime(r.deadline)) : shortWhen(r.deadline);
-  return `<div class="trow-wrap u-line-${esc(r.urgency)}" data-row="${r.id}">
-    <div class="swipe-bg" aria-hidden="true"><span class="sb-done">✓ Сделано</span><span class="sb-later">На завтра →</span></div>
-    <div class="swipe-fg">
-      <button class="done-btn" data-done="${r.id}" type="button" aria-label="Отметить «${esc(r.summary)}» выполненным" title="Сделано">${CHECK}</button>
-      <button class="trow" data-req="${r.id}" type="button">
-        ${avatar(c)}
-        <span class="tbody">
-          <span class="tline"><b class="tname">${esc(c?.name || 'Без клиента')}${c?.vip ? ' <span class="vip">★</span>' : ''}${warn ? ' <span class="warn-dot" title="Есть ограничения">⚠</span>' : ''}</b>
-            <span class="twhen${group === 'late' ? ' late' : ''}">${esc(when)}</span></span>
-          <span class="tline"><span class="tsum"><span class="cat">${CATEGORIES[r.category] || '📌'}</span> ${esc(r.summary)}</span>
-            <span class="tstatus">${ring(r, 14)}${esc(statusLabel(effectiveStatus(r.status)))}</span></span>
-          ${info?.next ? `<span class="tnext" data-goto-day title="Открыть «Мой день»">⏰ ${hmIn(info.next.start)} · ${esc(info.next.title)}</span>`
-            : info?.handled ? '<span class="tnext ok">✓ на сегодня по плану всё сделано</span>'
-            : info?.moved ? '<span class="tnext moved">↪︎ перенесено из плана на другой день</span>' : ''}
-        </span>
-      </button>
-    </div>
-  </div>`;
-}
-
-function summary(today) {
-  const open = state.requests.filter((r) => !isClosed(r.status));
-  const now = new Date();
-  const late = open.filter((r) => r.deadline && new Date(r.deadline) < now).length;
-  const todayN = open.filter((r) => r.deadline && parisDay(new Date(r.deadline)) === today && new Date(r.deadline) >= now).length;
-  const doneReq = state.requests.filter((r) => r.status === doneKey() && r.updated_at && parisDay(new Date(r.updated_at)) === today).length;
-  const doneActs = state.day_items.filter((m) => m.day === today && m.status === 'done').length;
-  const done = doneReq + doneActs;
-  const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now) % 24;
-  const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
-  const date = now.toLocaleDateString('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
-  const bdays = state.clients.map((c) => ({ c, b: birthdayInfo(c.birthday) })).filter(({ b }) => b && b.days <= 7).sort((x, y) => x.b.days - y.b.days);
-  return `<section class="hero">
-    <div class="hero-hello"><h2>${hello}</h2><span>${esc(date)}</span></div>
-    <div class="hero-stats">
-      <div class="stat${late ? ' s-late' : ''}"><b data-count="${late}">${late}</b><span>просрочено</span></div>
-      <div class="stat s-today"><b data-count="${todayN}">${todayN}</b><span>на сегодня</span></div>
-      <div class="stat s-done"><b data-count="${done}">${done}</b><span>сделано</span></div>
-    </div>
-    ${backupDue() ? `<div class="hero-note">💾 ${daysSinceBackup() == null ? 'Резервной копии ещё не было' : `Резервной копии не было ${daysSinceBackup()} дн.`} · <button type="button" data-backup>Сохранить копию</button></div>` : ''}
-    ${bdays.length ? `<div class="hero-bdays">🎂 ${bdays.map(({ c, b }) =>
-      `<button type="button" data-cl-open="${c.id}">${esc(c.name.replace(/\s*\(.*?\)/g, ''))} — ${b.days === 0 ? 'сегодня' : b.days === 1 ? 'завтра' : esc(b.day + ' ' + b.text.split(' ')[1])}</button>`).join(', ')}</div>` : ''}
-  </section>`;
-}
-
-function todayView(list) {
-  const now = new Date();
-  const today = parisDay(now), tomorrow = parisDay(new Date(+now + 864e5)), weekEnd = parisDay(new Date(+now + 7 * 864e5));
-  const open = list.filter((r) => !isClosed(r.status));
-  const by = {};
-  for (const r of open) (by[groupOf(r, today, tomorrow, weekEnd)] ||= []).push(r);
-  const sort = (a, b) => (a.deadline || '9').localeCompare(b.deadline || '9') || URG_ORDER[a.urgency] - URG_ORDER[b.urgency];
-  // связь с «Моим днём»: что уже сделано по плану — уходит вниз, у остального видно ближайшее действие
-  const D = requestDayInfo();
-  const handled = [];
-  for (const g of Object.keys(by)) by[g] = by[g].filter((r) => {
-    if (D.done.has(r.id) && !D.next.has(r.id)) { handled.push(r); return false; }
-    return true;
-  });
-  const info = (r) => ({ next: D.next.get(r.id), moved: D.moved.has(r.id) && !D.next.has(r.id), handled: false });
-  const html = GROUPS.filter(([g]) => by[g]?.length).map(([g, label]) =>
-    `<section class="tgroup g-${g}"><h3>${label}<span>${by[g].length}</span></h3>
-      <div class="tlist">${by[g].sort(sort).map((r) => rowHtml(r, g, info(r))).join('')}</div></section>`).join('')
-    + (handled.length ? `<details class="tgroup g-handled"><summary><h3>✓ Сегодня сделано по плану<span>${handled.length}</span></h3></summary>
-      <div class="tlist">${handled.sort(sort).map((r) => rowHtml(r, groupOf(r, today, tomorrow, weekEnd), { handled: true })).join('')}</div></details>` : '');
-  return (html || `<div class="empty calm">${ui.q ? 'Ничего не нашлось.' : 'Открытых запросов нет. Можно выдохнуть.'}</div>`) +
-    (html ? '<p class="hint swipe-hint">На телефоне: смахните строку вправо — «Сделано», влево — «На завтра».</p>' : '');
-}
-
 function boardView(list) {
-  const cols = columns().filter((c) => ui.archive || c.kind === 'active');
-  const hidden = columns().length - cols.length;
+  const cols = columns();
   return `<div class="board" id="board">${cols.map((c) => {
       const items = list.filter((r) => effectiveStatus(r.status) === c.key).sort((a, b) => a.position - b.position);
-      return `<section class="col${c.kind !== 'active' ? ' archived' : ''}" data-status="${esc(c.key)}">
+      return `<section class="col${c.kind === 'done' ? ' col-done' : c.kind !== 'active' ? ' archived' : ''}" data-status="${esc(c.key)}">
         <h3><span class="col-name">${esc(c.label)}</span><span class="col-count">${items.length}</span>
           <button class="col-menu" data-colmenu="${c.id}" type="button" aria-label="Настроить колонку «${esc(c.label)}»">⋯</button></h3>
         <div class="col-body">${items.map((r) => requestCard(r)).join('') || '<div class="col-empty">Пусто</div>'}</div>
       </section>`;
     }).join('')}
     <button class="col-add" id="colAdd" type="button"><span>＋</span>Новая колонка</button></div>
-    <p class="hint board-hint">Карточки перетаскиваются между колонками (на телефоне — нажмите и подержите). Колонки настраиваются кнопкой ⋯ в заголовке.${hidden && !ui.archive ? ` Скрыто колонок: ${hidden} — «Показать архив».` : ''}</p>`;
+    <p class="hint board-hint">Карточки перетаскиваются между колонками (на телефоне — нажмите и подержите). Кружок ✓ на карточке или перенос в «Выполнено» — одно и то же: запрос закрывается везде. Колонки настраиваются кнопкой ⋯.</p>`;
 }
 
 // ---------- настройка колонок ----------
@@ -219,7 +117,7 @@ function editColumn(id) {
   const body =
     field('label', 'Название колонки', `<input id="f-label" name="label" type="text" required value="${esc(c.label)}" placeholder="Например: Ждём партнёра" autocomplete="off">`) +
     field('kind', 'Тип', `<select id="f-kind" name="kind">${options(KINDS, c.kind)}</select>`,
-      'Рабочие колонки видны на экране «Сегодня». Колонки «Выполнено» и «Архив» скрыты, пока не нажат «Показать архив».') +
+      'Запросы в рабочих колонках попадают в «Мой день». «Выполнено» и «Архив» закрывают запрос во всём приложении.') +
     (id && count ? field('move_to', `При удалении перенести карточки (${count}) в`, `<select id="f-move_to" name="move_to">${options(others.map((x) => [x.key, x.label]), others.find((x) => x.kind === 'active')?.key)}</select>`) : '');
   openModal({
     title: id ? 'Колонка' : 'Новая колонка',
@@ -295,70 +193,49 @@ function placePopover(m, anchor) {
   requestAnimationFrame(() => m.classList.add('open'));
 }
 
+// заметки дня: резервная копия и ближайшие дни рождения
+function dayNotes() {
+  const bdays = state.clients.map((c) => ({ c, b: birthdayInfo(c.birthday) })).filter(({ b }) => b && b.days <= 7).sort((x, y) => x.b.days - y.b.days);
+  const backup = backupDue();
+  if (!backup && !bdays.length) return '';
+  return `<section class="day-notes">
+    ${backup ? `<div class="hero-note">💾 ${daysSinceBackup() == null ? 'Резервной копии ещё не было' : `Резервной копии не было ${daysSinceBackup()} дн.`} · <button type="button" data-backup>Сохранить копию</button></div>` : ''}
+    ${bdays.length ? `<div class="hero-bdays">🎂 ${bdays.map(({ c, b }) =>
+      `<button type="button" data-cl-open="${c.id}">${esc(c.name.replace(/\s*\(.*?\)/g, ''))} — ${b.days === 0 ? 'сегодня' : b.days === 1 ? 'завтра' : esc(b.day + ' ' + b.text.split(' ')[1])}</button>`).join(', ')}</div>` : ''}
+  </section>`;
+}
+
 function view(app) {
   const q = ui.q.trim().toLowerCase();
   const list = state.requests.filter((r) => !q ||
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
+  if (!['day', 'board', 'calendar'].includes(ui.reqView)) ui.reqView = 'day';
   const board = ui.reqView === 'board';
   const cal = ui.reqView === 'calendar';
   const myday = ui.reqView === 'day';
   const toolbar = `<div class="bar toolbar">
       <div class="seg" role="tablist" aria-label="Вид">
-        <button type="button" data-view="today" aria-selected="${!board && !cal && !myday}">Сегодня</button>
         <button type="button" data-view="day" aria-selected="${myday}">Мой день</button>
         <button type="button" data-view="board" aria-selected="${board}">Доска</button>
         <button type="button" data-view="calendar" aria-selected="${cal}">Календарь</button>
       </div>
-      <div class="grow search"><input type="search" id="q" placeholder="Поиск по запросам и гостям" value="${esc(ui.q)}" autocomplete="off"></div>
-      ${board ? `<span class="count">Открытых: ${open}</span>
-        <button class="btn small" id="arch" type="button">${ui.archive ? 'Скрыть архив' : 'Показать архив'}</button>` : ''}
+      ${myday ? '' : `<div class="grow search"><input type="search" id="q" placeholder="Поиск по запросам и гостям" value="${esc(ui.q)}" autocomplete="off"></div>`}
+      ${board ? `<span class="count">Открытых: ${open}</span>` : ''}
     </div>`;
-  // «Сегодня» — одна центрированная колонка: приветствие → Jarvis → переключатель и поиск → список
   app.innerHTML = myday
-    ? `<div class="stack daystack">${toolbar.replace(/<div class="grow search">[\s\S]*?<\/div>/, '')}${dayView()}</div>`
-    : cal
-    ? `<div class="board-top">${smartBar()}${toolbar}</div>${calendarView(list)}`
-    : board
-    ? `<div class="board-top">${smartBar()}${toolbar}</div>${boardView(list)}`
-    : `<div class="stack">${ui.q ? '' : summary(parisDay(new Date()))}${ui.q ? '' : suggestionsBlock()}${smartBar()}${toolbar}${todayView(list)}</div>`;
-  if (!board && !cal && !myday) refreshSuggestions();
+    ? `<div class="stack daystack">${dayNotes()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
+    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? calendarView(list) : boardView(list)}`;
+  if (myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}
     render();
   });
-  app.querySelector('#arch')?.addEventListener('click', () => { ui.archive = !ui.archive; render(); });
   if (board) enableDrag(app.querySelector('#board'));
   if (cal) bindCalendar(app);
   if (myday) bindDay(app);
   bindSmart(app);
-  app.querySelectorAll('[data-done]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); markDone(b.dataset.done, b); });
-  if (!board && !cal && !myday) app.querySelectorAll('.trow-wrap').forEach(enableSwipe);
-  app.querySelectorAll('[data-goto-day]').forEach((el) => el.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); ui.reqView = 'day'; try { localStorage.setItem('reqView', 'day'); } catch {} render(); scrollTo(0, 0); }));
-}
-
-
-// «Сделано»: статус «Выполнено», строка уходит, в уведомлении можно отменить
-async function markDone(id, btn) {
-  const r = byId('requests', id);
-  if (!r) return;
-  const before = r.status;
-  const done = doneKey();
-  if (!done) { toast('Нет колонки типа «Выполнено». Создайте её на доске.', 'err'); return; }
-  btn.classList.add('checked');
-  btn.closest('.trow-wrap')?.classList.add('leaving');
-  await new Promise((ok) => setTimeout(ok, 280));
-  try {
-    await save('requests', id, { status: done });
-    toast(`Выполнено: ${r.summary}`, '', { label: 'Отменить', fn: async () => {
-      try { await save('requests', id, { status: before }); toast('Вернул в работу'); }
-      catch (err) { toast('Не удалось отменить: ' + (err.message || err), 'err'); }
-    } });
-  } catch (err) {
-    render();
-    toast('Не удалось отметить: ' + (err.message || err), 'err');
-  }
 }
 registerView('requests', view);
 
@@ -451,79 +328,9 @@ async function drop(id, col, y) {
   const next = cards[idx] && pos(cards[idx]);
   const position = prev != null && next != null ? (prev + next) / 2 : prev != null ? prev + 1 : next != null ? next - 1 : Date.now() / 1000;
   if (status === r.status && position === r.position) return;
-  const before = { status: r.status, position: r.position };
-  Object.assign(r, { status, position }); // сразу показываем
-  render();
-  try {
-    await save('requests', id, { status, position });
-    if (status !== before.status) toast(`«${r.summary}» → ${statusLabel(status)}`);
-  } catch (err) {
-    Object.assign(r, before); render();
-    toast('Не удалось переместить: ' + (err.message || err), 'err');
-  }
+  // тот же путь, что у «Сделано» в «Моём дне» и в профиле: статус меняется сразу везде
+  setStatus(id, status, { position, quiet: status === r.status }).catch(() => {});
 }
 
 export { editRequest };
 
-// ---------- «На завтра» ----------
-async function postpone(id) {
-  const r = byId('requests', id);
-  if (!r) return;
-  const before = r.deadline;
-  let next;
-  if (r.deadline) next = new Date(+new Date(r.deadline) + 864e5).toISOString();
-  else next = fromParisInput(parisDay(new Date(Date.now() + 864e5)) + 'T10:00');
-  try {
-    await save('requests', id, { deadline: next });
-    toast(`На завтра: ${r.summary}`, '', { label: 'Отменить', fn: () => save('requests', id, { deadline: before }) });
-  } catch (err) { render(); toast('Не удалось перенести: ' + (err.message || err), 'err'); }
-}
-
-// ---------- свайп строки пальцем ----------
-function enableSwipe(wrap) {
-  const fg = wrap.querySelector('.swipe-fg');
-  const id = wrap.dataset.row;
-  wrap.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
-    const sx = e.clientX, sy = e.clientY;
-    let dx = 0, mode = null; // null → ещё не решили, 'x' → свайп, 'y' → прокрутка
-    const W = wrap.offsetWidth, LIMIT = Math.min(110, W * 0.3);
-    const move = (ev) => {
-      const ddx = ev.clientX - sx, ddy = ev.clientY - sy;
-      if (!mode) {
-        if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
-        mode = Math.abs(ddx) > Math.abs(ddy) * 1.3 ? 'x' : 'y';
-        if (mode === 'x') { wrap.classList.add('swiping'); dragActive = true; }
-      }
-      if (mode !== 'x') return;
-      dx = ddx;
-      fg.style.transform = `translateX(${dx}px)`;
-      wrap.classList.toggle('arm-done', dx > LIMIT);
-      wrap.classList.toggle('arm-later', dx < -LIMIT);
-      wrap.classList.toggle('dir-right', dx > 0);
-    };
-    const up = () => {
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', up);
-      removeEventListener('pointercancel', up);
-      dragActive = false;
-      if (mode !== 'x') return;
-      suppressClick = true; setTimeout(() => { suppressClick = false; }, 60);
-      wrap.classList.remove('swiping');
-      if (dx > LIMIT) {
-        fg.style.transform = `translateX(${W}px)`;
-        markDone(id, wrap.querySelector('.done-btn'));
-      } else if (dx < -LIMIT) {
-        fg.style.transform = `translateX(${-W}px)`;
-        wrap.classList.add('leaving');
-        setTimeout(() => postpone(id), 250);
-      } else {
-        fg.style.transform = '';
-        wrap.classList.remove('arm-done', 'arm-later');
-      }
-    };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
-    addEventListener('pointercancel', up);
-  });
-}

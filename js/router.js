@@ -1,7 +1,8 @@
 // Состояние экрана и перерисовка текущего раздела
-let savedView = 'today';
-try { savedView = localStorage.getItem('reqView') || 'today'; } catch {}
-export const ui = { tab: 'requests', reqView: savedView, client: null, archive: false, q: '', ptype: '', pcity: '' };
+let savedView = 'day';
+try { savedView = localStorage.getItem('reqView') || 'day'; } catch {}
+if (!['day', 'board', 'calendar'].includes(savedView)) savedView = 'day';
+export const ui = { tab: 'requests', reqView: savedView, client: null, q: '', ptype: '', pcity: '' };
 const views = {};
 export const registerView = (name, fn) => { views[name] = fn; };
 

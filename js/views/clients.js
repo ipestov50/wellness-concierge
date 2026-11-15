@@ -89,8 +89,12 @@ function tabDates(c) {
 }
 
 function tabRequests(c, reqs) {
-  return `<div class="tab-head"><span>${reqs.length ? 'Сначала открытые' : 'Запросов пока нет'}</span><button type="button" class="btn small" data-newreq="${c.id}">＋ Запрос</button></div>
-    ${reqs.length ? `<div class="req-list">${reqs.map((r) => requestCard(r, { showClient: false })).join('')}</div>` : ''}`;
+  const open = reqs.filter((r) => !isClosed(r.status));
+  const closed = reqs.filter((r) => isClosed(r.status));
+  return `<div class="tab-head"><span>${!reqs.length ? 'Запросов пока нет' : open.length ? `В работе · ${open.length}` : 'Открытых запросов нет'}</span><button type="button" class="btn small" data-newreq="${c.id}">＋ Запрос</button></div>
+    ${open.length ? `<div class="req-list">${open.map((r) => requestCard(r, { showClient: false })).join('')}</div>` : ''}
+    ${closed.length ? `<details class="req-closed"${open.length ? '' : ' open'}><summary>✓ Выполненные и архив · ${closed.length}</summary>
+      <div class="req-list">${closed.map((r) => requestCard(r, { showClient: false })).join('')}</div></details>` : ''}`;
 }
 
 function profile(c) {

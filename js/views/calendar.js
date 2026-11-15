@@ -3,7 +3,7 @@ import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { esc, avatar, toast, fromParisInput } from '../ui.js';
 import { state, byId, save } from '../data.js';
 import { ui, render } from '../router.js';
-import { isClosed, statusLabel, effectiveStatus } from '../statuses.js';
+import { isClosed, statusLabel, effectiveStatus, statusOf } from '../statuses.js';
 import { birthdayInfo } from '../birthday.js';
 import { editRequest } from '../forms.js';
 import { editTrip, editPerson, editDate } from '../dossier.js';
@@ -33,8 +33,9 @@ const wdIdx = (ymd) => (new Date(ymd + 'T12:00:00Z').getUTCDay() + 6) % 7;
 const weekStart = (ymd) => addDays(ymd, -wdIdx(ymd));
 const hhmm = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
 
-const LS = 'cal.filters';
-const loadFilters = () => { try { return { req: true, trips: true, dates: true, done: false, ...JSON.parse(localStorage.getItem(LS) || '{}') }; } catch { return { req: true, trips: true, dates: true, done: false }; } };
+// v2: выполненные видны по умолчанию — отмечены ✓ и зачёркнуты
+const LS = 'cal.filters.v2';
+const loadFilters = () => { try { return { req: true, trips: true, dates: true, done: true, ...JSON.parse(localStorage.getItem(LS) || '{}') }; } catch { return { req: true, trips: true, dates: true, done: true }; } };
 let F = loadFilters();
 const mobile = () => matchMedia('(max-width: 760px)').matches;
 
@@ -50,12 +51,13 @@ function collect(fromDay, toDay, list, compactTrips = false) {
     const c = byId('clients', r.client_id);
     const m = minOf(r.deadline);
     const allDay = m === 0;
+    const kind = statusOf(r.status)?.kind;
     ev.push({
       id: 'r:' + r.id, kind: 'req', ref: r.id, day: d, start: allDay ? null : m, dur: DUR[r.category] || 60,
-      color: COLOR[r.category] || 'other', icon: CATEGORIES[r.category] || '📌', title: r.summary, who: c?.name || '',
+      color: COLOR[r.category] || 'other', icon: kind === 'done' ? '✓' : CATEGORIES[r.category] || '📌', title: r.summary, who: c?.name || '',
       client: c, vip: c?.vip, warn: c && (c.allergies?.length || c.diet?.length || c.health?.length || c.dislikes?.length),
       urgent: r.urgency === 'critical' || r.urgency === 'high', critical: r.urgency === 'critical',
-      late: !isClosed(r.status) && new Date(r.deadline) < new Date(), done: isClosed(r.status),
+      late: !isClosed(r.status) && new Date(r.deadline) < new Date(), done: kind === 'done', cancelled: kind === 'archive',
       sub: statusLabel(effectiveStatus(r.status)), urgency: r.urgency,
     });
   }
@@ -103,7 +105,7 @@ function lanes(items) {
   return sorted;
 }
 
-const evClass = (e) => `ev c-${e.color}${e.late ? ' late' : ''}${e.done ? ' done' : ''}${e.critical ? ' crit' : ''}`;
+const evClass = (e) => `ev c-${e.color}${e.late ? ' late' : ''}${e.done ? ' done' : ''}${e.cancelled ? ' cancelled' : ''}${e.critical ? ' crit' : ''}`;
 const evAttrs = (e) => `data-ev="${esc(e.id)}" data-kind="${e.kind}" data-ref="${esc(e.ref)}"`;
 
 function timedEvent(e) {

@@ -1,10 +1,12 @@
-// «Мой день»: мировые часы гостей, «Сейчас», шкала дня по часам, «Сделано / Позже / Завтра», черновики, перетаскивание
+// «Мой день»: мировые часы гостей, «Сейчас», список действий без таймингов, «Запрос выполнен / Шаг сделан / Позже», черновики, перетаскивание
 import { esc, toast, openModal, options, field, avatar } from '../ui.js';
 import { state, byId, save, remove, dataVersion } from '../data.js';
 import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
-import { guestWhere, timeIn, flag } from '../tz.js';
+import { guestWhere, timeIn } from '../tz.js';
+import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
+import { statusLabel } from '../statuses.js';
 import { editRequest } from '../forms.js';
 
 let settings = null;
@@ -39,22 +41,6 @@ function currentWeek() {
   return weekCache.week;
 }
 
-// связь с «Сегодня»: что по каждому запросу в плане дня
-export function requestDayInfo() {
-  const P = currentPlan();
-  const today = dayIn(OWNER_TZ, Date.now());
-  const next = new Map(), done = new Set(), moved = new Set();
-  if (!P.tomorrow) for (const b of P.blocks) if (b.request_id && b.end > Date.now() && !next.has(b.request_id)) next.set(b.request_id, b);
-  for (const m of state.day_items) {
-    if (m.day !== today) continue;
-    const id = /^[gbpfc]:/.test(m.key) ? m.key.split(':')[1] : null;
-    if (!id) continue;
-    if (m.status === 'done') done.add(id);
-    if (m.status === 'tomorrow') moved.add(id);
-  }
-  return { next, done, moved, tomorrow: P.tomorrow };
-}
-
 // ---------- мировые часы: города гостей прямо сейчас ----------
 function worldClocks() {
   const seen = new Map();
@@ -70,31 +56,34 @@ function worldClocks() {
     return `<div class="wc ph-${ph}${x.tz === OWNER_TZ ? ' me' : ''}" title="${esc(x.tz)}"><b data-tz-clock="${esc(x.tz)}">${timeIn(x.tz)}</b><span>${esc(x.label)}</span>${x.tz === OWNER_TZ ? '' : `<i class="${ok ? 'ok' : 'no'}">${ok ? 'можно писать' : ph === 'night' ? 'спит' : 'не беспокоить'}</i>`}</div>`; }).join('')}</div>`;
 }
 
-// ---------- блок шкалы ----------
-function blockHtml(b, now, { big = false } = {}) {
+// ---------- блок действия (без времени) ----------
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.2 12.4l3.2 3.2 6.4-6.6"/></svg>';
+// «почему» без часов: только то, что влияет на решение
+const whyClean = (b) => why(b).split(' · ').filter((x) => x && !/^у (гостя|партнёра) /.test(x) && !/^\d/.test(x) && x !== 'вы поставили это время').join(' · ');
+function blockHtml(b, { big = false } = {}) {
   const c = byId('clients', b.client_id);
   const r = b.request_id ? byId('requests', b.request_id) : null;
-  const live = now >= b.start && now < b.end;
-  const past = now >= b.end;
-  const w = why(b);
-  return `<article class="db ${KIND[b.kind]?.[1] || ''}${live ? ' live' : ''}${past ? ' past' : ''}${b.late || b.missed ? ' warn' : ''}${big ? ' big' : ''}" data-db="${esc(b.key)}">
-    <div class="db-time"><b>${hm(b.start)}</b><small>${b.dur} мин</small></div>
+  const w = whyClean(b);
+  return `<article class="db ${KIND[b.kind]?.[1] || ''}${b.late || b.missed || b.overdue ? ' warn' : ''}${big ? ' big' : ''}${r ? ' has-req' : ''}" data-db="${esc(b.key)}">
+    ${r ? `<button type="button" class="db-check" data-db-complete="${esc(r.id)}" title="Запрос выполнен — уйдёт в «Выполнено» на доске" aria-label="Запрос выполнен: ${esc(r.summary)}">${CHECK}</button>` : '<span class="db-check-sp"></span>'}
     <div class="db-body">
-      <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b>${b.fixed ? '<span class="db-pin" title="Точное время">⏱</span>' : ''}</div>
-      ${c || b.who ? `<div class="db-who">${c ? avatar(c, 'av-xs') : ''}<span>${esc(b.who || c?.name || '')}</span>${b.guestLocal ? `<span class="db-tz">у гостя ${b.guestLocal}${b.guestPlace ? ' · ' + esc(b.guestPlace) : ''}</span>` : ''}${b.partnerLocal ? `<span class="db-tz">у партнёра ${b.partnerLocal}</span>` : ''}</div>` : ''}
+      <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b></div>
+      ${c || b.who ? `<div class="db-who">${c ? avatar(c, 'av-xs') : ''}<span>${esc(b.who || c?.name || '')}</span>${r ? `<span class="db-st">${esc(statusLabel(r.status))}</span>` : ''}</div>` : ''}
       ${b.detail || r?.summary ? `<p class="db-detail">${esc(b.detail || r.summary)}</p>` : ''}
-      ${w && !b.guestLocal && !b.partnerLocal ? `<p class="db-why">${esc(w)}</p>` : w && (b.pinned || b.late || b.missed || b.outside || b.batch || b.overdue) ? `<p class="db-why">${esc(w.replace(/^у (гостя|партнёра) [^·]+·?\s?/, ''))}</p>` : ''}
+      ${w ? `<p class="db-why">${esc(w)}</p>` : ''}
       <div class="db-actions">
         ${b.kind === 'guest' || b.kind === 'partner' ? `<button type="button" class="btn small" data-db-draft="${esc(b.key)}">✍ Черновик</button>` : ''}
         ${r ? `<button type="button" class="btn small ghostish" data-db-open="${esc(r.id)}">Открыть</button>` : ''}
         <span class="db-sp"></span>
         <div class="db-later"><button type="button" class="btn small ghostish" data-db-later="${esc(b.key)}">⏭ Позже</button>
-          <div class="db-menu" hidden><button type="button" data-db-snooze="30">+30 минут</button><button type="button" data-db-snooze="lunch">После обеда</button><button type="button" data-db-snooze="tomorrow">Завтра</button>
+          <div class="db-menu" hidden><button type="button" data-db-snooze="later">Ниже в списке</button><button type="button" data-db-snooze="tomorrow">Завтра</button>
             <div class="db-days">${nextDays().map(([d, l]) => `<button type="button" data-db-moveto="${d}">${l}</button>`).join('')}</div></div></div>
-        <button type="button" class="btn small primary" data-db-done="${esc(b.key)}">✓ Сделано</button>
+        ${r ? `<button type="button" class="btn small primary" data-db-complete="${esc(r.id)}">✓ Сделано</button>
+          <button type="button" class="btn small ghostish" data-db-done="${esc(b.key)}" title="Только этот шаг, запрос остаётся в работе">Шаг сделан</button>`
+          : `<button type="button" class="btn small primary" data-db-done="${esc(b.key)}">✓ Сделано</button>`}
       </div>
     </div>
-    <button type="button" class="db-grip" data-db-grip aria-label="Перетащить на другое время">⋮⋮</button>
+    <button type="button" class="db-grip" data-db-grip aria-label="Перетащить выше или ниже">⋮⋮</button>
   </article>`;
 }
 
@@ -103,34 +92,35 @@ export function dayView() {
   if (!settings) { loadSettings(); return `<div class="dayv"><div class="empty">Собираю ваш день…</div></div>`; }
   const P = currentPlan();
   const now = Date.now();
-  const left = P.blocks.filter((b) => b.end > now);
-  const nowB = left.find((b) => b.start <= now) || left[0];
-  const total = P.blocks.reduce((s, b) => s + b.dur, 0);
+  const left = P.blocks.filter((b) => b.end > now || P.tomorrow);
+  const first = left[0];
   const dateLabel = new Date(P.dayStart).toLocaleDateString('ru-RU', { timeZone: OWNER_TZ, weekday: 'long', day: 'numeric', month: 'long' });
-  const nowLine = !P.tomorrow && now > P.dayStart && now < P.dayEnd;
-  let rows = '', lineDone = false;
-  const gapHtml = (s, e) => `<div class="db-gap"><span>${hm(s)}</span><i></i><em>Свободно ${Math.round((e - s) / 6e4)} мин${P.overflow.length ? ' — можно взять из «не помещается»' : ''}</em></div>`;
-  const items = [...P.blocks.map((b) => ({ t: b.start, b })), ...P.gaps.map(([s, e]) => ({ t: s, gap: [s, e] })), { t: P.lunch[0], lunch: true }].sort((a, b) => a.t - b.t);
-  for (const it of items) {
-    if (nowLine && !lineDone && it.t > now) { rows += `<div class="db-now"><span>${hm(now)}</span><i></i></div>`; lineDone = true; }
-    if (it.lunch) rows += `<div class="db-lunch">🍽 ${hm(P.lunch[0])}–${hm(P.lunch[1])} · обед</div>`;
-    else if (it.gap) rows += gapHtml(...it.gap);
-    else rows += blockHtml(it.b, now).replace('class="db ', `class="db ${nowB && it.b.key === nowB.key && !P.tomorrow ? 'is-echo ' : ''}`);
-  }
+  const doneReqs = closedToday();
+  const doneN = P.done.length + doneReqs.length;
+  const rows = P.blocks.filter((b) => b !== first).map((b) => blockHtml(b)).join('');
   return `<div class="dayv">
     ${worldClocks()}
     <header class="day-head">
-      <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)} · рабочий день ${hm(P.dayStart)}–${hm(P.dayEnd)}</span></div>
-      <div class="day-stats"><b>${P.blocks.length}</b><small>действий</small><b>${Math.floor(total / 60)} ч ${total % 60} мин</b><small>работы</small><b>${P.done.length}</b><small>сделано</small></div>
+      <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span></div>
+      <div class="day-stats"><b>${P.blocks.length}</b><small>в работе</small><b>${doneN}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
     ${weekStrip()}
-    ${nowB && !P.tomorrow ? `<section class="day-now"><span class="day-now-l">${nowB.start <= now ? 'Сейчас' : `Дальше · в ${hm(nowB.start)}`}</span>${blockHtml(nowB, now, { big: true })}</section>` : ''}
-    ${P.blocks.length ? `<section class="day-line" id="dayLine">${rows}</section>` : `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>`}
-    ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span><small>${esc(a.why)}</small></div>`).join('')}
+    ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
+    ${P.blocks.length > 1 ? `<section class="day-line" id="dayLine"><h3 class="day-line-h">Дальше · ${P.blocks.length - 1}</h3>${rows}</section>`
+      : !P.blocks.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
+    ${P.overflow.length ? `<section class="day-over"><h3>Не помещается сегодня · ${P.overflow.length}</h3>${P.overflow.map((a) => `<div class="day-over-i"><span>${a.icon} ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span></div>`).join('')}
       <button type="button" class="btn small" data-db-all-tomorrow>Перенести всё на завтра</button></section>` : ''}
-    ${P.done.length ? `<details class="day-done"><summary>Сделано сегодня · ${P.done.length}</summary>${P.done.map((a) => `<div class="day-done-i"><span>✓ ${esc(a.title)}${a.who ? ` · ${esc(a.who)}` : ''}</span><button type="button" class="link" data-db-undo="${esc(a.key)}">вернуть</button></div>`).join('')}</details>` : ''}
+    ${doneN ? `<details class="day-done"${doneReqs.length ? ' open' : ''}><summary>Сделано сегодня · ${doneN}</summary>
+      ${doneReqs.map((r) => `<div class="day-done-i is-req"><span>✓ <s>${esc(r.summary)}</s>${byId('clients', r.client_id) ? ` · ${esc(byId('clients', r.client_id).name)}` : ''} <em>запрос выполнен</em></span><button type="button" class="link" data-db-reopen="${esc(r.id)}">вернуть в работу</button></div>`).join('')}
+      ${P.done.map((a) => `<div class="day-done-i"><span>✓ <s>${esc(a.title)}</s>${a.who ? ` · ${esc(a.who)}` : ''}</span><button type="button" class="link" data-db-undo="${esc(a.key)}">вернуть</button></div>`).join('')}</details>` : ''}
   </div>`;
+}
+
+// запросы, закрытые сегодня (по Парижу) — видно, что сделано, и можно вернуть
+function closedToday() {
+  const today = dayIn(OWNER_TZ, Date.now());
+  return state.requests.filter((r) => isDone(r) && r.updated_at && dayIn(OWNER_TZ, +new Date(r.updated_at)) === today);
 }
 
 // ---------- неделя: что впереди, чтобы распланировать ----------
@@ -148,7 +138,7 @@ function weekStrip() {
         <span class="wk-bar"><i style="width:${Math.min(100, (d.load / max) * 100)}%"></i></span>
         <em>${d.items.length ? d.items.length : '—'}</em></button>`; }).join('')}</div>
     ${chosen ? `<div class="week-list">${chosen.items.length ? chosen.items.map((x) => `<button type="button" class="wk-i k-${x.kind}" ${x.request_id ? `data-db-open="${x.request_id}"` : ''}>
-        <span class="wk-t">${x.time || '·'}</span><span class="wk-ic">${WK_ICON[x.kind]}</span><span class="wk-x"><b>${esc(x.title)}</b>${x.who ? `<small>${esc(x.who)}</small>` : ''}</span>
+        <span class="wk-ic">${WK_ICON[x.kind]}</span><span class="wk-x"><b>${esc(x.title)}</b>${x.who ? `<small>${esc(x.who)}</small>` : ''}</span>
         ${x.kind === 'moved' ? '<em>перенесено сюда</em>' : x.urgency === 'critical' || x.urgency === 'high' ? '<em class="hot">срочно</em>' : ''}</button>`).join('')
       : '<p class="muted">В этот день пока ничего — свободный день, можно перенести сюда дела.</p>'}</div>` : ''}
   </section>`;
@@ -182,12 +172,10 @@ async function sideEffects(b) {
   if (b.kind === 'guest' && c) await save('clients', c.id, { last_contact: dayIn(OWNER_TZ, Date.now()) }).catch(() => {});
   if (r && b.next && r.status !== b.next) {
     const before = r.status;
-    const label = state.statuses.find((s) => s.key === b.next)?.label || b.next;
-    await save('requests', r.id, { status: b.next });
-    toast(`✓ ${b.title} · статус → ${label}`, '', { label: 'Отменить', fn: () => save('requests', r.id, { status: before }) });
+    await setStatus(r.id, b.next, { quiet: true });
+    toast(`✓ ${b.title} · статус → ${statusLabel(b.next)}`, '', { label: 'Отменить', fn: () => { unmark(b.key); setStatus(r.id, before, { quiet: true }); } });
     return true;
   }
-  if (b.suggestion_id) { /* предложение откроется на «Сегодня» */ }
   return false;
 }
 
@@ -199,6 +187,17 @@ export function bindDay(app) {
     const t = e.target;
     const P = currentPlan();
     const find = (k) => P.blocks.find((b) => b.key === k);
+    const comp = t.closest('[data-db-complete]');
+    if (comp) {
+      const el = comp.closest('.db');
+      el?.classList.add('leaving');
+      comp.classList.add('checked');
+      await new Promise((r) => setTimeout(r, 240));
+      try { await completeRequest(comp.dataset.dbComplete); } catch { el?.classList.remove('leaving'); }
+      return;
+    }
+    const ro = t.closest('[data-db-reopen]');
+    if (ro) { reopenRequest(ro.dataset.dbReopen).catch(() => {}); return; }
     const done = t.closest('[data-db-done]');
     if (done) {
       const b = find(done.dataset.dbDone);
@@ -214,13 +213,14 @@ export function bindDay(app) {
     const sn = t.closest('[data-db-snooze]');
     if (sn) {
       const key = sn.closest('.db').dataset.db;
-      const b = find(key);
       const v = sn.dataset.dbSnooze;
       if (v === 'tomorrow') { await mark(key, 'tomorrow'); toast('Перенесено на завтра', '', { label: 'Вернуть', fn: () => unmark(key) }); }
       else {
-        const at = v === 'lunch' ? P.lunch[1] : Math.max(Date.now(), b.start) + 30 * 6e4;
+        // «ниже в списке»: ставим после последнего дела сегодня
+        const last = P.blocks.filter((x) => x.key !== key).at(-1);
+        const at = Math.max(Date.now(), last ? last.end : Date.now()) + 6e4;
         await mark(key, 'snoozed', new Date(Math.ceil(at / 3e5) * 3e5).toISOString());
-        toast(`Перенесено на ${hm(at)}`);
+        toast('Опущено ниже в списке', '', { label: 'Вернуть', fn: () => unmark(key) });
       }
       return;
     }
@@ -261,7 +261,7 @@ function enableBlockDrag(root) {
       y = ev.clientY;
       if (!started) { if (Math.abs(y - sy) < 5) return; started = true; ghost = el.cloneNode(true); ghost.classList.add('db-ghost'); Object.assign(ghost.style, { width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px' }); document.body.append(ghost); el.classList.add('db-lifted'); }
       ghost.style.transform = `translateY(${y - sy}px) scale(1.02) rotate(.4deg)`;
-      const over = document.elementFromPoint(rect.left + 40, y)?.closest('.db, .db-gap, .db-lunch');
+      const over = document.elementFromPoint(rect.left + 40, y)?.closest('.db');
       if (over !== target) { target?.classList.remove('drop-on'); target = over && over !== el ? over : null; target?.classList.add('drop-on'); }
     };
     const up = async () => {
@@ -270,16 +270,14 @@ function enableBlockDrag(root) {
       ghost.remove(); el.classList.remove('db-lifted'); target?.classList.remove('drop-on');
       if (!target) return;
       const tb = target.dataset.db ? P.blocks.find((x) => x.key === target.dataset.db) : null;
-      let at = tb ? tb.start : null;
-      if (!at && target.classList.contains('db-gap')) { const [h, m] = target.querySelector('span').textContent.split(':').map(Number); at = zoned(OWNER_TZ, P.day, h, m); }
-      if (!at && target.classList.contains('db-lunch')) at = P.lunch[1];
+      const at = tb ? tb.start : null;
       if (!at) return;
       await mark(b.key, 'pinned', new Date(at).toISOString());
       if (b.kind === 'guest' && b.guestTz) {
         const h = +hmIn(b.guestTz, at).slice(0, 2);
-        if (h >= (settings?.guest_to ?? 21) || h < (settings?.guest_from ?? 10)) toast(`⚠ У гостя будет ${hmIn(b.guestTz, at)} — поздно для сообщения`, 'err');
-        else toast(`Поставлено на ${hm(at)} · у гостя ${hmIn(b.guestTz, at)}`);
-      } else toast(`Поставлено на ${hm(at)}`);
+        if (h >= (settings?.guest_to ?? 21) || h < (settings?.guest_from ?? 10)) toast('⚠ У гостя в это время поздно для сообщения', 'err');
+        else toast('Порядок изменён');
+      } else toast('Порядок изменён');
     };
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   });
@@ -290,7 +288,7 @@ async function openDraft(b) {
   const c = byId('clients', b.client_id);
   const r = b.request_id ? byId('requests', b.request_id) : null;
   const p = r?.partner_id ? byId('partners', r.partner_id) : null;
-  const m = openModal({ title: b.kind === 'partner' ? 'Сообщение партнёру' : 'Сообщение гостю', saveLabel: 'Закрыть', body: `<div class="dr"><p class="dr-ctx">${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}${b.guestLocal ? ` · у гостя ${b.guestLocal}` : ''}</p><div class="dr-text"><span class="spin"></span> Jarvis пишет…</div></div>`, onSave: async () => {} });
+  const m = openModal({ title: b.kind === 'partner' ? 'Сообщение партнёру' : 'Сообщение гостю', saveLabel: 'Закрыть', body: `<div class="dr"><p class="dr-ctx">${b.icon} ${esc(b.title)}${b.who ? ' · ' + esc(b.who) : ''}</p><div class="dr-text"><span class="spin"></span> Jarvis пишет…</div></div>`, onSave: async () => {} });
   m.form.querySelector('#cancel').hidden = true;
   try {
     const sb = await getSupabase();
@@ -336,5 +334,5 @@ function openSettings() {
   });
 }
 
-// план пересобирается сам каждую минуту — «Сейчас» и линия времени двигаются
+// план пересобирается сам каждую минуту — «Сейчас» двигается
 setInterval(() => { if (ui.tab === 'requests' && ui.reqView === 'day' && !document.querySelector('.ov, .db-ghost, .db-menu:not([hidden])')) render(); }, 60e3);

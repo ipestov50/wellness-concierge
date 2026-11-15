@@ -74,6 +74,15 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && state.loaded && Date.now() - lastLoad > 60e3) loadAll().catch(() => {});
 });
 
+// мгновенное локальное изменение (до ответа сервера) — через слой данных, чтобы все экраны и кэши увидели его сразу
+export function patchLocal(table, id, patch) {
+  const row = state[table].find((x) => x.id === id);
+  if (!row) return null;
+  Object.assign(row, patch);
+  emit();
+  return row;
+}
+
 export async function save(table, id, data) {
   // новый запрос сразу получает продуманный чек-лист под свой тип
   if (table === 'requests' && !id && data.checklist === undefined) {

@@ -188,7 +188,7 @@ document.addEventListener('click', async (e) => {
 export async function runDeep() {
   if (deep.on) return;
   const { ui } = await import('./router.js');
-  if (ui.tab !== 'requests' || ui.reqView !== 'today') { ui.tab = 'requests'; ui.reqView = 'today'; }
+  if (ui.tab !== 'requests' || ui.reqView !== 'day') { ui.tab = 'requests'; ui.reqView = 'day'; }
   deep.on = true; deep.text = 'Jarvis изучает гостей и ближайшие события…';
   render();
   document.querySelector('.jarvis-sg')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

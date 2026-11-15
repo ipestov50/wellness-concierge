@@ -21,3 +21,4 @@ supabase/.branches/
 dev-preview.html
 .claude/
 dev-facts.json
+dev-sb-mock.js

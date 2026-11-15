@@ -307,7 +307,7 @@ function brief(D: any, now: number, sugg: any[] = [], plan: any = null) {
   if (tomorrowArr.length) out.push('', '🗓 <b>Завтра прилетают</b>', ...tomorrowArr);
   if (bdays.length) out.push('', '🎂 <b>Даты на неделе</b>', ...bdays.map((x: any) => `${x.what} ${x.name} — ${x.days === 0 ? '<b>сегодня</b>' : x.days === 1 ? 'завтра' : `${x.d} ${MON[x.m - 1]}`}`));
   if (plan?.blocks?.length) out.push('', `📋 <b>План дня · ${plan.blocks.length} действ.</b>`, ...plan.blocks.slice(0, 10).map(blockLine), plan.blocks.length > 10 ? `<i>…и ещё ${plan.blocks.length - 10} — во вкладке «Мой день»</i>` : '');
-  if (sugg.length) out.push('', `✨ <b>Jarvis предлагает: ${sugg.length}</b>`, ...sugg.slice(0, 4).map((x: any) => esc(x.title)), '<i>Планы готовы на сайте — откройте «Сегодня».</i>');
+  if (sugg.length) out.push('', `✨ <b>Jarvis предлагает: ${sugg.length}</b>`, ...sugg.slice(0, 4).map((x: any) => esc(x.title)), '<i>Планы готовы на сайте — откройте «Мой день».</i>');
   if (!late.length && !risk.length && !todays.length && !arrivals.length && !departures.length && !sugg.length) out.push('', 'На сегодня задач нет. Хорошего дня ✨');
   return out.join('\n');
 }
