@@ -43,7 +43,7 @@ export function requestCard(r, { showClient = true } = {}) {
 }
 
 // ---------- меню карточки: изменить, статус, удалить ----------
-function closeCardMenu() { document.getElementById('cardmenu')?.remove(); }
+function closeCardMenu() { document.getElementById('cardmenu')?.remove(); document.getElementById('cardmenu-bg')?.remove(); }
 function openCardMenu(id, anchor) {
   closeCardMenu();
   const r = byId('requests', id);
@@ -59,7 +59,15 @@ function openCardMenu(id, anchor) {
   document.body.append(m);
   const a = anchor.getBoundingClientRect();
   const w = m.offsetWidth, h = m.offsetHeight;
-  if (innerWidth <= 520) m.classList.add('sheet');
+  // телефон (или любой сенсорный экран): нижняя шторка — статус меняется одним касанием, без перетаскивания
+  if (innerWidth < 768 || matchMedia('(pointer: coarse)').matches) {
+    m.classList.add('sheet');
+    const bg = document.createElement('div');
+    bg.id = 'cardmenu-bg'; bg.className = 'sheet-bg';
+    bg.addEventListener('click', closeCardMenu);
+    m.before(bg);
+    requestAnimationFrame(() => bg.classList.add('open'));
+  }
   else {
     m.style.left = Math.max(8, Math.min(a.right - w, innerWidth - w - 8)) + 'px';
     m.style.top = (a.bottom + 6 + h > innerHeight - 8 ? Math.max(8, a.top - h - 6) : a.bottom + 6) + 'px';

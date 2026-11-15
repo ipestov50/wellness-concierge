@@ -7,6 +7,21 @@ import { byId, save } from './data.js';
 import { cached, TTL, agoLabel } from './api.js';
 
 const CATS = ['Dining', 'Spa & Wellness', 'Activities', 'Health & Fitness', 'Transport', 'Gifts & Events'];
+export const ROAD_CATS = CATS;
+
+// дорога для запроса через Jarvis (TomTom на сервере). Пробки меняются быстро, но не ежесекундно:
+// 4 минуты результат берётся из кэша — повторные открытия не тратят лимит.
+export function fetchRoad(id, { force = false } = {}) {
+  const r0 = byId('requests', id);
+  return cached(`road:${id}|${r0?.road_from || ''}|${r0?.road_to || ''}|${r0?.deadline || ''}`, TTL.road, async () => {
+    const sb = await getSupabase();
+    const { data, error } = await sb.functions.invoke('jarvis', { body: { mode: 'traffic', id } });
+    let t = data;
+    if (error) { try { t = await error.context.json(); } catch { t = { error: 'fail' }; } }
+    if (t?.error && t.error !== 'no_endpoints' && t.error !== 'no_tomtom_key') throw Object.assign(new Error(t.error), { body: t });
+    return t;
+  }, { force });
+}
 const hm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
 
 export function roadSlot(r) {
@@ -105,20 +120,11 @@ export async function bindRoad(root) {
     openForm(false);
   };
 
-  // пробки меняются быстро, но не ежесекундно: 4 минуты результат берётся из кэша (бережём лимит TomTom)
   const run = async (force = false) => {
     ico.innerHTML = '<span class="spin"></span>';
     txt.textContent = 'Jarvis проверяет дорогу…';
     try {
-      const r0 = byId('requests', id);
-      const res = await cached(`road:${id}|${r0?.road_from || ''}|${r0?.road_to || ''}|${r0?.deadline || ''}`, TTL.road, async () => {
-        const sb = await getSupabase();
-        const { data, error } = await sb.functions.invoke('jarvis', { body: { mode: 'traffic', id } });
-        let t = data;
-        if (error) { try { t = await error.context.json(); } catch { t = { error: 'fail' }; } }
-        if (t?.error && t.error !== 'no_endpoints' && t.error !== 'no_tomtom_key') throw Object.assign(new Error(t.error), { body: t });
-        return t;
-      }, { force }).catch((e) => ({ value: e.body || { error: 'fail' }, at: Date.now() }));
+      const res = await fetchRoad(id, { force }).catch((e) => ({ value: e.body || { error: 'fail' }, at: Date.now() }));
       at = res.at;
       const t = res.value;
       if (el.isConnected) show(t);

@@ -4,6 +4,7 @@ import { state, byId, save, remove, dataVersion } from '../data.js';
 import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
 import { api, isAbort } from '../api.js';
+import { conflictsBlock, watchTraffic } from '../conflict-actions.js';
 import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
 import { guestWhere, timeIn } from '../tz.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
@@ -85,6 +86,7 @@ function blockHtml(b, { big = false, future = false } = {}) {
       <div class="db-actions">
         ${b.kind === 'guest' || b.kind === 'partner' ? `<button type="button" class="btn small" data-db-draft="${esc(b.key)}">✍ Черновик</button>` : ''}
         ${r ? `<button type="button" class="btn small ghostish" data-db-open="${esc(r.id)}">Открыть</button>` : ''}
+        ${/^t:.+:(chk|out)$/.test(b.key) ? `<button type="button" class="btn small" data-flight-delay="${esc(b.key.split(':')[1])}" data-dir="${b.key.endsWith(':out') ? 'out' : 'in'}">⏱ Рейс задерживается</button>` : ''}
         <span class="db-sp"></span>
         <div class="db-later"><button type="button" class="btn small ghostish" data-db-later="${esc(b.key)}">⏭ Позже</button>
           <div class="db-menu" hidden><button type="button" data-db-snooze="later">Ниже в списке</button><button type="button" data-db-snooze="tomorrow">Завтра</button>
@@ -126,6 +128,7 @@ export function dayView() {
       <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
+    ${conflictsBlock()}
     ${weekStrip()}
     ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
     ${section(P.tomorrow ? 'Ещё на завтра' : 'Ещё сегодня', restToday)}
@@ -206,6 +209,7 @@ export function bindDay(app) {
   const root = app.querySelector('.dayv');
   if (!root) return;
   root.querySelector('#daySettings')?.addEventListener('click', openSettings);
+  watchTraffic(); // пробки для выездов в ближайшие 3 часа (кэш 4 мин)
   root.addEventListener('click', async (e) => {
     const t = e.target;
     const P = currentPlan();

@@ -7,6 +7,7 @@ import { isClosed, statusLabel, effectiveStatus, statusOf } from '../statuses.js
 import { birthdayInfo } from '../birthday.js';
 import { editRequest } from '../forms.js';
 import { editTrip, editPerson, editDate } from '../dossier.js';
+import { currentConflicts, conflictsBlock } from '../conflict-actions.js';
 
 const H0 = 6, H1 = 24; // сетка с 06:00 до 24:00
 // масштаб: высота одного часа в пикселях
@@ -40,7 +41,7 @@ let F = loadFilters();
 const mobile = () => matchMedia('(max-width: 760px)').matches;
 
 // ---------- события ----------
-function collect(fromDay, toDay, list, compactTrips = false) {
+function collect(fromDay, toDay, list, compactTrips = false, hit = new Set()) {
   const ev = [];
   const inRange = (d) => d >= fromDay && d <= toDay;
   if (F.req) for (const r of list) {
@@ -58,7 +59,7 @@ function collect(fromDay, toDay, list, compactTrips = false) {
       client: c, vip: c?.vip, warn: c && (c.allergies?.length || c.diet?.length || c.health?.length || c.dislikes?.length),
       urgent: r.urgency === 'critical' || r.urgency === 'high', critical: r.urgency === 'critical',
       late: !isClosed(r.status) && new Date(r.deadline) < new Date(), done: kind === 'done', cancelled: kind === 'archive',
-      sub: statusLabel(effectiveStatus(r.status)), urgency: r.urgency,
+      sub: statusLabel(effectiveStatus(r.status)), urgency: r.urgency, conflict: hit.has(r.id),
     });
   }
   if (F.trips) for (const t of state.trips) {
@@ -67,7 +68,7 @@ function collect(fromDay, toDay, list, compactTrips = false) {
     for (const [at, num, dir] of [[t.flight_in_at, t.flight_in, 'in'], [t.flight_out_at, t.flight_out, 'out']]) {
       if (!at || !inRange(dayOf(at))) continue;
       ev.push({ id: `f:${t.id}:${dir}`, kind: 'trip', ref: t.id, day: dayOf(at), start: minOf(at), dur: 40, color: 'flight',
-        icon: dir === 'in' ? '🛬' : '🛫', title: `${dir === 'in' ? 'Прилёт' : 'Вылет'}${num ? ' ' + num : ''} · ${t.city}`, who, client: c, vip: c?.vip });
+        icon: dir === 'in' ? '🛬' : '🛫', title: `${dir === 'in' ? 'Прилёт' : 'Вылет'}${num ? ' ' + num : ''} · ${t.city}${t[`flight_${dir}_delay`] ? ` · задержка +${t[`flight_${dir}_delay`]} мин` : ''}`, who, client: c, vip: c?.vip, conflict: (t[`flight_${dir}_delay`] || 0) > 30 });
     }
     if (t.start_date) {
       const e = t.end_date || t.start_date;
@@ -105,7 +106,7 @@ function lanes(items) {
   return sorted;
 }
 
-const evClass = (e) => `ev c-${e.color}${e.late ? ' late' : ''}${e.done ? ' done' : ''}${e.cancelled ? ' cancelled' : ''}${e.critical ? ' crit' : ''}`;
+const evClass = (e) => `ev c-${e.color}${e.conflict ? ' conflict' : ''}${e.late ? ' late' : ''}${e.done ? ' done' : ''}${e.cancelled ? ' cancelled' : ''}${e.critical ? ' crit' : ''}`;
 const evAttrs = (e) => `data-ev="${esc(e.id)}" data-kind="${e.kind}" data-ref="${esc(e.ref)}"`;
 
 function timedEvent(e) {
@@ -115,7 +116,7 @@ function timedEvent(e) {
   const compact = h < 50;
   return `<button type="button" class="${evClass(e)}${compact ? ' compact' : ''}" ${evAttrs(e)}
     style="top:${top}px;height:${h}px;left:calc(${w * (e.lane || 0)}% + 2px);width:calc(${w}% - 4px)">
-    <span class="ev-t">${e.icon} ${esc(e.title)}</span>
+    <span class="ev-t">${e.conflict ? '<span class="cf-badge" title="Конфликт: задержка рейса или пробки">⏱</span> ' : ''}${e.icon} ${esc(e.title)}</span>
     ${e.who ? `<span class="ev-who">${e.client ? avatar(e.client, 'av-xs') : ''}${esc(e.who)}${e.vip ? ' <span class="vip">★</span>' : ''}${e.warn ? ' <span class="warn-dot">⚠</span>' : ''}</span>` : ''}
     ${!compact ? `<span class="ev-time">🕗 ${hhmm(e.start)}${e.kind === 'req' ? ` · ${esc(e.sub)}` : ''}</span>` : ''}
   </button>`;
@@ -192,7 +193,8 @@ export function calendarView(list) {
   if (mode === 'day') { from = to = anchor; days = [anchor]; }
   else if (mode === 'week') { from = weekStart(anchor); to = addDays(from, 6); for (let i = 0; i < 7; i++) days.push(addDays(from, i)); }
   else { from = weekStart(anchor.slice(0, 8) + '01'); to = addDays(from, 41); }
-  const ev = collect(from, to, list, mode === 'month');
+  const conflicts = currentConflicts();
+  const ev = collect(from, to, list, mode === 'month', new Set(conflicts.flatMap((c) => c.affected)));
   const [y, m, d] = anchor.split('-').map(Number);
   const title = mode === 'month' ? `${MONTHS[m - 1]} ${y}`
     : mode === 'day' ? `${d} ${MONTHS_GEN[m - 1]}, ${WD_LONG[wdIdx(anchor)]}`
@@ -203,7 +205,7 @@ export function calendarView(list) {
   }).join('')}</div>`; })() : '';
   const body = mode === 'month' ? monthGrid(anchor, ev) : mode === 'week' && mobile() ? agenda(days, ev) : timeGrid(days, ev);
   const count = ev.filter((e) => e.kind === 'req').length;
-  return `<section class="cal">
+  return `${conflictsBlock(conflicts)}<section class="cal">
     <header class="cal-top">
       <div class="cal-nav">
         <button type="button" class="icon-btn" data-calnav="-1" aria-label="Назад">‹</button>

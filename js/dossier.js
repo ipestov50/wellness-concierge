@@ -49,11 +49,11 @@ export function tripCard(t, { showGuest = false } = {}) {
       ${showGuest && c ? `<span class="trip-guest">${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</span>` : ''}
       <b class="trip-city">${t.country_code ? flagOf(t.country_code) + ' ' : ''}${esc(t.city)}${t.country ? `<span>, ${esc(t.country)}</span>` : ''}</b>
       ${t.hotel ? `<span class="trip-line">🏨 ${esc(t.hotel)}</span>` : ''}
-      ${t.flight_in || t.flight_in_at ? `<span class="trip-line">🛬 ${esc(t.flight_in || '')}${t.flight_in_at ? ' · ' + esc(fmtFlight(t.flight_in_at)) : ''}</span>` : ''}
-      ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}</span>` : ''}
+      ${t.flight_in || t.flight_in_at ? `<span class="trip-line">🛬 ${esc(t.flight_in || '')}${t.flight_in_at ? ' · ' + esc(fmtFlight(t.flight_in_at)) : ''}${t.flight_in_delay ? ` <b class="delay">+${t.flight_in_delay} мин</b>` : ''}</span>` : ''}
+      ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}${t.flight_out_delay ? ` <b class="delay">+${t.flight_out_delay} мин</b>` : ''}</span>` : ''}
       ${t.companions ? `<span class="trip-line">👥 ${esc(t.companions)}</span>` : ''}
     </span>
-  </button>${showBrief ? `<button type="button" class="trip-brief" data-brief="${t.id}" title="Перед вылетом: погода, праздники, визы, оплата">✈️ Перед вылетом${t.brief ? '' : ' <i>✦</i>'}</button>` : ''}</div>`;
+  </button>${st.kind !== 'past' && (t.flight_in_at || t.flight_out_at) ? `<div class="trip-delays">${[['in', t.flight_in_at, '🛬'], ['out', t.flight_out_at, '🛫']].filter(([, a]) => a && Date.parse(a) > Date.now() - 6 * 36e5).map(([d, , ic]) => `<button type="button" class="trip-delay" data-flight-delay="${t.id}" data-dir="${d}">${ic} ⏱ ${t[`flight_${d}_delay`] ? `задержка +${t[`flight_${d}_delay`]} мин` : 'Задержка?'}</button>`).join('')}</div>` : ''}${showBrief ? `<button type="button" class="trip-brief" data-brief="${t.id}" title="Перед вылетом: погода, праздники, визы, оплата">✈️ Перед вылетом${t.brief ? '' : ' <i>✦</i>'}</button>` : ''}</div>`;
 }
 
 const guestOptions = () => [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);

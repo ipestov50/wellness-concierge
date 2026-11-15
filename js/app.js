@@ -4,6 +4,8 @@ import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js
 import { ui, render, registerLazy, viewSkeleton } from './router.js';
 import { editRequest, editClient, editPartner } from './forms.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
+import { clearCache } from './api.js';
+import { saveSnapshot, loadSnapshot, clearSnapshot, storedSession, registerSW, warmModules } from './offline.js';
 import './views/requests.js';
 // остальные разделы — по требованию (меньше кода на старте)
 registerLazy('clients', () => import('./views/clients.js'));
@@ -98,7 +100,9 @@ function renderShell(session) {
         </div>
       </div>
     </header>
+    <div class="offline-bar" id="offbar" role="status" hidden></div>
     <main id="app">${viewSkeleton()}</main>
+    <button type="button" class="fab" id="fab" aria-label="Новый запрос">＋</button>
     <div id="modal"></div>`;
   applyTheme(getTheme());
   render();
@@ -108,21 +112,50 @@ function renderShell(session) {
 // первая загрузка: при сбое — карточка с «Повторить» вместо пустого экрана
 function firstLoad() {
   loadAll().then(() => {
+    state.offline = null; offlineBar();
     if (state.partial?.length) toast('Часть данных не загрузилась — покажу, что есть, и обновлю позже', 'err');
+    warmModules();
     return startRealtime();
-  }).then(() => import('./tz.js').then((m) => m.backfillTrips())).catch((e) => {
+  }).then(() => import('./tz.js').then((m) => m.backfillTrips())).catch(async (e) => {
     const app = $('#app');
     if (!app) return;
+    if (await showOffline()) return;
     app.innerHTML = `<div class="notice retry-card"><p>Не удалось загрузить данные${navigator.onLine ? '' : ' — нет интернета'}.</p><small>${esc(e.message || e)}</small>
       <button type="button" class="btn primary" id="retryLoad">↻ Повторить</button></div>`;
     $('#retryLoad').addEventListener('click', () => { app.innerHTML = viewSkeleton(); firstLoad(); });
   });
 }
 
-onChange(() => { if (shown === 'app' && state.loaded) render(); });
+onChange(() => {
+  if (shown === 'app' && state.loaded) render();
+  if (shown === 'app' && state.loaded && !state.offline) saveSnapshot(state); // свежий снимок на случай, если пропадёт сеть
+});
+
+// ---------- офлайн ----------
+// нет сети — показываем сохранённый снимок «на сегодня» (только просмотр) и плашку с его временем
+async function showOffline() {
+  const snap = await loadSnapshot();
+  if (!snap) return false;
+  Object.assign(state, snap.data, { loaded: true, offline: snap.at });
+  offlineBar();
+  render();
+  return true;
+}
+function offlineBar() {
+  const bar = $('#offbar');
+  if (!bar) return;
+  const off = state.offline || !navigator.onLine;
+  bar.hidden = !off;
+  if (off) bar.textContent = state.offline
+    ? `Нет сети — показываю данные на ${new Date(state.offline).toLocaleString('ru-RU', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} (по Парижу). Изменения сохранятся, когда появится связь.`
+    : 'Нет сети — изменения пока не сохраняются';
+}
+addEventListener('offline', offlineBar);
+addEventListener('online', () => { offlineBar(); if (shown === 'app' && state.offline) firstLoad(); });
+registerSW();
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup],#tgBtn');
+  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup],#tgBtn,#fab');
   const menu = $('#menuList');
   if (menu && !menu.hidden && !e.target.closest('.menu')) { menu.hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); }
   if (!t) return;
@@ -132,6 +165,7 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.newreq) editRequest(null, t.dataset.newreq);
   else if (t.dataset.editcl) editClient(t.dataset.editcl);
   else if (t.dataset.editp) editPartner(t.dataset.editp);
+  else if (t.id === 'fab') editRequest(null, ui.tab === 'clients' && ui.client ? ui.client : undefined); // в профиле гостя — сразу для него
   else if (t.id === 'addBtn') {
     if (ui.tab === 'requests') editRequest(null);
     else if (ui.tab === 'clients') editClient(null);
@@ -173,9 +207,14 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); const m = $('#menuList'); if (m) m.hidden = true; } });
 
-function route(session) {
+function route(session, event) {
   if (session && shown !== 'app') renderShell(session);
-  else if (!session) { stopRealtime(); closeModal(); renderLogin(); }
+  else if (!session) {
+    // без сети сессию не обновить — если владелец уже входил на этом устройстве, открываем офлайн-снимок
+    const kept = storedSession();
+    if (!navigator.onLine && kept?.user && event !== 'SIGNED_OUT') { if (shown !== 'app') renderShell(kept); return; }
+    stopRealtime(); closeModal(); clearSnapshot(); clearCache(); renderLogin();
+  }
 }
 
 try {
@@ -183,7 +222,7 @@ try {
   const { data } = await sb.auth.getSession();
   route(data.session);
   sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') route(session);
+    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') route(session, event);
   });
 } catch {
   root.innerHTML = `<main class="center"><div class="login"><h1>Сайт не настроен</h1>
