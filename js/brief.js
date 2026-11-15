@@ -45,6 +45,8 @@ export function openBrief(tripId) {
           <p>${esc(fmtRange(t) || 'даты не указаны')}${t.hotel ? ` · ${esc(t.hotel)}` : ''}</p>
           <p class="bf-guest">${c ? esc(c.name) : ''}${cit ? ` · ${cit}` : c ? ' · <button type="button" class="link" data-editcl="' + c.id + '">указать гражданство</button>' : ''}</p></div>
       </header>
+      <div class="bf-guide-cta"><div><b>📘 Путеводитель для гостя</b><small>Рестораны, спа, места и транспорт под этого гостя — с вашими указаниями, потом PDF</small></div>
+        <button type="button" class="btn primary" data-guide>${t.guide ? 'Открыть черновик' : '✦ Собрать'}</button></div>
       <p class="bf-upd"><span id="bf-ago"></span><button type="button" class="link" data-bf-refresh>↻ Обновить</button></p>
       <div class="bf-grid">
         <section class="bf-card" id="bf-time"><h4>🕐 Время</h4>${skeleton}</section>
@@ -191,6 +193,7 @@ export function openBrief(tripId) {
 
   m.form.addEventListener('click', async (e) => {
     if (e.target.closest('[data-bf-retry]') || e.target.closest('[data-bf-refresh]')) { loadFacts(true); return; }
+    if (e.target.closest('[data-guide]')) { import('./guide.js').then((g) => g.openGuide(tripId)); return; }
     if (e.target.closest('[data-bf-run]')) {
       renderJarvis(null, true);
       try { const { brief } = await call(tripId, 'jarvis', m.signal); t.brief = brief; renderJarvis(brief); }

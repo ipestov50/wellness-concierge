@@ -98,7 +98,9 @@ function bindOne(el) {
       <div class="dp-mins${st.hour == null ? ' off' : ''}">${MINUTES.map((mm) =>
         `<button type="button" class="chip-btn${st.hour != null && st.minute === mm ? ' on' : ''}" data-m="${mm}">:${pad(mm)}</button>`).join('')}</div>
       <button type="button" class="btn small primary dp-done">Готово</button>`;
-    el.querySelector('.dp-hours .on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    // прокручиваем только ленту часов (scrollIntoView двигал всё окно — календарь «уезжал» в другое место)
+    const hrs = el.querySelector('.dp-hours'), on = hrs?.querySelector('.on');
+    if (hrs && on) hrs.scrollLeft = on.offsetLeft - hrs.offsetLeft - (hrs.clientWidth - on.offsetWidth) / 2;
   }
 
   function draw() { quick(); if (!panel.hidden) { cal(); if (el.dataset.dateonly) el.querySelector('.dp-time').innerHTML = '<button type="button" class="btn small primary dp-done">Готово</button>'; else time(); } }
