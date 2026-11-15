@@ -64,7 +64,7 @@ export function registerSW() {
 
 // после загрузки, в простое, подтягиваем остальные разделы — чтобы они открывались и без сети
 export function warmModules() {
-  const go = () => ['./views/clients.js', './views/partners.js', './views/trips.js', './views/calendar.js', './brief.js', './dossier.js', './forms.js', './road.js', './telegram.js']
+  const go = () => ['./views/clients.js', './views/partners.js', './views/trips.js', './views/calendar.js', './brief.js', './dossier.js', './forms.js', './road.js', './telegram.js', './views/archive.js']
     .forEach((p) => import(p).catch(() => {}));
   (self.requestIdleCallback || ((f) => setTimeout(f, 3000)))(go, { timeout: 8000 });
 }

@@ -1,11 +1,13 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
-import { setStatus, toggleDone, isDone } from '../actions.js';
+import { setStatus, toggleDone, isDone, archiveRequests } from '../actions.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
 import { viewSkeleton } from '../router.js';
 // календарь — отдельный модуль, грузится при первом открытии
 let cal$ = null, calLoading = null;
+let arc$ = null, arcLoading = null;
+const loadArc = () => arcLoading || (arcLoading = import('./archive.js').then((m) => { arc$ = m; render(); }).catch(() => { arcLoading = null; }));
 const loadCal = () => calLoading || (calLoading = import('./calendar.js').then((m) => { cal$ = m; render(); }).catch(() => { calLoading = null; }));
 import { dayView, bindDay } from './myday.js';
 import { backupDue, daysSinceBackup } from '../backup.js';
@@ -55,6 +57,7 @@ function openCardMenu(id, anchor) {
     <div class="pop-label">Перенести в</div>
     <div class="pop-statuses">${columns().map(({ key: s, label: l }) =>
       `<button type="button" role="menuitem" data-act="status" data-status="${esc(s)}"${s === r.status ? ' aria-current="true" disabled' : ''}>${s === r.status ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
+    ${isClosed(r.status) && !r.archived_at ? '<button type="button" role="menuitem" data-act="archive">🗄 В архив</button>' : ''}
     <button type="button" role="menuitem" data-act="delete" class="pop-danger">Удалить</button>`;
   document.body.append(m);
   const a = anchor.getBoundingClientRect();
@@ -78,6 +81,7 @@ function openCardMenu(id, anchor) {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     if (b.dataset.act === 'edit') { closeCardMenu(); editRequest(id); }
+    else if (b.dataset.act === 'archive') { closeCardMenu(); archiveRequests([id]).catch(() => {}); }
     else if (b.dataset.act === 'status') {
       closeCardMenu();
       setStatus(id, b.dataset.status).catch(() => {});
@@ -98,6 +102,8 @@ document.addEventListener('click', (e) => {
   const cm = e.target.closest('[data-colmenu]');
   if (cm) { e.stopPropagation(); openColumnMenu(cm.dataset.colmenu, cm); return; }
   if (e.target.closest('#colAdd')) { editColumn(null); return; }
+  const ac = e.target.closest('[data-archive-col]');
+  if (ac) { e.stopPropagation(); ac.disabled = true; archiveRequests(state.requests.filter((r) => !r.archived_at && effectiveStatus(r.status) === ac.dataset.archiveCol).map((r) => r.id)).catch(() => { ac.disabled = false; }); return; }
   if (!e.target.closest('#cardmenu')) closeCardMenu();
   const bo = e.target.closest('[data-cl-open]');
   if (bo) { ui.tab = 'clients'; ui.client = bo.dataset.clOpen; ui.q = ''; render(); scrollTo(0, 0); }
@@ -111,6 +117,7 @@ function boardView(list) {
       const items = list.filter((r) => effectiveStatus(r.status) === c.key).sort((a, b) => a.position - b.position);
       return `<section class="col${c.kind === 'done' ? ' col-done' : c.kind !== 'active' ? ' archived' : ''}" data-status="${esc(c.key)}">
         <h3><span class="col-name">${esc(c.label)}</span><span class="col-count">${items.length}</span>
+          ${c.kind !== 'active' && items.length ? `<button class="col-arc" data-archive-col="${esc(c.key)}" type="button" title="Убрать выполненные с доски в архив — история гостя сохранится">🗄 В архив</button>` : ''}
           <button class="col-menu" data-colmenu="${c.id}" type="button" aria-label="Настроить колонку «${esc(c.label)}»">⋯</button></h3>
         <div class="col-body">${items.map((r) => requestCard(r)).join('') || '<div class="col-empty">Пусто</div>'}</div>
       </section>`;
@@ -221,8 +228,10 @@ function view(app) {
   const list = state.requests.filter((r) => !q ||
     [r.summary, clientName(r.client_id), r.original_message, r.category].join(' ').toLowerCase().includes(q));
   const open = state.requests.filter((r) => !isClosed(r.status)).length;
-  if (!['day', 'board', 'calendar'].includes(ui.reqView)) ui.reqView = 'day';
-  const board = ui.reqView === 'board';
+  const archivedN = state.requests.filter((r) => r.archived_at).length;
+  if (!['day', 'board', 'calendar', 'archive'].includes(ui.reqView)) ui.reqView = 'day';
+  const arc = ui.reqView === 'archive';
+  const board = ui.reqView === 'board' || arc;
   const cal = ui.reqView === 'calendar';
   const myday = ui.reqView === 'day';
   const toolbar = `<div class="bar toolbar">
@@ -232,18 +241,20 @@ function view(app) {
         <button type="button" data-view="calendar" aria-selected="${cal}">Календарь</button>
       </div>
       ${myday ? '' : `<div class="grow search"><input type="search" id="q" placeholder="Поиск по запросам и гостям" value="${esc(ui.q)}" autocomplete="off"></div>`}
-      ${board ? `<span class="count">Открытых: ${open}</span>` : ''}
+      ${board && !arc ? `<span class="count">Открытых: ${open}</span>` : ''}
+      ${board ? `<button type="button" class="btn small arc-btn${arc ? ' on' : ''}" data-arc-toggle aria-pressed="${arc}">${arc ? '← Доска' : `🗄 Архив${archivedN ? ' · ' + archivedN : ''}`}</button>` : ''}
     </div>`;
   app.innerHTML = myday
     ? `<div class="stack daystack">${dayNotes()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
-    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : boardView(list)}`;
+    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : arc ? (arc$ ? arc$.archiveView(list) : (loadArc(), viewSkeleton())) : boardView(list.filter((r) => !r.archived_at))}`;
   if (myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}
     render();
   });
-  if (board) enableDrag(app.querySelector('#board'));
+  app.querySelector('[data-arc-toggle]')?.addEventListener('click', () => { ui.reqView = arc ? 'board' : 'archive'; render(); scrollTo(0, 0); });
+  if (board && !arc) enableDrag(app.querySelector('#board'));
   if (cal && cal$) cal$.bindCalendar(app);
   if (myday) bindDay(app);
   bindSmart(app);

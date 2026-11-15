@@ -137,6 +137,16 @@ async function seedStatuses() {
 }
 
 // изменить сразу много строк (например, перенести все карточки из колонки)
+// одно обновление для многих строк (архивирование пачкой)
+export async function updateMany(table, ids, data) {
+  if (!ids.length) return;
+  const { error } = await sb.from(table).update(data).in('id', ids);
+  if (error) throw error;
+  const set = new Set(ids);
+  state[table].forEach((row) => { if (set.has(row.id)) Object.assign(row, data); });
+  emit();
+}
+
 export async function updateWhere(table, column, value, data) {
   const { error } = await sb.from(table).update(data).eq(column, value);
   if (error) throw error;
