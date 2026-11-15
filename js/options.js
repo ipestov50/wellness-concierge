@@ -2,18 +2,27 @@
 // запрос в «Ждёт одобрения» → гость выбрал номер → «Бронируем» (партнёр и адрес подставляются в запрос).
 // Всё хранится в запросе (requests.options) — доска, «Мой день» и профиль видят одно и то же.
 import { esc, openModal, toast } from './ui.js';
-import { byId, save } from './data.js';
+import { state, byId, save } from './data.js';
 import { api, isAbort } from './api.js';
 import { statusOf } from './statuses.js';
 import { setStatus } from './actions.js';
 
 const NUM = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
 const CHECK = {
-  verified: ['ok', '✓ адрес подтверждён по карте'],
+  google: ['ok', '✓ место в Google Картах'],
+  verified: ['ok', '✓ адрес подтверждён'],
   corrected: ['mid', '↻ адрес уточнён по карте'],
   partner: ['ok', '★ ваш партнёр'],
-  unverified: ['bad', '⚠ не нашёл на карте — проверьте'],
+  unverified: ['bad', '⚠ проверьте адрес'],
 };
+const HOLIDAY = {
+  confirmed_open: ['ok', '● открыто в этот день'],
+  unconfirmed_holiday: ['mid', '◐ праздник — часы не подтверждены'],
+  closed: ['bad', '○ закрыто в этот день'],
+};
+const CAT_TYPE = { Dining: 'restaurant', 'Spa & Wellness': 'spa', Activities: 'activity', 'Health & Fitness': 'spa', Transport: 'transport', Accommodation: 'hotel' };
+const gem = (x) => x.rating != null && x.reviews != null && x.rating >= 4.4 && x.rating <= 4.9 && x.reviews >= 80 && x.reviews <= 1500;
+const fmtN = (n) => Number(n).toLocaleString('ru-RU');
 const LOC = { RU: 'ru-RU', EN: 'en-GB', FR: 'fr-FR' };
 const TPL = {
   RU: { hi: (n, w) => `${n ? n + ', в' : 'В'}от варианты${w ? ' на ' + w : ''}:`, end: 'Напишите номер — всё забронирую.' },
@@ -65,86 +74,119 @@ export function openOptions(id, { back = null } = {}) {
   const c = byId('clients', r.client_id);
   const lang = (c?.language && TPL[c.language]) ? c.language : 'RU';
   const whenG = r.deadline ? new Date(r.deadline).toLocaleString(LOC[lang], { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const whenRu = r.deadline ? new Date(r.deadline).toLocaleString('ru-RU', { timeZone: 'Europe/Paris', weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
   let st = r.options?.items?.length ? structuredClone(r.options) : null;
   let manual = false; // сообщение правили руками — не перезаписываем
-  const m = openModal({ title: '✦ Варианты для гостя', saveLabel: 'Закрыть', body: '<div class="opt" id="opt"></div>', onSave: async () => {}, onClose: back });
-  m.form.classList.add('wide');
+  const m = openModal({ title: '✦ Варианты для гостя', saveLabel: 'Закрыть', body: '<div class="vo" id="opt"></div>', onSave: async () => {}, onClose: back });
+  m.form.classList.add('wide', 'vo-dlg');
   m.form.querySelector('#cancel').hidden = true;
   const box = m.form.querySelector('#opt');
+  const persist = () => save('requests', id, { options: st }).catch(() => {});
 
   const message = () => {
     const t = TPL[lang];
     const on = st.items.filter((x) => x.on !== false);
-    return [t.hi(first(c), whenG), '', ...on.map((x, k) => `${NUM[k]} *${x.name}*${x.why_guest ? ' — ' + x.why_guest : ''}\n📍 ${x.address}\n${x.maps}`), '', t.end].join('\n\n').replace(/\n{4,}/g, '\n\n');
+    return [t.hi(first(c), whenG), ...on.map((x, k) => `${NUM[k]} *${x.name}*${x.why_guest ? ' — ' + x.why_guest : ''}\n📍 ${x.address}\n${x.maps}`), t.end].join('\n\n');
   };
+  const chip = ([cls, label]) => `<span class="vo-chip ${cls}">${label}</span>`;
   const card = (x, i) => {
-    const [cls, label] = CHECK[x.check] || CHECK.unverified;
-    return `<article class="opt-i${x.on === false ? ' off' : ''}" data-i="${i}">
-      <label class="opt-on"><input type="checkbox" data-opt-on="${i}"${x.on === false ? '' : ' checked'}></label>
-      <div class="opt-body">
-        <div class="opt-h"><input class="opt-name" data-f="name" value="${esc(x.name)}"><span class="opt-check ${cls}">${label}</span></div>
-        <small class="opt-meta">${[x.kind, x.area, x.price].filter(Boolean).map(esc).join(' · ')}</small>
-        <input class="opt-addr" data-f="address" value="${esc(x.address)}" placeholder="Адрес">
-        ${x.address_ai ? `<small class="opt-was">Jarvis указал: ${esc(x.address_ai)}</small>` : ''}
-        <p class="opt-why">${esc(x.why)}</p>
-        ${x.note ? `<p class="opt-note">💡 ${esc(x.note)}</p>` : ''}
-        <div class="opt-links"><a href="${esc(x.maps)}" target="_blank" rel="noopener">📍 Google Maps</a>${x.website ? `<a href="${esc(x.website)}" target="_blank" rel="noopener">🌐 сайт</a>` : ''}</div>
+    const on = x.on !== false;
+    const tel = (x.phone || '').replace(/[^\d+]/g, '');
+    return `<article class="vo-card${on ? ' sel' : ''}" data-i="${i}">
+      <button type="button" class="vo-sel" data-opt-on="${i}" aria-pressed="${on}" title="${on ? 'Убрать из сообщения' : 'Добавить в сообщение'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 12.5l3.5 3.5 7.5-8"/></svg></button>
+      <header class="vo-head"><span class="vo-num">${i + 1}</span>
+        <div class="vo-title"><h3 class="vo-name" contenteditable="plaintext-only" spellcheck="false" data-f="name">${esc(x.name)}</h3>
+          <p class="vo-meta">${[x.kind, x.area, x.price].filter(Boolean).map(esc).join(' · ')}</p></div></header>
+      <div class="vo-chips">
+        ${x.rating != null ? `<span class="vo-chip rate">★ ${String(x.rating).replace('.', ',')}${x.reviews != null ? ` · ${fmtN(x.reviews)} отзывов` : ''}</span>` : ''}
+        ${gem(x) ? '<span class="vo-chip gem">◆ скрытая жемчужина</span>' : ''}
+        ${x.partner ? chip(CHECK.partner) : CHECK[x.check] ? chip(CHECK[x.check]) : ''}
+        ${x.holiday && HOLIDAY[x.holiday] ? chip(HOLIDAY[x.holiday]) : ''}
+      </div>
+      ${x.why ? `<p class="vo-why">${esc(x.why)}</p>` : ''}
+      ${x.evidence ? `<p class="vo-evidence"><span>Отзывы</span>${esc(x.evidence)}</p>` : ''}
+      ${(x.red_flags || []).length ? `<ul class="vo-flags">${x.red_flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+      <p class="vo-addr"><span aria-hidden="true">📍</span><span contenteditable="plaintext-only" spellcheck="false" data-f="address">${esc(x.address)}</span>${x.hours ? `<small>· ${esc(x.hours)}</small>` : ''}</p>
+      ${x.address_ai ? `<p class="vo-was">Jarvis указал: ${esc(x.address_ai)}</p>` : ''}
+      <div class="vo-actions">
+        <a class="vo-btn" href="${esc(x.maps)}" target="_blank" rel="noopener">Карта</a>
+        ${x.website ? `<a class="vo-btn" href="${esc(x.website)}" target="_blank" rel="noopener">Сайт</a>` : ''}
+        ${tel ? `<a class="vo-btn" href="tel:${esc(tel)}">Позвонить</a>` : ''}
+        ${x.partner ? '<span class="vo-btn done">★ В партнёрах</span>' : `<button type="button" class="vo-btn" data-opt-partner="${i}">★ В партнёры</button>`}
       </div></article>`;
   };
+  const skeleton = () => `<div class="vo-loading"><p class="vo-status"><span class="spin"></span> Jarvis ищет в Google Картах скрытые жемчужины, сверяет отзывы и праздники… 15–40 секунд</p>
+    <div class="vo-grid">${[0, 1, 2].map(() => '<div class="vo-card skel"><i></i><i></i><i></i><i></i></div>').join('')}</div></div>`;
   const draw = () => {
-    if (!st) { box.innerHTML = loading(); return; }
+    if (!st) { box.innerHTML = skeleton(); return; }
     const phone = (c?.phone || '').replace(/[^\d]/g, '');
+    const n = st.items.filter((x) => x.on !== false).length;
     box.innerHTML = `
-      <p class="opt-ctx"><b>${esc(r.summary)}</b>${c ? ' · ' + esc(c.name) : ''}${whenG ? ' · ' + esc(whenG) : ''}</p>
-      <div class="opt-list">${st.items.map(card).join('')}</div>
-      <div class="opt-more"><input id="opt-notes" placeholder="Уточнить для Jarvis: ближе к отелю, с террасой, без морепродуктов…" value="${esc(st.notes || '')}"><button type="button" class="btn small" data-opt-more>↻ Другие варианты</button></div>
-      <label class="f"><span>Сообщение гостю · ${lang === 'RU' ? 'по-русски' : lang === 'EN' ? 'по-английски' : 'по-французски'}</span><textarea id="opt-msg" rows="9">${esc(st.message && manual ? st.message : message())}</textarea></label>
-      <div class="opt-act">
-        <button type="button" class="btn primary" data-opt-send="copy">Скопировать</button>
-        ${phone ? '<button type="button" class="btn" data-opt-send="wa">WhatsApp</button>' : ''}
-        ${c?.telegram ? '<button type="button" class="btn" data-opt-send="tg">Telegram</button>' : ''}
-        ${st.sent_at ? `<span class="muted">отправлено ${new Date(st.sent_at).toLocaleString('ru-RU', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}
+      <div class="vo-ctx"><div><b>${esc(r.summary)}</b><span>${[c?.name, whenRu].filter(Boolean).map(esc).join(' · ')}</span></div>
+        ${st.considered ? `<span class="vo-chip">${st.considered} кандидатов → 3 лучших</span>` : ''}</div>
+      ${st.holiday ? `<p class="vo-holiday">🎌 ${esc(st.holiday)} — в этот день праздник. Часы работы проверьте при брони.</p>` : ''}
+      <div class="vo-grid">${st.items.map(card).join('')}</div>
+      <div class="vo-refine"><input id="opt-notes" placeholder="Уточнить: бельгийское пиво на кране, терраса, без морепродуктов…" value="${esc(st.notes || '')}" autocomplete="off">
+        <button type="button" class="btn small" data-opt-more>↻ Найти другие</button></div>
+      <details class="vo-msg"${st.sent_at ? '' : ' open'}><summary>Сообщение гостю · ${lang === 'RU' ? 'по-русски' : lang === 'EN' ? 'по-английски' : 'по-французски'} · ${n} ${n === 1 ? 'вариант' : 'варианта'}</summary>
+        <textarea id="opt-msg" rows="8">${esc(st.message && manual ? st.message : message())}</textarea></details>
+      <div class="vo-foot">
+        ${phone ? '<button type="button" class="btn primary" data-opt-send="wa">WhatsApp</button>' : ''}
+        ${c?.telegram ? `<button type="button" class="btn${phone ? '' : ' primary'}" data-opt-send="tg">Telegram</button>` : ''}
+        <button type="button" class="btn${phone || c?.telegram ? '' : ' primary'}" data-opt-send="copy">Скопировать</button>
+        <span class="vo-sent">${st.sent_at ? `отправлено ${new Date(st.sent_at).toLocaleString('ru-RU', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : st.cached ? 'из сохранённого поиска' : ''}</span>
       </div>
       ${pickChips({ ...r, options: st })}
-      ${(st.sources || []).length ? `<p class="bf-src">Источники Jarvis: ${st.sources.map((s) => `<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || 'ссылка')}</a>`).join(' · ')}</p>` : ''}`;
+      ${(st.sources || []).length ? `<p class="bf-src">Источники: ${st.sources.map((s) => `<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || 'ссылка')}</a>`).join(' · ')}</p>` : ''}`;
   };
-  const loading = () => `<div class="bf-busy"><span class="spin"></span> Jarvis подбирает места и сверяет адреса с картой… обычно 10–25 секунд</div><div class="bf-skel"><i></i><i></i><i></i></div>`;
 
   const fetchOptions = async (notes = '', exclude = []) => {
-    box.innerHTML = loading();
+    st = null; draw();
     try {
       const out = await api('options', { id, notes, exclude }, { signal: m.signal });
-      st = { items: out.items.map((x) => ({ ...x, on: true })), lang: out.lang, sources: out.sources, notes, created_at: new Date().toISOString() };
+      st = { items: out.items.map((x) => ({ ...x, on: true })), city: out.city, lang: out.lang, sources: out.sources, holiday: out.holiday, considered: out.considered, cached: !!out.cached, notes, excluded: exclude, created_at: new Date().toISOString() };
       manual = false;
-      await save('requests', id, { options: st }).catch(() => {}); // черновик сохраняем сразу — видно везде
+      await persist(); // черновик сохраняем сразу — видно на доске и в «Моём дне»
       if (m.form.isConnected) draw();
     } catch (e) {
       if (isAbort(e) || !m.form.isConnected) return;
-      box.innerHTML = `<div class="notice retry-card"><p>${e.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту.' : 'Не получилось подобрать варианты.'}</p><button type="button" class="btn primary" data-opt-retry>↻ Повторить</button></div>`;
+      box.innerHTML = `<div class="vo-error"><p>${e.message === 'rate_limited' ? 'Лимит Gemini на минуту исчерпан — попробуйте чуть позже.' : 'Не получилось подобрать места.'}</p><button type="button" class="btn primary" data-opt-retry>↻ Повторить</button></div>`;
     }
   };
+  const refreshMsg = () => { const t = box.querySelector('#opt-msg'); if (t && !manual) t.value = message(); };
 
   box.addEventListener('input', (e) => {
     if (e.target.id === 'opt-msg') { manual = true; return; }
     const f = e.target.dataset.f;
     if (!f) return;
-    const i = +e.target.closest('.opt-i').dataset.i;
-    st.items[i][f] = e.target.value;
-    if (f === 'address' || f === 'name') st.items[i].maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([st.items[i].name, st.items[i].address].filter(Boolean).join(', '))}`;
-    if (!manual) box.querySelector('#opt-msg').value = message();
+    const i = +e.target.closest('.vo-card').dataset.i;
+    st.items[i][f] = e.target.innerText.trim();
+    if (!st.items[i].place_id) st.items[i].maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([st.items[i].name, st.items[i].address].filter(Boolean).join(', '))}`;
+    refreshMsg();
   });
-  box.addEventListener('change', (e) => {
-    const on = e.target.closest('[data-opt-on]');
-    if (!on) return;
-    st.items[+on.dataset.optOn].on = on.checked;
-    on.closest('.opt-i').classList.toggle('off', !on.checked);
-    if (!manual) box.querySelector('#opt-msg').value = message();
-  });
+  box.addEventListener('focusout', (e) => { if (e.target.dataset?.f) persist(); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.dataset?.f || e.target.id === 'opt-notes')) { e.preventDefault(); if (e.target.id === 'opt-notes') box.querySelector('[data-opt-more]').click(); else e.target.blur(); } });
   box.addEventListener('click', async (e) => {
     if (e.target.closest('[data-opt-retry]')) return fetchOptions(st?.notes || '');
+    const sel = e.target.closest('[data-opt-on]');
+    if (sel) { const i = +sel.dataset.optOn; st.items[i].on = st.items[i].on === false; draw(); return; }
     if (e.target.closest('[data-opt-more]')) {
       const notes = box.querySelector('#opt-notes').value.trim();
       return fetchOptions(notes, [...new Set([...(st?.excluded || []), ...st.items.map((x) => x.name)])]);
+    }
+    const tp = e.target.closest('[data-opt-partner]');
+    if (tp) {
+      const x = st.items[+tp.dataset.optPartner];
+      const same = state.partners.find((p) => p.name.trim().toLowerCase() === x.name.trim().toLowerCase());
+      try {
+        const p = same || await save('partners', null, { name: x.name, address: x.address || null, city: st.city || c?.city || null,
+          contact: [x.phone, x.website].filter(Boolean).join(' · ') || null, type: CAT_TYPE[r.category] || 'other', rating: x.rating ? Math.round(x.rating) : null,
+          notes: [x.kind, x.why].filter(Boolean).join('. ') || null });
+        x.partner = true; x.partner_id = p.id;
+        await persist(); draw();
+        toast(same ? `«${x.name}» уже в партнёрах — отмечено` : `★ «${x.name}» добавлен в партнёры`);
+      } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
+      return;
     }
     const pick = e.target.closest('[data-opt-pick]');
     if (pick) { await pickOption(id, +pick.dataset.i); m.close(); return; }
@@ -154,14 +196,14 @@ export function openOptions(id, { back = null } = {}) {
     if (!st.items.some((x) => x.on !== false)) return toast('Отметьте хотя бы один вариант', 'err');
     try { await navigator.clipboard.writeText(text); } catch {}
     const how = send.dataset.optSend;
-    if (how === 'wa') window.open(`https://wa.me/${(c.phone || '').replace(/[^\d]/g, '')}?text=${encodeURIComponent(text.replace(/\*/g, '*'))}`, '_blank', 'noopener');
+    if (how === 'wa') window.open(`https://wa.me/${(c.phone || '').replace(/[^\d]/g, '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
     if (how === 'tg') window.open(`https://t.me/${encodeURIComponent(c.telegram.replace(/^@/, ''))}`, '_blank', 'noopener');
     st = { ...st, message: manual ? text : null, sent_at: new Date().toISOString(), chosen: null };
     try {
       await save('requests', id, { options: st });
       const cur = statusOf(byId('requests', id)?.status);
       if (hasStatus('awaiting_approval') && cur?.kind === 'active' && byId('requests', id).status !== 'booking') await setStatus(id, 'awaiting_approval', { quiet: true });
-      toast(how === 'copy' ? 'Скопировано · запрос ждёт выбор гостя' : how === 'tg' ? 'Текст скопирован — вставьте в чат Telegram · ждём выбор' : 'Открываю WhatsApp · ждём выбор гостя');
+      toast(how === 'copy' ? 'Скопировано · ждём выбор гостя' : how === 'tg' ? 'Текст скопирован — вставьте в чат Telegram · ждём выбор' : 'Открываю WhatsApp · ждём выбор гостя');
       draw();
     } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
   });
