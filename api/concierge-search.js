@@ -69,8 +69,10 @@ const COUNTRY_EN = { DE: 'germany', AT: 'austria', CH: 'switzerland', FR: 'franc
 async function planQuery(q, cityHint) {
   const prompt = `Разбери запрос консьержа для поиска в интернете. Запрос: «${q}».${cityHint ? ` Если город в запросе не указан — город: ${cityHint}.` : ''}
 Верни ТОЛЬКО JSON: {"city":"город по-английски в именительном падеже или пусто","city_local":"название города на местном языке","cc":"ISO2 страны","lang":"ISO 639-1 основного языка этого города","kind":"dining|wellness|hotel|nightlife|service|event|shopping|other","must":["1–4 обязательных ключевых слова по-английски (бренд, вид услуги)"],"q_local":"короткая поисковая фраза на местном языке, как искал бы местный житель, с городом","q_en":"короткая поисковая фраза на английском с городом"}`;
+  let why = '';
   try {
-    const g = await gemini(LITE, prompt);
+    let g = await gemini(LITE, prompt);
+    if (!g.text) { why = `lite:${g.status}`; g = await gemini(SMART, prompt); if (!g.text) why += `/smart:${g.status}`; }
     if (g.text) {
       const j = extractJSON(g.text);
       const cc = str(j.cc, 2).toUpperCase();
@@ -87,7 +89,7 @@ async function planQuery(q, cityHint) {
       for (const cand of [w, w.replace(/[еиу]$/u, ''), w.replace(/[еиу]$/u, 'а'), w.replace(/е$/u, 'ь')]) { if (await place(cand)) { city = cand; break; } }
     }
   }
-  return { city, kind: '', must: [], q_local: '', q_en: '', lang: '' };
+  return { city, kind: '', must: [], q_local: '', q_en: '', lang: '', why };
 }
 
 // ---------- поставщики ----------
@@ -331,7 +333,7 @@ ${(pl.must || []).length ? `ОБЯЗАТЕЛЬНО должно совпадат
     list = list.filter((x) => !bannedVenue.has(keyOf(x.title)) && !(x.url && ownDomains.includes(domainOf(x.url))));
     const RANK = { own: 0, high: 1, medium: 2, low: 3 };
     list.sort((a, b) => (RANK[a.trust?.level] ?? 3) - (RANK[b.trust?.level] ?? 3) || (b.trust?.guides?.length || 0) - (a.trust?.guides?.length || 0));
-    const out = { at: new Date().toISOString(), queries, plan: { city: pl.city, kind: pl.kind, lang: pl.lang, must: pl.must }, results: list.slice(0, 9), answer, sources: sources.filter((s) => !isBlocked(s.url, ownDomains) || /vertexaisearch/.test(s.url)), tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
+    const out = { at: new Date().toISOString(), queries, plan: { city: pl.city, kind: pl.kind, lang: pl.lang, must: pl.must, ai: !!pl.ai, why: pl.why || '' }, results: list.slice(0, 9), answer, sources: sources.filter((s) => !isBlocked(s.url, ownDomains) || /vertexaisearch/.test(s.url)), tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
     await setCache(auth, ck, out);
     return res.status(200).json(out);
   } catch (e) {
