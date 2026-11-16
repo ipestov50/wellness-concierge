@@ -92,6 +92,7 @@ function renderShell(session) {
           <button class="icon-btn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Меню">⋯</button>
           <div class="menu-list" id="menuList" hidden>
             <div class="menu-who">${esc(session.user.email)}</div>
+            <div class="menu-who" id="usageLine" hidden></div>
             <button type="button" id="tgBtn">✈️ Telegram-уведомления…</button>
             <button type="button" id="backupBtn">💾 Резервная копия…</button>
             <button type="button" id="setPass">Задать пароль</button>
@@ -177,6 +178,7 @@ document.addEventListener('click', (e) => {
     applyTheme(next); toast(THEME_LABEL[next]);
   } else if (t.id === 'menuBtn') {
     menu.hidden = !menu.hidden; t.setAttribute('aria-expanded', String(!menu.hidden));
+    if (!menu.hidden) showUsage();
   } else if (t.id === 'setPass') {
     menu.hidden = true;
     const p = prompt('Новый пароль (не меньше 8 символов):');
@@ -227,4 +229,18 @@ try {
 } catch {
   root.innerHTML = `<main class="center"><div class="login"><h1>Сайт не настроен</h1>
     <p class="lead">Нет подключения к базе. Проверьте переменные окружения в Vercel.</p></div></main>`;
+}
+
+// сколько раз сегодня обращались к Jarvis (день — по времени сброса лимита Gemini)
+async function showUsage() {
+  const el = $('#usageLine');
+  if (!el) return;
+  try {
+    const sb = await getSupabase();
+    const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    const { data } = await sb.from('search_cache').select('result').eq('key', `usage|${day}`).maybeSingle();
+    const u = data?.result || {};
+    el.textContent = `Jarvis сегодня: ${u.flash || 0} осн. · ${u.lite || 0} лёгк.${u.tavily ? ` · поиск ${u.tavily}` : ''}`;
+    el.hidden = false;
+  } catch { el.hidden = true; }
 }

@@ -2,9 +2,8 @@
 // Ключ Gemini хранится только здесь (переменная окружения GEMINI_API_KEY в Vercel).
 // Отвечает только залогиненному владельцу. Один вызов модели на запрос, без повторов.
 
-import { cacheKey, getCache, setCache } from './_cache.js';
+import { cacheKey, getCache, setCache, gfetch, FLASH, LITE } from './_cache.js';
 
-const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 const CATEGORIES = ['Spa & Wellness', 'Dining', 'Transport', 'Accommodation', 'Activities', 'Health & Fitness', 'Gifts & Events', 'Other'];
 const URGENCY = ['critical', 'high', 'normal', 'low'];
@@ -128,7 +127,7 @@ export default async function handler(req, res) {
   const hit = await getCache(auth, ck, 6 * 3600e3);
   if (hit?.requests) return res.status(200).json({ ...hit, cached: true });
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const r = await gfetch(auth, [LITE, FLASH], {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({

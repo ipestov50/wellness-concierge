@@ -1,7 +1,7 @@
+import { gfetch, FLASH, LITE } from './_cache.js';
 // «✦ Jarvis дополнит»: 2–4 неочевидных пункта чек-листа под конкретного гостя и запрос.
 // Только для владельца; данные читаются с его токеном (RLS). Имя гостя в ИИ не отправляется.
 
-const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 
 async function rest(path, auth) {
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
       уже_в_чек_листе: (r.checklist?.items || []).map((i) => i.t),
     };
 
-    const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const g = await gfetch(auth, [LITE, FLASH], {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({

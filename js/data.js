@@ -48,21 +48,56 @@ export function loadAll() {
   if (!loading) loading = doLoad().finally(() => { loading = null; });
   return loading;
 }
+// Тяжёлое поле trips.brief (брифинг Jarvis) не грузим при старте — его дочитывает ensureField при открытии брифинга.
+// ВАЖНО: новая колонка в trips должна быть добавлена и сюда.
+const COLS = { trips: 'id,owner_id,client_id,city,country,hotel,start_date,end_date,flight_in,flight_in_at,flight_out,flight_out_at,companions,notes,created_at,updated_at,tz,country_code,lat,lon,flight_in_delay,flight_out_delay,flight_in_delay_done,flight_out_delay_done' };
+const cols = (t) => COLS[t] || '*';
+// таблицы с updated_at: при повторной загрузке сверяем только id+время и дочитываем лишь изменённые строки
+const STAMPED = new Set(['clients', 'requests', 'partners', 'trips', 'people', 'client_dates', 'day_items']);
+const ts = (v) => Date.parse(v) || 0;
+
 async function doLoad() {
   sb = await getSupabase();
-  const results = await Promise.allSettled(TABLES.map((t) => sb.from(t).select('*')));
+  const again = state.loaded;
+  const results = await Promise.allSettled(TABLES.map((t) => sb.from(t).select(again && STAMPED.has(t) ? 'id,updated_at' : cols(t))));
   const failed = [];
-  results.forEach((r, i) => {
+  let dirty = !again;
+  await Promise.all(results.map(async (r, i) => {
     const t = TABLES[i];
-    const err = r.status === 'rejected' ? r.reason : r.value.error;
+    let err = r.status === 'rejected' ? r.reason : r.value.error;
+    let rows = err ? null : r.value.data;
+    if (!err && again && STAMPED.has(t)) {
+      const local = new Map(state[t].map((x) => [x.id, x]));
+      const changed = rows.filter((s) => ts(local.get(s.id)?.updated_at) !== ts(s.updated_at)).map((s) => s.id);
+      if (!changed.length && rows.length === state[t].length) return;
+      let fresh = new Map();
+      if (changed.length) {
+        const q = changed.length > 80 ? sb.from(t).select(cols(t)) : sb.from(t).select(cols(t)).in('id', changed);
+        const f = await q;
+        if (f.error) err = f.error; else fresh = new Map(f.data.map((x) => [x.id, x]));
+      }
+      if (!err) rows = rows.map((s) => fresh.get(s.id) || local.get(s.id)).filter(Boolean);
+    }
     if (err) { if (CRITICAL.has(t)) throw err; failed.push(t); return; }
-    state[t] = r.value.data;
-  });
+    if (again && !STAMPED.has(t) && JSON.stringify(rows) === JSON.stringify(state[t])) return;
+    state[t] = rows; dirty = true;
+  }));
+  if (String(failed) !== String(state.partial || [])) dirty = true;
   state.partial = failed;
   if (!state.statuses.length) await seedStatuses();
   state.loaded = true;
   lastLoad = Date.now();
-  emit();
+  if (dirty) emit();
+}
+
+// дочитать тяжёлое поле одной строки (например, trips.brief), если его ещё нет в памяти
+export async function ensureField(table, id, field) {
+  const row = state[table].find((x) => x.id === id);
+  if (!row || field in row) return row;
+  const { data, error } = await sb.from(table).select(field).eq('id', id).single();
+  if (error) throw error;
+  row[field] = data[field];
+  return row;
 }
 
 export async function startRealtime() {

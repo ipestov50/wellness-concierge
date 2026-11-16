@@ -16,9 +16,35 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Concierge">
   <title>Wellness Concierge</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- файлы, нужные при старте: браузер качает их сразу, а не по цепочке импортов (список: стартовый граф js/app.js) -->
+  <link rel="modulepreload" href="/js/supabase.js">
+  <link rel="modulepreload" href="/js/ui.js">
+  <link rel="modulepreload" href="/js/const.js">
+  <link rel="modulepreload" href="/js/api.js">
+  <link rel="modulepreload" href="/js/data.js">
+  <link rel="modulepreload" href="/js/router.js">
+  <link rel="modulepreload" href="/js/lazy.js">
+  <link rel="modulepreload" href="/js/backup.js">
+  <link rel="modulepreload" href="/js/offline.js">
+  <link rel="modulepreload" href="/js/views/requests.js">
+  <link rel="modulepreload" href="/js/actions.js">
+  <link rel="modulepreload" href="/js/statuses.js">
+  <link rel="modulepreload" href="/js/options.js">
+  <link rel="modulepreload" href="/js/birthday.js">
+  <link rel="modulepreload" href="/js/smart.js">
+  <link rel="modulepreload" href="/js/match.js">
+  <link rel="modulepreload" href="/js/restrictions.js">
+  <link rel="modulepreload" href="/js/datepicker.js">
+  <link rel="modulepreload" href="/js/suggest.js">
+  <link rel="modulepreload" href="/js/tz.js">
+  <link rel="modulepreload" href="/js/views/myday.js">
+  <link rel="modulepreload" href="/js/conflict-actions.js">
+  <link rel="modulepreload" href="/js/conflicts.js">
+  <link rel="modulepreload" href="/js/planner.js">
   <script src="js/theme-init.js"></script>
 </head>
 <body>

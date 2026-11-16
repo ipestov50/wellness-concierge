@@ -1,7 +1,7 @@
 // «✈️ Перед вылетом»: время, погода, праздники, деньги — сразу; въезд, платежи, связь, фразы — от Jarvis с источниками
 import { api, isAbort, cached, TTL, agoLabel } from './api.js';
 import { esc, openModal, toast, fromParisInput } from './ui.js';
-import { state, byId, save } from './data.js';
+import { state, byId, save, ensureField } from './data.js';
 import { firstKey } from './statuses.js';
 import { flag, timeIn, diffHours, fmtDiff, CITIZENSHIPS } from './tz.js';
 import { fmtRange } from './dossier.js';
@@ -187,7 +187,13 @@ export function openBrief(tripId) {
       ${(b.sources || []).length ? `<p class="bf-src">Источники: ${b.sources.map((s) => `<a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title || 'ссылка')}</a>`).join(' · ')}</p>` : ''}
       <p class="bf-note">Правила въезда меняются — перед поездкой сверьте с официальным сайтом посольства или консульства.</p>`;
   };
-  renderJarvis(t.brief);
+  // брифинг — тяжёлое поле, при старте не грузится: дочитываем при открытии
+  if ('brief' in t) renderJarvis(t.brief);
+  else {
+    renderJarvis(null, true);
+    ensureField('trips', tripId, 'brief').then((row) => { t.brief = row?.brief ?? null; if (!m.signal?.aborted && $('#bf-jarvis')) renderJarvis(t.brief); })
+      .catch(() => { if (!m.signal?.aborted && $('#bf-jarvis')) renderJarvis(null); });
+  }
 
   m.form.addEventListener('click', async (e) => {
     if (e.target.closest('[data-bf-retry]') || e.target.closest('[data-bf-refresh]')) { loadFacts(true); return; }

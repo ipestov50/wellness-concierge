@@ -17,7 +17,6 @@ export const CITIZENSHIPS = [
   ['BY', '🇧🇾 Беларусь'], ['KG', '🇰🇬 Киргизия'], ['TJ', '🇹🇯 Таджикистан'], ['TM', '🇹🇲 Туркменистан'], ['MD', '🇲🇩 Молдова'], ['UA', '🇺🇦 Украина'],
   ['AE', '🇦🇪 ОАЭ'], ['IL', '🇮🇱 Израиль'], ['CY', '🇨🇾 Кипр'], ['GB', '🇬🇧 Великобритания'], ['FR', '🇫🇷 Франция'], ['US', '🇺🇸 США'],
 ];
-export const CURRENCY_OF = { RU: 'RUB', KZ: 'KZT', UZ: 'UZS', AZ: 'AZN', AM: 'AMD', GE: 'GEL', BY: 'BYN', KG: 'KGS', TJ: 'TJS', TM: 'TMT', MD: 'MDL', UA: 'UAH', AE: 'AED', IL: 'ILS', GB: 'GBP', US: 'USD' };
 
 export const flag = (cc) => (cc && cc.length === 2 ? String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : '');
 const zoneLabel = (tz) => ZONES.find(([z]) => z === tz)?.[1]?.split(',')[0] || (tz || '').split('/').pop().replace(/_/g, ' ');

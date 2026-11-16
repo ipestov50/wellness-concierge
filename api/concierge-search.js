@@ -3,7 +3,8 @@
 //   места/исследование: ваши партнёры → Tavily → Gemini (поиск Google)
 // Ключи — только на сервере (Vercel): TAVILY_API_KEYS, TICKETMASTER_API_KEYS (через запятую — пул с ротацией).
 // Только для владельца, данные — с его токеном (RLS). Имена гостя в поиск не уходят.
-import { cacheKey, getCache, setCache } from './_cache.js';
+import { cacheKey, getCache, setCache, bump } from './_cache.js';
+let curAuth = ''; // токен текущего запроса — для счётчика обращений (сервис на одного владельца)
 import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, mentions, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
 import { verify } from './options.js';
 
@@ -50,6 +51,7 @@ function extractJSON(text) {
   return JSON.parse(text.slice(a, b + 1));
 }
 async function gemini(model, prompt, tools) {
+  bump(curAuth, model === LITE ? 'lite' : 'flash');
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
     body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(tools ? { tools } : {}), generationConfig: { temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } } }),
@@ -120,6 +122,7 @@ async function ticketmaster(q, loc, from, to) {
 }
 async function tavily(q, exclude = [], { depth = 'basic', include = null, max = 10, country = '' } = {}) {
   return withKeys('TAVILY_API_KEYS', async (key) => {
+    bump(curAuth, 'tavily');
     const r = await fetch('https://api.tavily.com/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ query: q, search_depth: depth, include_answer: !include, max_results: max, ...(include ? { include_domains: include } : { exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }), ...(country && !include ? { country } : {}) }), signal: AbortSignal.timeout(20000),
@@ -160,6 +163,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store'); // ответы персональные — кэш в базе, не в общем CDN
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
   const auth = req.headers.authorization || '';
+  curAuth = auth;
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
   const user = await u.json();

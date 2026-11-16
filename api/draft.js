@@ -1,8 +1,8 @@
+import { gfetch, FLASH, LITE } from './_cache.js';
 // Черновик плана для предложения Jarvis (Gemini). Только для владельца.
 // Данные читаются с токеном владельца — база сама проверяет доступ (RLS).
 // Имя гостя в ИИ не отправляется: только вкусы, ограничения и детали поездки.
 
-const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 const CATEGORIES = ['Spa & Wellness', 'Dining', 'Transport', 'Accommodation', 'Activities', 'Health & Fitness', 'Gifts & Events', 'Other'];
 
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
       партнёры: partners.map((p) => ({ id: p.id, название: p.name, тип: p.type, город: p.city, оценка: p.rating, заметки: p.notes, условия: p.terms })),
     };
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const r = await gfetch(auth, [FLASH, LITE], {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({

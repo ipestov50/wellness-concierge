@@ -1,9 +1,8 @@
 // Черновик сообщения для блока «Моего дня»: гостю — на его языке, партнёру — на языке страны.
 // Только для владельца. Имена в ИИ не отправляются: {имя} — обращение к гостю, {гость} — имя на брони.
 
-import { cacheKey, getCache, setCache } from './_cache.js';
+import { cacheKey, getCache, setCache, gfetch, FLASH, LITE } from './_cache.js';
 
-const MODEL = 'gemini-2.5-flash';
 const TZ = 'Europe/Paris';
 const LANG_BY_CC = { FR: ['fr', 'французском'], MC: ['fr', 'французском'], IT: ['it', 'итальянском'], ES: ['es', 'испанском'], DE: ['de', 'немецком'], AT: ['de', 'немецком'], CH: ['fr', 'французском'], PT: ['pt', 'португальском'] };
 const GUEST_LANG = { RU: ['ru', 'русском'], EN: ['en', 'английском'], FR: ['fr', 'французском'] };
@@ -49,7 +48,7 @@ export default async function handler(req, res) {
     const prompt = toPartner
       ? `Ты консьерж люксового сервиса. Напиши короткое деловое сообщение партнёру (${p?.type || 'заведение'}) на ${langLabel} языке для действия ниже: вежливо, конкретно (дата, время, число гостей если известно, пожелания, аллергии — обязательно, если есть). Бронь на имя «{гость}». Без лишних слов, 3–6 предложений, подпись «Concierge». Только текст сообщения. Данные: ${JSON.stringify(ctx)}`
       : `Ты личный консьерж люксового сервиса. Напиши короткое тёплое сообщение гостю на ${langLabel} языке для действия ниже. Обращайся «{имя}». Конкретно и без воды, 2–4 предложения, на «вы», без смайликов (максимум один уместный). Если нужно уточнить детали — задай 1–3 чётких вопроса. Не упоминай медицинские данные. Только текст сообщения. Данные: ${JSON.stringify(ctx)}`;
-    const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const g = await gfetch(auth, [FLASH, LITE], {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.5, thinkingConfig: { thinkingBudget: 0 } } }),
       signal: AbortSignal.timeout(30000),

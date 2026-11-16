@@ -3,9 +3,8 @@
 // совпало название и место рядом с городом → «адрес подтверждён»; иначе — «проверьте».
 // Только для владельца, данные — с его токеном (RLS). Имена гостя и близких в ИИ не отправляются.
 
-import { getCache, setCache } from './_cache.js';
+import { getCache, setCache, gfetch, FLASH, LITE } from './_cache.js';
 
-const MODEL = 'gemini-2.5-flash';
 const UA = { 'User-Agent': 'WellnessConciergeOptions/1.0' };
 const LANG = { RU: 'русском', EN: 'английском', FR: 'французском' };
 const CAT_TYPES = { Dining: ['restaurant'], 'Spa & Wellness': ['spa'], Activities: ['activity'], 'Health & Fitness': ['spa', 'activity'], Transport: ['transport'], Accommodation: ['hotel'], 'Gifts & Events': ['activity', 'other'] };
@@ -73,7 +72,7 @@ export default async function handler(req, res) {
   if (b.mode === 'probe') {
     const t0 = Date.now();
     const body = (tools) => JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Назови 3 кафе рядом с Place Masséna в Ницце с рейтингом и числом отзывов в Google Картах. Коротко.' }] }], tools, generationConfig: { thinkingConfig: { thinkingBudget: 0 } } });
-    const call = (tools) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: body(tools), signal: AbortSignal.timeout(40000) });
+    const call = (tools) => gfetch(auth, FLASH, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: body(tools), signal: AbortSignal.timeout(40000) });
     const g = await call([{ googleMaps: {} }]);
     const j = await g.json().catch(() => ({}));
     const chunks = j.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -158,7 +157,7 @@ export default async function handler(req, res) {
 } ] }
 Данные: ${JSON.stringify(ctx)}`;
     // Google Карты через Gemini (реальные места с рейтингом); если инструмент недоступен — поиск Google
-    const ask = (tools, extra = {}) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const ask = (tools, extra = {}) => gfetch(auth, FLASH, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], tools, ...extra, generationConfig: { temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } } }),
       signal: AbortSignal.timeout(70000),

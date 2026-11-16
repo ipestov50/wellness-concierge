@@ -18,9 +18,31 @@ export async function getCache(auth, key, ttlMs) {
 
 export async function setCache(auth, key, result) {
   try {
+    // изредка подчищаем записи старше 30 дней (самый долгий срок жизни кэша) — таблица не растёт бесконечно
+    if (Math.random() < 0.05) fetch(`${base()}?created_at=lt.${new Date(Date.now() - 30 * 864e5).toISOString()}`, { method: 'DELETE', headers: headers(auth), signal: AbortSignal.timeout(4000) }).catch(() => {});
     await fetch(`${base()}?on_conflict=owner_id,key`, {
       method: 'POST', headers: { ...headers(auth), Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({ key, result, created_at: new Date().toISOString() }), signal: AbortSignal.timeout(4000),
     });
   } catch {}
+}
+
+// Счётчик обращений за день (день — по времени сброса лимита Gemini, Тихоокеанское время)
+export const usageDay = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+export function bump(auth, field) {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/bump_usage`, { method: 'POST', headers: headers(auth), body: JSON.stringify({ day: usageDay(), field }), signal: AbortSignal.timeout(4000) }).catch(() => {});
+}
+
+// Запрос к Gemini с учётом в счётчике: модели пробуются по очереди (лёгкая → основная или наоборот), пока одна не ответит
+export const FLASH = 'gemini-2.5-flash';
+export const LITE = 'gemini-2.5-flash-lite';
+export async function gfetch(auth, models, init) {
+  let r;
+  for (const m of [].concat(models)) {
+    const counted = bump(auth, m === LITE ? 'lite' : 'flash');
+    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, init);
+    await counted;
+    if (r.ok) return r;
+  }
+  return r;
 }

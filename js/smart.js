@@ -260,4 +260,3 @@ async function createAll(items, text, keepText = false) {
 }
 
 // для локальной проверки превью
-export const _test = { preview, toDraft };

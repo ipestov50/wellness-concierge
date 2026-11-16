@@ -1,9 +1,9 @@
+import { gfetch, FLASH, LITE } from './_cache.js';
 // «Перед вылетом» для поездки. Только для владельца; данные — с его токеном (RLS).
 // mode=facts  — погода (Open-Meteo), праздники (Nager.Date), курсы (open.er-api) — без ИИ, бесплатно
 // mode=jarvis — въезд, платежи, связь, этикет, фразы, что предусмотреть: Gemini + живой поиск Google, с источниками.
 // Имя гостя в ИИ не отправляется.
 
-const MODEL = 'gemini-2.5-flash';
 const CUR = { FR: 'EUR', MC: 'EUR', IT: 'EUR', ES: 'EUR', DE: 'EUR', AT: 'EUR', PT: 'EUR', GR: 'EUR', CY: 'EUR', NL: 'EUR', BE: 'EUR', ME: 'EUR', HR: 'EUR', FI: 'EUR', IE: 'EUR', MT: 'EUR', LV: 'EUR', LT: 'EUR', EE: 'EUR', SK: 'EUR', SI: 'EUR', LU: 'EUR',
   CH: 'CHF', GB: 'GBP', AE: 'AED', TR: 'TRY', TH: 'THB', MV: 'USD', US: 'USD', GE: 'GEL', AM: 'AMD', AZ: 'AZN', KZ: 'KZT', UZ: 'UZS', RU: 'RUB', RS: 'RSD', CZ: 'CZK', HU: 'HUF', PL: 'PLN', IL: 'ILS', SC: 'SCR', MU: 'MUR', ID: 'IDR', JP: 'JPY', SG: 'SGD', QA: 'QAR', SA: 'SAR', EG: 'EGP', MA: 'MAD' };
 const HOME_CUR = { RU: 'RUB', KZ: 'KZT', UZ: 'UZS', AZ: 'AZN', AM: 'AMD', GE: 'GEL', BY: 'BYN', KG: 'KGS', TJ: 'TJS', TM: 'TMT', MD: 'MDL', UA: 'UAH', AE: 'AED', IL: 'ILS', GB: 'GBP', US: 'USD', CY: 'EUR', FR: 'EUR' };
@@ -117,7 +117,7 @@ function extractJSON(text) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
-async function jarvis(t, c, people) {
+async function jarvis(t, c, people, auth) {
   const kids = people.some((p) => /сын|доч|реб|дет/i.test(p.role || '')) || /дет|сын|доч|реб/i.test(t.companions || '');
   const ctx = {
     гражданство_гостя: c?.citizenship || 'не указано (скорее всего RU)',
@@ -150,7 +150,7 @@ async function jarvis(t, c, people) {
 Транспорт — актуальные цены и линии на ${new Date().getFullYear()} год по официальным сайтам перевозчика: 3–6 самых полезных линий для туриста (до главных достопримечательностей, торговых улиц, вокзалов, аэропорта), 2–4 тарифа. Если в городе нет метро — автобусы, трамваи, такси, лодки.
 Фразы — 3 штуки (такси до отеля, «у меня аллергия на…», «спасибо»). Действия — 3–6, конкретные (например: «Договориться об оплате брони через консьержа — российские карты не работают»).
 Если не уверен — так и напиши в details и поставь confidence low. Данные: ${JSON.stringify(ctx)}`;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+  const r = await gfetch(auth, FLASH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
     body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.2, thinkingConfig: { thinkingBudget: 1024 } } }),
@@ -183,7 +183,7 @@ export default async function handler(req, res) {
     if (req.body?.mode === 'jarvis') {
       if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'no_key' });
       const people = await rest(`people?client_id=eq.${t.client_id}&select=role`, auth);
-      const brief = await jarvis(t, c, people);
+      const brief = await jarvis(t, c, people, auth);
       await rest(`trips?id=eq.${id}`, auth, { method: 'PATCH', body: JSON.stringify({ brief }), headers: { Prefer: 'return=minimal' } });
       return res.status(200).json({ brief });
     }

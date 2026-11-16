@@ -21,7 +21,6 @@ export function currentConflicts() {
   const roads = [...traffic.values()].filter((x) => x.value && !x.value.error && x.value.leaveBy).map((x) => ({ request_id: x.id, ...x.value }));
   return detectScheduleConflicts(events, flights, roads);
 }
-export const affectedIds = () => new Set(currentConflicts().flatMap((c) => c.affected));
 
 // раз в несколько минут, пока «Мой день» открыт: дорога для выездов в ближайшие 3 часа (не больше трёх — бережём лимит)
 export function watchTraffic() {

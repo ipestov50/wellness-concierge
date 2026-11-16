@@ -233,8 +233,6 @@ const stageOf = (r) => {
   const o = r?.options || {};
   if (isClosedLike(r)) return null;
   if (o.booking?.confirmed_at || r.status === 'confirmed') return o.reminded_at ? null : 'remind';
-  if (o.booking?.sent_at) return 'confirm';
-  if (r.status === 'booking' && venueOf(r)) return 'partner';
   return null;
 };
 const isClosedLike = (r) => { const k = statusOf(r?.status)?.kind; return k && k !== 'active'; };
@@ -247,76 +245,7 @@ export function stageButton(r, cls = 'btn small primary') {
   return '';
 }
 
-const phoneOf = (s) => { const m = String(s || '').match(/\+?\d[\d\s().-]{7,}\d/); return m ? m[0].replace(/[^\d]/g, '') : ''; };
-const emailOf = (s) => String(s || '').match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0] || '';
-const guestsFrom = (r) => +(String(`${r.summary} ${r.original_message || ''}`).match(/(\d+)\s*(перс|чел|гост|pers|people|guest|pax)/i)?.[1] || 0) || 2;
-const fullName = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').trim();
-
-// 1) сообщение партнёру на его языке (Jarvis переводит и учитывает аллергии; имя гостя подставляем только здесь)
-export function openPartnerMsg(id, { back = null } = {}) {
-  const r = byId('requests', id);
-  const v = venueOf(r);
-  if (!r || !v) return toast('Сначала выберите место', 'err');
-  const c = byId('clients', r.client_id);
-  const bk = r.options?.booking || {};
-  const m = openModal({ title: '✉ Бронь у партнёра', saveLabel: 'Закрыть', body: `<div class="opt" id="pm">
-    <p class="opt-ctx"><b>${esc(v.name)}</b>${v.address ? ' · ' + esc(v.address) : ''}</p>
-    <div class="pm-row"><label class="f"><span>Гостей</span><input type="number" id="pm-n" min="1" max="40" value="${bk.guests || guestsFrom(r)}"></label>
-      <label class="f grow"><span>Пожелания (по-русски — Jarvis переведёт)</span><input id="pm-wish" value="${esc(bk.wish || '')}" placeholder="столик у окна, тихий зал, торт на десерт…"></label></div>
-    <button type="button" class="btn small" data-pm-gen>✦ Составить сообщение</button>
-    <div id="pm-out"></div></div>`, onSave: async () => {}, onClose: back });
-  m.form.querySelector('#cancel').hidden = true;
-  const out = m.form.querySelector('#pm-out');
-  const gen = async () => {
-    out.innerHTML = '<div class="bf-busy"><span class="spin"></span> Jarvis пишет партнёру на его языке…</div>';
-    const n = +m.form.querySelector('#pm-n').value || 2, wish = m.form.querySelector('#pm-wish').value.trim();
-    try {
-      const res = await api('message', { kind: 'partner', title: `Забронировать: ${v.name}`, detail: `Место: ${v.name}${v.address ? ', ' + v.address : ''}. Гостей: ${n}.${wish ? ' Пожелания: ' + wish + '.' : ''} Попросить подтвердить бронь ответным сообщением.`, request_id: id, client_id: r.client_id }, { signal: m.signal });
-      const text = String(res.text || '').replace(/\{гость\}/g, fullName(c)).replace(/\{имя\}/g, fullName(c));
-      const phone = phoneOf(v.contact), email = emailOf(v.contact);
-      out.innerHTML = `<label class="f"><span>Сообщение ${esc(res.lang_label || '')}</span><textarea id="pm-text" rows="8">${esc(text)}</textarea></label>
-        <div class="opt-act"><button type="button" class="btn primary" data-pm-send="copy">Скопировать</button>
-          ${phone ? `<button type="button" class="btn" data-pm-send="wa" data-phone="${phone}">WhatsApp</button>` : ''}
-          ${email ? `<button type="button" class="btn" data-pm-send="mail" data-email="${esc(email)}">Почта</button>` : ''}
-          ${!phone && !email ? `<span class="muted">Контакт: ${v.website ? `<a href="${esc(v.website)}" target="_blank" rel="noopener">сайт</a> · ` : ''}<a href="${esc(v.maps)}" target="_blank" rel="noopener">телефон в Google Maps</a></span>` : ''}</div>`;
-    } catch (e) {
-      if (isAbort(e)) return;
-      out.innerHTML = `<p class="muted">${e.message === 'rate_limited' ? 'Лимит Gemini — попробуйте через минуту.' : 'Не получилось составить сообщение.'}</p>`;
-    }
-  };
-  m.form.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-pm-gen]')) return gen();
-    const s = e.target.closest('[data-pm-send]');
-    if (!s) return;
-    const text = m.form.querySelector('#pm-text').value;
-    try { await navigator.clipboard.writeText(text); } catch {}
-    if (s.dataset.pmSend === 'wa') window.open(`https://wa.me/${s.dataset.phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-    if (s.dataset.pmSend === 'mail') location.href = `mailto:${s.dataset.email}?subject=${encodeURIComponent('Réservation / Booking')}&body=${encodeURIComponent(text)}`;
-    const cur = byId('requests', id);
-    const booking = { sent_at: new Date().toISOString(), guests: +m.form.querySelector('#pm-n').value || 2, wish: m.form.querySelector('#pm-wish').value.trim() };
-    try {
-      await save('requests', id, { options: { ...(cur.options || {}), booking } });
-      if (hasStatus('booking') && cur.status !== 'booking' && statusOf(cur.status)?.kind === 'active') await setStatus(id, 'booking', { quiet: true });
-      toast('Отправлено партнёру · ждём подтверждения');
-      m.close();
-    } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
-  });
-  gen();
-}
-
-// 2) партнёр подтвердил → «Подтверждено»
-export async function confirmBooking(id) {
-  const r = byId('requests', id);
-  if (!r) return;
-  const o = r.options || {};
-  try {
-    await save('requests', id, { options: { ...o, booking: { ...(o.booking || {}), confirmed_at: new Date().toISOString() } } });
-    if (hasStatus('confirmed')) await setStatus(id, 'confirmed', { quiet: true });
-    toast('✓ Бронь подтверждена — накануне напомню гостю', '', { label: 'Отменить', fn: async () => { await save('requests', id, { options: o }); if (hasStatus('booking')) await setStatus(id, 'booking', { quiet: true }); } });
-  } catch (e) { toast('Не сохранилось: ' + (e.message || e), 'err'); }
-}
-
-// 3) напоминание гостю: когда, где, карта — на его языке, без ИИ (точные данные из запроса)
+// напоминание гостю: когда, где, карта — на его языке, без ИИ (точные данные из запроса)
 const REM = {
   RU: (f, when, v, n) => `${f ? f + ', н' : 'Н'}апоминаю: ${when} — ${v.name}.${n ? ` Столик на ${n}.` : ''}`,
   EN: (f, when, v, n) => `${f ? f + ', a' : 'A'} quick reminder: ${when} — ${v.name}.${n ? ` Table for ${n}.` : ''}`,
@@ -361,9 +290,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   e.stopPropagation(); e.preventDefault();
   const id = b.dataset.id;
-  if (b.dataset.stage === 'partner') openPartnerMsg(id, { back: backTo(b) });
-  else if (b.dataset.stage === 'confirm') { b.disabled = true; confirmBooking(id).then(() => { const back = backTo(b); if (back) back(); }); }
-  else if (b.dataset.stage === 'remind') openReminder(id, { back: backTo(b) });
+  if (b.dataset.stage === 'remind') openReminder(id, { back: backTo(b) });
 });
 
 // верх карточки запроса: только факты. Кнопка подбора — неброская; пока гость выбирает — «ждём выбор» и номера

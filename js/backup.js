@@ -8,7 +8,6 @@ const TABLES = ['clients', 'requests', 'partners', 'statuses'];
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 let lastBackupAt = null;
 
-export const getLastBackup = () => lastBackupAt;
 export function setLastBackupFromSession(session) { lastBackupAt = session?.user?.user_metadata?.last_backup_at || null; }
 
 export function daysSinceBackup() {
