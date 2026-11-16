@@ -4,7 +4,7 @@
 // Ключи — только на сервере (Vercel): TAVILY_API_KEYS, TICKETMASTER_API_KEYS (через запятую — пул с ротацией).
 // Только для владельца, данные — с его токеном (RLS). Имена гостя в поиск не уходят.
 import { cacheKey, getCache, setCache } from './_cache.js';
-import { EXCLUDE_DOMAINS, domainOf, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
+import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
 import { verify } from './options.js';
 
 const SMART = 'gemini-2.5-flash';
@@ -87,11 +87,11 @@ async function ticketmaster(q, loc, from, to) {
     }) };
   });
 }
-async function tavily(q, exclude = []) {
+async function tavily(q, exclude = [], { depth = 'basic', include = null, max = 10 } = {}) {
   return withKeys('TAVILY_API_KEYS', async (key) => {
     const r = await fetch('https://api.tavily.com/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ query: q, search_depth: 'advanced', include_answer: true, max_results: 10, exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }), signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({ query: q, search_depth: depth, include_answer: !include, max_results: max, ...(include ? { include_domains: include } : { exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }) }), signal: AbortSignal.timeout(20000),
     });
     if (!r.ok) return { status: r.status };
     const j = await r.json();
@@ -162,7 +162,12 @@ export default async function handler(req, res) {
     const when = from ? (to && to !== from ? `${from} – ${to}` : from) : '';
     if (!results.length) {
       const tq = `${q}${where ? ` in ${where}` : ''}${when ? ` ${when}` : ''}${category === 'venues' ? ' authentic local insider recommendations, opening hours' : ''}`;
-      const tv = await tavily(tq, ownDomains);
+      // параллельно: общий поиск и поиск только по признанным гидам (быстрый режим — оба вместе ~2 кредита)
+      const [tv, tg] = await Promise.all([
+        tavily(tq, ownDomains),
+        category !== 'events' ? tavily(`${q}${where ? ` ${where}` : ''}`, [], { include: Object.keys(GUIDES), max: 6 }) : Promise.resolve({}),
+      ]);
+      if (tg.sources?.length) tv.sources = [...(tv.sources || []), ...tg.sources.filter((g) => !(tv.sources || []).some((s) => s.url === g.url))];
       tried.push({ provider: 'tavily', status: tv.sources ? (tv.sources.length ? 'ok' : 'empty') : tv.skipped || tv.error || tv.status });
       if (tv.sources?.length) {
         rawSources = tv.sources.filter((s) => !isBlocked(s.url, ownDomains));
@@ -210,6 +215,11 @@ export default async function handler(req, res) {
     for (const x of list) {
       if (x.url && isResale(x.url)) { x.resale = true; x.url = ''; x.red_flags.unshift('Билеты только у перепродавцов — высокий риск'); }
       else if (x.url && isBlocked(x.url, ownDomains)) x.url = '';
+      // «Сайт» — только официальный сайт места (или первичная продажа билетов); остальное — просто «источник»
+      if (x.url && x.kind === 'venue' && !isOfficial(x.url, x.title)) { x.source_url = x.url; x.url = ''; }
+      // официальный сайт нашёлся среди источников — ставим его
+      if (!x.url && x.kind === 'venue') { const off = rawSources.find((s) => isOfficial(s.url, x.title)); if (off) x.url = off.url; }
+      if (x.url && x.kind === 'event' && !isPrimaryTicket(x.url) && !isOfficial(x.url, x.title) && x.sourceProvider !== 'ticketmaster') { x.source_url = x.url; x.url = ''; }
       if (x.kind === 'event' && x.url && isPrimaryTicket(x.url)) x.primary = true;
     }
     await Promise.all(list.map(async (x) => {

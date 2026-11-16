@@ -1835,3 +1835,4 @@ details.g-handled .trow-wrap { opacity: .7; }
 .cs-bans { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); animation: rise .2s var(--ease); }
 .cs-ban-i { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; background: var(--soft); font-size: 12.5px; }
 .cs-ban-i button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; } .cs-ban-i button:hover { background: var(--line); color: var(--ink); }
+.cs-srcl { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }

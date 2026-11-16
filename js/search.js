@@ -21,6 +21,7 @@ function trustLine(x) {
   }
   return `<p class="cs-trust low"><b>⚠ Проверьте</b>${(t.missing || []).length ? ' · нет: ' + t.missing.map(esc).join(', ') : ''}</p>`;
 }
+const srcLink = (x) => (x.source_url ? ` · <a class="cs-srcl" href="${esc(x.source_url)}" target="_blank" rel="noopener noreferrer" title="Источник, не официальный сайт">${esc(domainOf(x.source_url))}</a>` : '');
 
 const SOURCE = { black_book: 'ваш партнёр', ticketmaster: 'Ticketmaster', tavily: 'Tavily', gemini: 'Google' };
 const CATS = [['auto', 'Всё'], ['venues', 'Места'], ['events', 'События'], ['general', 'Разузнать']];
@@ -57,7 +58,7 @@ export function openSearch({ query = '' } = {}) {
         <p class="cs-src">${x.kind === 'event' ? 'Событие' : 'Место'} · ${esc(SOURCE[x.sourceProvider] || x.sourceProvider)}</p>
         <h3 class="cs-title">${esc(x.title)}</h3>
         ${meta.length ? `<p class="cs-meta">${meta.map(esc).join(' · ')}</p>` : ''}
-        ${trustLine(x)}
+        ${trustLine(x).replace(/<\/p>$/, srcLink(x) + '</p>') || (x.source_url ? `<p class="cs-trust">источник${srcLink(x)}</p>` : '')}
         ${x.summary ? `<p class="cs-sum">${esc(x.summary)}</p>` : ''}
         ${x.addressOrVenue ? `<p class="cs-addr">${esc(x.addressOrVenue)}</p>` : ''}
         ${x.holiday || x.status === 'offsale' || (x.red_flags || []).length ? `<ul class="cs-notes">
