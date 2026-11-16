@@ -34,6 +34,7 @@ export function smartBar() {
         aria-label="Умное поле: опишите запрос обычным текстом" ${smart.busy ? 'disabled' : ''}>${esc(smart.text)}</textarea>
       <div class="jarvis-btns">
         <button class="jarvis-ahead" type="button" id="jarvisAhead" title="Jarvis, что впереди? — планы на ближайшие важные события" aria-label="Jarvis предлагает: планы на ближайшие события">✦<span>Что впереди?</span></button>
+        <button class="jarvis-search" type="button" id="jarvisSearch" title="Поиск мест и событий для гостя" aria-label="Поиск мест и событий">⌕<span>Поиск</span></button>
         <button class="jarvis-send" type="submit" aria-label="Разобрать" ${smart.busy ? 'disabled' : ''}>${smart.busy ? '<span class="spin"></span>' : '↵'}</button>
       </div>
     </form>
@@ -58,6 +59,11 @@ export function bindSmart(app) {
   app.querySelector('#jarvisForm').addEventListener('submit', (e) => { e.preventDefault(); run(); });
   app.querySelector('#jarvisAuto').addEventListener('change', (e) => { smart.auto = e.target.checked; ls.set(LS_AUTO, smart.auto ? '1' : null); });
   app.querySelector('#jarvisClose')?.addEventListener('click', () => { smart.result = null; render(); });
+  // «Поиск»: текст из поля становится запросом поиска
+  app.querySelector('#jarvisSearch')?.addEventListener('click', async () => {
+    const { openSearch } = await import('./search.js');
+    openSearch({ query: smart.text.trim() });
+  });
   app.querySelector('#jarvisAhead')?.addEventListener('click', async () => {
     const { runDeep } = await import('./suggest.js');
     runDeep();

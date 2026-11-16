@@ -92,7 +92,6 @@ function renderShell(session) {
           <button class="icon-btn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Меню">⋯</button>
           <div class="menu-list" id="menuList" hidden>
             <div class="menu-who">${esc(session.user.email)}</div>
-            <button type="button" id="searchBtn">🔎 Поиск Jarvis…</button>
             <button type="button" id="tgBtn">✈️ Telegram-уведомления…</button>
             <button type="button" id="backupBtn">💾 Резервная копия…</button>
             <button type="button" id="setPass">Задать пароль</button>
@@ -193,15 +192,6 @@ document.addEventListener('click', (e) => {
   } else if (t.id === 'logout') {
     sb.auth.signOut();
   }
-});
-// «🔎 Поиск Jarvis» — из меню, профиля гостя или карточки запроса (контекст гостя подставляется)
-document.addEventListener('click', (e) => {
-  const t = e.target.closest('#searchBtn,[data-search-client],[data-search-req]');
-  if (!t) return;
-  e.stopPropagation();
-  const menu = $('#menuList'); if (menu) menu.hidden = true;
-  const back = t.closest('[data-req-id]') ? t.closest('[data-req-id]').dataset.reqId : null;
-  import('./search.js').then((s) => s.openSearch({ client_id: t.dataset.searchClient || null, request_id: t.dataset.searchReq || null, back }));
 });
 // «Перед вылетом» — модуль брифинга грузится при первом нажатии
 document.addEventListener('click', (e) => {

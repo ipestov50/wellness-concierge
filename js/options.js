@@ -371,5 +371,5 @@ export function requestOptionsBar(r) {
   const o = r?.options;
   if (o?.sent_at && o.chosen == null) return `<div class="req-opts"><span class="opt-badge wait">Ждём выбор гостя</span>${pickChips(r)}</div>`;
   if (o?.chosen != null || r?.venue?.name) return '';
-  return `<div class="req-opts"><button type="button" class="vo-btn" data-options="${esc(r.id)}">✦ Варианты для гостя</button><button type="button" class="vo-btn" data-search-req="${esc(r.id)}">🔎 Поиск</button></div>`;
+  return `<div class="req-opts"><button type="button" class="vo-btn" data-options="${esc(r.id)}">✦ Варианты для гостя</button></div>`;
 }

@@ -115,7 +115,6 @@ function profile(c) {
       <div class="sub">${[c.language, c.city].filter(Boolean).map(esc).join(' · ')}${c.last_contact ? ` · контакт ${esc(fmtDate(c.last_contact))}` : ''}</div></div>
       <button class="icon-btn edit-btn" data-editcl="${c.id}" type="button" aria-label="Редактировать профиль" title="Редактировать">✎</button></div>
     ${guestClock(c)}
-    <button type="button" class="vo-btn cs-open" data-search-client="${c.id}">🔎 Поиск мест и событий для гостя</button>
     ${birthdayLine(c.birthday)}
     ${contacts(c)}
     ${restrictionsBlock(c)}
