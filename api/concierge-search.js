@@ -155,8 +155,11 @@ export default async function handler(req, res) {
 Только аутентичные, не туристические места или реальные события. Ничего не выдумывай: адрес/дата — только если есть в источниках, url — только из списка источников.
 Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event", "title": "", "summary": "1–2 предложения по-русски: что это и почему подходит", "addressOrVenue": "", "date": "YYYY-MM-DD или пусто", "time": "HH:MM или пусто", "url": "", "holiday": "часы в праздники/особые дни, если указаны, иначе пусто", "red_flags": ["по-русски, если есть"] } ] }
 ИСТОЧНИКИ: ${JSON.stringify(tv.sources)}`;
-        const g = await gemini(LITE, prompt);
-        if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'tavily' })); } catch {} }
+        // собираем карточки: лёгкая модель (свой лимит), если она недоступна — основная
+        let g = await gemini(LITE, prompt), synth = LITE;
+        if (!g.text) { const st1 = g.status; g = await gemini(SMART, prompt); synth = g.text ? SMART : `lite:${st1}/smart:${g.status}`; }
+        if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'tavily' })); } catch { synth = 'bad_json'; } }
+        tried.push({ provider: 'cards', status: results.length ? 'ok' : synth });
         // Gemini недоступен — отдаём найденное Tavily как есть (с источниками)
         if (!results.length) results = tv.sources.slice(0, 6).map((s) => ({ kind: category === 'events' ? 'event' : 'venue', title: s.title, summary: str(s.content, 240), addressOrVenue: '', url: s.url, sourceProvider: 'tavily' }));
       }
