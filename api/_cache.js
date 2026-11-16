@@ -38,11 +38,16 @@ export const FLASH = 'gemini-2.5-flash';
 export const LITE = 'gemini-2.5-flash-lite';
 export async function gfetch(auth, models, init) {
   let r;
+  const tried = []; // что пробовали и чем ответило — видно в ответе функции при сбое
   for (const m of [].concat(models)) {
     const counted = bump(auth, m === LITE ? 'lite' : 'flash');
     r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, init);
     await counted;
+    r.tried = tried;
     if (r.ok) return r;
+    let why = '';
+    try { why = (JSON.parse(await r.clone().text())?.error?.message || '').slice(0, 160); } catch {}
+    tried.push(`${m === LITE ? 'lite' : 'flash'}:${r.status}${why ? ' ' + why : ''}`);
   }
   return r;
 }

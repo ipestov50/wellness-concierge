@@ -144,7 +144,7 @@ export default async function handler(req, res) {
     });
     if (!r.ok) {
       const status = r.status === 429 ? 'rate_limited' : 'gemini_error';
-      return res.status(502).json({ error: status, code: r.status });
+      return res.status(502).json({ error: status, code: r.status, tried: r.tried });
     }
     const data = await r.json();
     const raw = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
