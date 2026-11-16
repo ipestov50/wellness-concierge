@@ -18,11 +18,14 @@ export const PRIMARY_TICKETS = ['ticketmaster.', 'eventim.', 'axs.com', 'seetick
 export const RESALE = ['stubhub.', 'ticketswap.', 'vividseats.com', 'seatgeek.com', 'tickpick.com', 'gigsberg.com', 'fansale.', 'twickets.', 'ticketexchange'];
 // категорически запрещено (мошенничество, завышенная перепродажа, сайты-двойники, короткие ссылки)
 export const BLOCKED = ['viagogo.', 'ticombo.', 'footballticketnet.', 'livefootballtickets.', 'ticketbis.', 'seatwave.', 'onlineticketshop.', 'ticket-compare.', 'tixstock.',
-  'premiumseats.', 'sportsevents365.', 'ticketsales.com', 'getmein.', 'bit.ly', 'tinyurl.com', 't.co', 'goo.gl/', 'cutt.ly', 'shorturl.', 'rebrand.ly', 'is.gd', 'ow.ly'];
+  'premiumseats.', 'sportsevents365.', 'ticketsales.com', 'getmein.',
+  // частные объявления — частый канал мошенничества, для VIP-брони не используем
+  'kleinanzeigen.', 'ebay.', 'leboncoin.', 'avito.', 'subito.it', 'wallapop.', 'marktplaats.', 'olx.', 'craigslist.', 'gumtree.', 'quoka.', 'willhaben.', 'bit.ly', 'tinyurl.com', 't.co', 'goo.gl/', 'cutt.ly', 'shorturl.', 'rebrand.ly', 'is.gd', 'ow.ly'];
 // те же запреты — конкретными доменами, чтобы поиск исключал их сразу
 export const EXCLUDE_DOMAINS = ['viagogo.com', 'viagogo.de', 'viagogo.co.uk', 'viagogo.fr', 'viagogo.it', 'viagogo.es', 'ticombo.com', 'ticombo.de', 'footballticketnet.com',
   'livefootballtickets.com', 'ticketbis.com', 'seatwave.com', 'onlineticketshop.com', 'ticket-compare.com', 'tixstock.com', 'premiumseats.co.uk', 'sportsevents365.com',
-  'ticketsales.com', 'getmein.com', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'rebrand.ly', 'is.gd', 'ow.ly'];
+  'ticketsales.com', 'getmein.com', 'kleinanzeigen.de', 'ebay.de', 'ebay.com', 'ebay.fr', 'ebay.it', 'leboncoin.fr', 'avito.ru', 'subito.it', 'wallapop.com', 'marktplaats.nl',
+  'olx.pl', 'olx.ua', 'olx.kz', 'craigslist.org', 'gumtree.com', 'quoka.de', 'willhaben.at', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'rebrand.ly', 'is.gd', 'ow.ly'];
 // соцсети и агрегаторы — не «официальный сайт»
 const NOT_OFFICIAL = ['instagram.com', 'facebook.com', 'tiktok.com', 'linktr.ee', 'booking.com', 'expedia.', 'hotels.com', 'agoda.com', 'trip.com', 'wikipedia.org',
   'youtube.com', 'pinterest.', 'reddit.com', 'medium.com', 'blogspot.', 'wordpress.com', ...MAPS, ...Object.keys(GUIDES)];
