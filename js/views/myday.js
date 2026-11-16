@@ -57,6 +57,13 @@ function whenLabel(iso) {
   const rel = day === addDays(today, 1) ? 'завтра, ' : '';
   return `${rel}${date}${t === '00:00' ? '' : ' · ' + t}`;
 }
+// срок запроса справа в заголовке: сегодня — только время, другой день — коротко с датой
+function dueChip(r, future) {
+  if (!r?.deadline || future) return '';
+  const ms = Date.parse(r.deadline);
+  const same = dayIn(OWNER_TZ, ms) === dayIn(OWNER_TZ, Date.now());
+  return `<span class="db-due" title="Срок запроса (Париж)">${same ? hmIn(OWNER_TZ, ms) : esc(whenLabel(r.deadline))}</span>`;
+}
 function blockHtml(b, { big = false, future = false } = {}) {
   const c = byId('clients', b.client_id);
   const r = b.request_id ? byId('requests', b.request_id) : null;
@@ -65,7 +72,7 @@ function blockHtml(b, { big = false, future = false } = {}) {
     ${future && r?.deadline ? `<div class="db-when">📅 ${esc(whenLabel(r.deadline))}<span>подготовить заранее</span></div>` : ''}
     ${r ? `<button type="button" class="db-check" data-db-complete="${esc(r.id)}" title="Запрос выполнен — уйдёт в «Выполнено» на доске" aria-label="Запрос выполнен: ${esc(r.summary)}">${CHECK}</button>` : '<span class="db-check-sp"></span>'}
     <div class="db-body">
-      <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b></div>
+      <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b>${dueChip(r, future)}</div>
       ${c || b.who ? `<div class="db-who">${c ? avatar(c, 'av-xs') : ''}<span>${esc(b.who || c?.name || '')}</span>${r ? `<span class="db-st">${esc(statusLabel(r.status))}</span>` : ''}</div>` : ''}
       ${b.detail || r?.summary ? `<p class="db-detail">${esc(b.detail || r.summary)}</p>` : ''}
       ${r && !future ? `${optionsBadge(r)}${pickChips(r)}` : ''}
