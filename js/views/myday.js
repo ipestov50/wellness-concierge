@@ -116,7 +116,6 @@ export function dayView() {
     <header class="day-head">
       <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span>${tzBadge()}</div>
       <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
-      <button type="button" class="sh-btn" id="shiftBtn" title="Итоги смены и дневник"><span>📓</span> Конец смены</button>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
     ${conflictsBlock()}
@@ -241,7 +240,6 @@ export function bindDay(app) {
   const root = app.querySelector('.dayv');
   if (!root) return;
   root.querySelector('#daySettings')?.addEventListener('click', openSettings);
-  root.querySelector('#shiftBtn')?.addEventListener('click', () => import('../shift.js').then((m) => m.openShift()));
   watchTraffic(); // пробки для выездов в ближайшие 3 часа (кэш 4 мин)
   root.addEventListener('click', async (e) => {
     const t = e.target;

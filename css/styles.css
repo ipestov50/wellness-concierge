@@ -1757,38 +1757,6 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .mem-add { margin-top: 10px; border: 1px dashed var(--line); background: none; color: var(--accent); font-weight: 600; padding: 10px; border-radius: 12px; width: 100%; cursor: pointer; } .mem-add:hover { background: var(--soft); }
 .mem-skel { display: grid; gap: 8px; } .mem-skel i, .idea-card.skel i { display: block; height: 54px; border-radius: 14px; background: linear-gradient(90deg, var(--soft) 0%, color-mix(in srgb, var(--soft) 50%, var(--surface)) 50%, var(--soft) 100%); background-size: 200% 100%; animation: vsk 1.3s ease-in-out infinite; }
 
-/* ================= Конец смены / дневник ================= */
-.sh-btn { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
-.sh-btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--soft); } .sh-btn:active { transform: scale(.97); }
-@media (max-width: 560px) { .sh-btn { padding: 0 11px; font-size: 13px; } }
-.sh-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: -4px 0 14px; }
-.sh-tabs button { position: relative; border: 0; background: none; padding: 8px 0 11px; font-weight: 600; color: var(--muted); cursor: pointer; }
-.sh-tabs button[aria-selected="true"] { color: var(--ink); } .sh-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px; }
-.sh-seg { display: inline-flex; background: var(--soft); padding: 3px; border-radius: 12px; gap: 2px; margin-bottom: 14px; }
-.sh-seg button { border: 0; background: none; padding: 7px 14px; border-radius: 9px; font-weight: 600; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
-.sh-seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-.sh-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
-.sh-stat { padding: 12px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-align: center; }
-.sh-stat b { display: block; font-family: var(--f-head); font-size: 28px; line-height: 1.1; } .sh-stat small { color: var(--muted); font-size: 11.5px; }
-.sh-stat.ok b { color: var(--accent); } .sh-stat.hot { border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); background: color-mix(in srgb, var(--crit-bg) 60%, var(--surface)); } .sh-stat.hot b { color: var(--crit); }
-.sh-grp { margin-bottom: 14px; } .sh-grp h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.sh-grp h4 span { background: var(--soft); border-radius: 99px; padding: 1px 8px; font-size: 11px; } .sh-grp.hot h4 { color: var(--crit); } .sh-grp.wait h4 { color: var(--high); }
-.sh-row { display: flex; gap: 11px; align-items: center; padding: 9px 10px; border-radius: 12px; cursor: pointer; transition: background .12s, opacity .12s; } .sh-row:hover { background: var(--soft); } .sh-row.off { opacity: .45; }
-.sh-row input { position: absolute; opacity: 0; pointer-events: none; } .sh-row input:focus-visible + .sh-ck { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sh-rt { min-width: 0; display: grid; } .sh-rt b { font-weight: 600; font-size: 14.5px; overflow-wrap: anywhere; } .sh-rt small { color: var(--muted); font-size: 12.5px; }
-.sh-empty { text-align: center; color: var(--muted); padding: 18px 0; }
-.sh-out { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); display: grid; gap: 10px; }
-.sh-out-h { display: flex; justify-content: space-between; align-items: center; }
-.sh-out textarea { font-size: 14px !important; line-height: 1.5; min-height: 150px; background: var(--bg) !important; }
-.sh-note, .sh-diary label { display: grid; gap: 5px; } .sh-note span, .sh-diary label span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.sh-diary { display: grid; gap: 12px; padding-top: 4px; } .sh-diary h4 { margin: 0; font-family: var(--f-head); font-size: 19px; }
-.sh-diary textarea { min-height: 64px; }
-.sh-week { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-.sh-week > div { padding: 12px; border-radius: 14px; background: var(--soft); text-align: center; } .sh-week b { display: block; font-family: var(--f-head); font-size: 24px; } .sh-week small { color: var(--muted); font-size: 11.5px; }
-.sh-log { padding: 13px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin-bottom: 8px; display: grid; gap: 6px; }
-.sh-log header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; } .sh-log header span { color: var(--muted); font-size: 13px; } .sh-log header em { margin-left: auto; font-style: normal; color: var(--accent); font-size: 13px; font-weight: 600; }
-.sh-log p { margin: 0; font-size: 14px; } .sh-log p i { font-style: normal; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--accent); margin-right: 8px; }
-
 /* ================= Идеи для гостя ================= */
 .idea-entry { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 16px; margin-bottom: 14px; text-align: left; cursor: pointer; border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 11%, var(--surface)), var(--surface) 70%); transition: transform .15s var(--ease, ease), box-shadow .2s, border-color .2s; }
