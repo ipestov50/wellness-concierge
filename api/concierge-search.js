@@ -4,6 +4,8 @@
 // Ключи — только на сервере (Vercel): TAVILY_API_KEYS, TICKETMASTER_API_KEYS (через запятую — пул с ротацией).
 // Только для владельца, данные — с его токеном (RLS). Имена гостя в поиск не уходят.
 import { cacheKey, getCache, setCache } from './_cache.js';
+import { EXCLUDE_DOMAINS, domainOf, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
+import { verify } from './options.js';
 
 const SMART = 'gemini-2.5-flash';
 const LITE = 'gemini-2.5-flash-lite';
@@ -85,11 +87,11 @@ async function ticketmaster(q, loc, from, to) {
     }) };
   });
 }
-async function tavily(q) {
+async function tavily(q, exclude = []) {
   return withKeys('TAVILY_API_KEYS', async (key) => {
     const r = await fetch('https://api.tavily.com/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ query: q, search_depth: 'advanced', include_answer: true, max_results: 8 }), signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({ query: q, search_depth: 'advanced', include_answer: true, max_results: 10, exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }), signal: AbortSignal.timeout(25000),
     });
     if (!r.ok) return { status: r.status };
     const j = await r.json();
@@ -125,14 +127,27 @@ export default async function handler(req, res) {
     }
     const prefs = c ? [c.diet?.length && `диета: ${c.diet.join(', ')}`, c.allergies?.length && `аллергии: ${c.allergies.join(', ')}`, c.dislikes?.length && `не любит: ${c.dislikes.join(', ')}`, c.likes?.length && `любит: ${c.likes.join(', ')}`].filter(Boolean).join('; ') : '';
     const ck = cacheKey('cs', q, category, city, from, to, c?.id || '');
-    if (!b.force) { const hit = await getCache(auth, ck, category === 'events' ? 30 * 60e3 : 6 * 3600e3); if (hit) return res.status(200).json({ ...hit, cached: true }); }
-    const loc = await place(city);
+    if (!b.force) {
+      const hit = await getCache(auth, ck, category === 'events' ? 30 * 60e3 : 6 * 3600e3);
+      if (hit) {
+        const bl = await rest('search_blocks?select=kind,value', auth).catch(() => []);
+        const kv = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+        const vs = new Set(bl.filter((x) => x.kind === 'venue').map((x) => x.value)), ds = bl.filter((x) => x.kind === 'domain').map((x) => x.value);
+        return res.status(200).json({ ...hit, results: hit.results.filter((x) => !vs.has(kv(x.title)) && !(x.url && ds.includes(domainOf(x.url)))), cached: true });
+      }
+    }
+    // параллельно: город, ваш чёрный список, ваши партнёры
+    const [loc, blocks, partners] = await Promise.all([
+      place(city),
+      rest('search_blocks?select=kind,value', auth).catch(() => []),
+      city ? rest(`partners?city=ilike.${encodeURIComponent('*' + city + '*')}&select=id,name,type,address,contact,notes,rating&limit=60`, auth).catch(() => []) : [],
+    ]);
     const tried = [];
-    let results = [], answer = '', sources = [];
+    let results = [], answer = '', sources = [], rawSources = [];
+    const ownDomains = blocks.filter((x) => x.kind === 'domain').map((x) => x.value);
 
     // ---------- 0) ваша база партнёров — бесплатно ----------
     const words = q.toLowerCase().split(/[^a-zа-яё0-9]+/i).filter((w) => w.length > 3);
-    const partners = city ? await rest(`partners?city=ilike.${encodeURIComponent('*' + city + '*')}&select=id,name,type,address,contact,notes,rating&limit=60`, auth).catch(() => []) : [];
     const own = partners.filter((p) => words.some((w) => `${p.name} ${p.notes || ''} ${p.type}`.toLowerCase().includes(w))).slice(0, 3)
       .map((p) => ({ kind: 'venue', title: p.name, summary: str(p.notes, 200), addressOrVenue: p.address || city, url: '', contact: p.contact || '', partner_id: p.id, sourceProvider: 'black_book' }));
 
@@ -147,21 +162,22 @@ export default async function handler(req, res) {
     const when = from ? (to && to !== from ? `${from} – ${to}` : from) : '';
     if (!results.length) {
       const tq = `${q}${where ? ` in ${where}` : ''}${when ? ` ${when}` : ''}${category === 'venues' ? ' authentic local insider recommendations, opening hours' : ''}`;
-      const tv = await tavily(tq);
+      const tv = await tavily(tq, ownDomains);
       tried.push({ provider: 'tavily', status: tv.sources ? (tv.sources.length ? 'ok' : 'empty') : tv.skipped || tv.error || tv.status });
       if (tv.sources?.length) {
-        answer = tv.answer; sources = tv.sources.map(({ title, url }) => ({ title, url }));
+        rawSources = tv.sources.filter((s) => !isBlocked(s.url, ownDomains));
+        answer = tv.answer; sources = rawSources.map(({ title, url }) => ({ title, url }));
         const prompt = `Ты консьерж уровня Les Clefs d'Or. По ИСТОЧНИКАМ ниже (и только по ним) собери до 6 карточек под запрос: «${q}»${where ? `, город: ${where}` : ''}${when ? `, даты: ${when}` : ''}${prefs ? `, гость: ${prefs}` : ''}.
-Только аутентичные, не туристические места или реальные события. Ничего не выдумывай: адрес/дата — только если есть в источниках, url — только из списка источников.
+Только аутентичные, не туристические, по-настоящему лучшие места или реальные события. Ничего не выдумывай: адрес/дата — только если есть в источниках, url — только из списка источников, ЛУЧШЕ официальный сайт заведения или первичная продажа билетов; перепродавцов и сомнительные сайты не используй. Если место упомянуто в признанном гиде (Michelin, Gault&Millau, Falstaff, Time Out и т.п.) — укажи это в summary.
 Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event", "title": "", "summary": "1–2 предложения по-русски: что это и почему подходит", "addressOrVenue": "", "date": "YYYY-MM-DD или пусто", "time": "HH:MM или пусто", "url": "", "holiday": "часы в праздники/особые дни, если указаны, иначе пусто", "red_flags": ["по-русски, если есть"] } ] }
-ИСТОЧНИКИ: ${JSON.stringify(tv.sources)}`;
+ИСТОЧНИКИ: ${JSON.stringify(rawSources)}`;
         // собираем карточки: лёгкая модель (свой лимит), если она недоступна — основная
         let g = await gemini(LITE, prompt), synth = LITE;
         if (!g.text) { const st1 = g.status; g = await gemini(SMART, prompt); synth = g.text ? SMART : `lite:${st1}/smart:${g.status}`; }
         if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'tavily' })); } catch { synth = 'bad_json'; } }
         tried.push({ provider: 'cards', status: results.length ? 'ok' : synth });
         // Gemini недоступен — отдаём найденное Tavily как есть (с источниками)
-        if (!results.length) results = tv.sources.slice(0, 6).map((s) => ({ kind: category === 'events' ? 'event' : 'venue', title: s.title, summary: str(s.content, 240), addressOrVenue: '', url: s.url, sourceProvider: 'tavily' }));
+        if (!results.length) results = rawSources.slice(0, 6).map((s) => ({ kind: category === 'events' ? 'event' : 'venue', title: s.title, summary: str(s.content, 240), addressOrVenue: '', url: s.url, sourceProvider: 'tavily' }));
       }
     }
     // ---------- 3) последний запас: Gemini с поиском Google ----------
@@ -172,6 +188,8 @@ export default async function handler(req, res) {
       tried.push({ provider: 'gemini', status: g.text ? 'ok' : g.status || 'error' });
       if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'gemini' })); } catch {} }
       sources = g.chunks?.map((x) => x.web).filter(Boolean).slice(0, 6).map((w) => ({ title: str(w.title, 120), url: str(w.uri, 500) })) || [];
+      // у Google в источниках только домен — проверяем по нему
+      rawSources = (g.chunks || []).map((x) => x.web).filter(Boolean).map((w) => ({ title: w.title || '', url: `https://${w.title || ''}`, content: '' }));
     }
     if (!results.length && !own.length) {
       const limited = tried.some((t) => [429, 'exhausted', 'cooldown'].includes(t.status));
@@ -186,7 +204,29 @@ export default async function handler(req, res) {
       contact: str(x.contact, 120), partner_id: x.partner_id || null, sourceProvider: x.sourceProvider,
       maps: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([x.title, x.addressOrVenue || city].filter(Boolean).join(', '))}`,
     });
-    const out = { results: [...own, ...results].filter((x) => x.title).slice(0, 9).map(clean), answer, sources, tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
+    // ---------- проверка достоверности: ссылки, перепродажа, карта, независимые подтверждения ----------
+    const near = loc ? { lat: loc.lat, lon: loc.lon } : null;
+    let list = [...own, ...results].filter((x) => x.title).slice(0, 10).map(clean);
+    for (const x of list) {
+      if (x.url && isResale(x.url)) { x.resale = true; x.url = ''; x.red_flags.unshift('Билеты только у перепродавцов — высокий риск'); }
+      else if (x.url && isBlocked(x.url, ownDomains)) x.url = '';
+      if (x.kind === 'event' && x.url && isPrimaryTicket(x.url)) x.primary = true;
+    }
+    await Promise.all(list.map(async (x) => {
+      if (x.sourceProvider === 'black_book') { x.trust = { level: 'own' }; return; }
+      if (x.sourceProvider === 'ticketmaster') { x.trust = { level: 'high', official: true, primary: true, sources: 1 }; return; }
+      const v = x.kind === 'venue' ? await verify({ name: x.title, address: x.addressOrVenue, city: loc?.en || city }, near).catch(() => ({ status: 'unverified' })) : { status: 'unverified' };
+      if (v.status === 'corrected' && v.osm_address && !x.addressOrVenue) x.addressOrVenue = v.osm_address;
+      x.trust = { ...trustOf(x, rawSources, v.status === 'verified' || v.status === 'corrected'), primary: !!x.primary };
+      if (x.trust.level === 'low') x.trust.missing = [!x.trust.official && 'официальный сайт', !x.trust.map && 'место на карте', x.trust.sources < 2 && 'второй источник'].filter(Boolean);
+    }));
+    // ваш чёрный список мест
+    const bannedVenue = new Set(blocks.filter((b) => b.kind === 'venue').map((b) => b.value));
+    const keyOf = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+    list = list.filter((x) => !bannedVenue.has(keyOf(x.title)) && !(x.url && ownDomains.includes(domainOf(x.url))));
+    const RANK = { own: 0, high: 1, medium: 2, low: 3 };
+    list.sort((a, b) => (RANK[a.trust?.level] ?? 3) - (RANK[b.trust?.level] ?? 3) || (b.trust?.guides?.length || 0) - (a.trust?.guides?.length || 0));
+    const out = { results: list.slice(0, 9), answer, sources: sources.filter((s) => !isBlocked(s.url, ownDomains) || /vertexaisearch/.test(s.url)), tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
     await setCache(auth, ck, out);
     return res.status(200).json(out);
   } catch (e) {

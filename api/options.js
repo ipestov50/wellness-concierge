@@ -194,6 +194,12 @@ export default async function handler(req, res) {
         partner: !!partner, partner_id: partner?.id || null, city,
       };
     });
+    // ваш список «Не предлагать» действует и здесь
+    const bl = await rest('search_blocks?select=kind,value', auth).catch(() => []);
+    const kv = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+    const bannedV = new Set(bl.filter((x) => x.kind === 'venue').map((x) => x.value)), bannedD = bl.filter((x) => x.kind === 'domain').map((x) => x.value);
+    for (let k = items.length - 1; k >= 0; k--) if (bannedV.has(kv(items[k].name))) items.splice(k, 1);
+    for (const o of items) { try { if (o.website && bannedD.includes(new URL(o.website).hostname.replace(/^www\./, ''))) o.website = ''; } catch {} }
     // сверяем каждое место с картой (OpenStreetMap), ссылка — точно на место в Google Картах
     await Promise.all(items.map(async (o) => {
       const v = await verify(o, near);

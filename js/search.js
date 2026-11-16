@@ -6,6 +6,21 @@ import { state, byId, save } from './data.js';
 import { api, isAbort } from './api.js';
 import { firstKey } from './statuses.js';
 import { updateGliders } from './router.js';
+import { getSupabase } from './supabase.js';
+
+const keyOf = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+const domainOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+// метка доверия: что именно подтвердило место
+function trustLine(x) {
+  const t = x.trust || {};
+  if (t.level === 'own') return '';
+  if (x.kind === 'event' && (t.primary || x.primary)) return '<p class="cs-trust high"><b>✓ Официальная продажа</b></p>';
+  if (t.level === 'high' || t.level === 'medium') {
+    const parts = [t.official && 'официальный сайт', ...(t.guides || []), t.map && 'карта'].filter(Boolean);
+    return `<p class="cs-trust ${t.level}"><b>✓ ${t.level === 'high' ? 'Проверено' : 'Подтверждено'}</b>${parts.length ? ' · ' + parts.map(esc).join(' · ') : ''}${t.sources ? ` · источников: ${t.sources}` : ''}</p>`;
+  }
+  return `<p class="cs-trust low"><b>⚠ Проверьте</b>${(t.missing || []).length ? ' · нет: ' + t.missing.map(esc).join(', ') : ''}</p>`;
+}
 
 const SOURCE = { black_book: 'ваш партнёр', ticketmaster: 'Ticketmaster', tavily: 'Tavily', gemini: 'Google' };
 const CATS = [['auto', 'Всё'], ['venues', 'Места'], ['events', 'События'], ['general', 'Разузнать']];
@@ -36,12 +51,13 @@ export function openSearch({ query = '' } = {}) {
     const c = guest();
     const isPartner = x.sourceProvider === 'black_book' || state.partners.some((p) => p.name.trim().toLowerCase() === x.title.trim().toLowerCase());
     const meta = [x.date && `${fmtDate(x.date)}${x.time ? ' · ' + x.time : ''}`, x.price].filter(Boolean);
-    return `<article class="cs-card${x.sourceProvider === 'black_book' ? ' own' : ''}">
+    return `<article class="cs-card${x.sourceProvider === 'black_book' ? ' own' : ''}${x.trust?.level === 'low' ? ' low' : ''}">
       ${x.image ? `<div class="cs-img"><img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}
       <div class="cs-body">
         <p class="cs-src">${x.kind === 'event' ? 'Событие' : 'Место'} · ${esc(SOURCE[x.sourceProvider] || x.sourceProvider)}</p>
         <h3 class="cs-title">${esc(x.title)}</h3>
         ${meta.length ? `<p class="cs-meta">${meta.map(esc).join(' · ')}</p>` : ''}
+        ${trustLine(x)}
         ${x.summary ? `<p class="cs-sum">${esc(x.summary)}</p>` : ''}
         ${x.addressOrVenue ? `<p class="cs-addr">${esc(x.addressOrVenue)}</p>` : ''}
         ${x.holiday || x.status === 'offsale' || (x.red_flags || []).length ? `<ul class="cs-notes">
@@ -53,6 +69,7 @@ export function openSearch({ query = '' } = {}) {
         <a class="vo-btn sm" href="${esc(x.maps)}" target="_blank" rel="noopener">Карта</a>
         ${x.kind !== 'event' ? (isPartner ? '<span class="vo-btn sm done">★ Партнёр</span>' : `<button type="button" class="vo-btn sm" data-cs-partner="${i}">★ В партнёры</button>`) : ''}
         ${c ? `<button type="button" class="vo-btn sm accent" data-cs-cal="${i}">В календарь гостя</button>` : ''}
+        ${x.sourceProvider !== 'black_book' ? `<button type="button" class="vo-btn sm icon cs-ban" data-cs-ban="${i}" title="Не предлагать это место${x.url && !x.trust?.official ? ' и этот сайт' : ''}" aria-label="Не предлагать">🚫</button>` : ''}
       </footer></article>`;
   };
   const results = () => {
@@ -64,9 +81,13 @@ export function openSearch({ query = '' } = {}) {
     const via = [...new Set((o.tried || []).filter((t) => t.status === 'ok' && t.provider !== 'cards').map((t) => SOURCE[t.provider] || t.provider))];
     return `${o.answer ? `<p class="cs-answer">${esc(o.answer)}</p>` : ''}
       <div class="cs-grid">${o.results.map(card).join('')}</div>
-      <p class="cs-foot">${o.results.length} · ${[o.city_en || o.city, o.from && fmtDate(o.from)].filter(Boolean).map(esc).join(', ')}${via.length ? ` · через ${esc(via.join(', '))}` : ''}${o.cached ? ' · сохранённый поиск' : ''}
+      <p class="cs-foot"><button type="button" class="link cs-bans-btn" data-cs-bans>Мои запреты${bans ? ` · ${bans.length}` : ''}</button> · ${o.results.length} · ${[o.city_en || o.city, o.from && fmtDate(o.from)].filter(Boolean).map(esc).join(', ')}${via.length ? ` · через ${esc(via.join(', '))}` : ''}${o.cached ? ' · сохранённый поиск' : ''}
         ${(o.sources || []).length ? ` · <span class="cs-links">${o.sources.slice(0, 4).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc((s.title || 'источник').slice(0, 40))}</a>`).join(', ')}</span>` : ''}</p>`;
   };
+  // ---------- «Не предлагать»: ваш чёрный список ----------
+  let bans = null;
+  const loadBans = async () => { const sb = await getSupabase(); const { data } = await sb.from('search_blocks').select('id,kind,value,label').order('created_at', { ascending: false }); bans = data || []; };
+  const bansPanel = () => `<div class="cs-bans">${bans?.length ? bans.map((b) => `<span class="cs-ban-i">${b.kind === 'domain' ? '🌐' : '📍'} ${esc(b.label || b.value)}<button type="button" data-cs-unban="${b.id}" aria-label="Убрать из запретов">✕</button></span>`).join('') : '<span class="muted">Пока пусто. Нажмите 🚫 на карточке — место (и сомнительный сайт) больше не появятся.</span>'}</div>`;
   const clients = () => [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const draw = () => {
     const c = guest();
@@ -108,6 +129,28 @@ export function openSearch({ query = '' } = {}) {
   box.addEventListener('change', (e) => { if (e.target.id === 'cs-guest') { read(); draw(); } });
   box.addEventListener('click', async (e) => {
     if (e.target.closest('[data-cs-go]')) return go();
+    if (e.target.closest('[data-cs-bans]')) {
+      const ex = box.querySelector('.cs-bans');
+      if (ex) { ex.remove(); return; }
+      await loadBans(); box.querySelector('.cs-foot').insertAdjacentHTML('afterend', bansPanel()); return;
+    }
+    const ub = e.target.closest('[data-cs-unban]');
+    if (ub) { const sb = await getSupabase(); await sb.from('search_blocks').delete().eq('id', ub.dataset.csUnban); await loadBans(); box.querySelector('.cs-bans').outerHTML = bansPanel(); toast('Убрано из запретов'); return; }
+    const ban = e.target.closest('[data-cs-ban]');
+    if (ban) {
+      const x = st.out.results[+ban.dataset.csBan];
+      const rows = [{ kind: 'venue', value: keyOf(x.title), label: x.title }];
+      if (x.url && !x.trust?.official && !/ticketmaster|eventim/.test(domainOf(x.url))) rows.push({ kind: 'domain', value: domainOf(x.url), label: domainOf(x.url) });
+      try {
+        const sb = await getSupabase();
+        const { error } = await sb.from('search_blocks').upsert(rows, { onConflict: 'owner_id,kind,value', ignoreDuplicates: true });
+        if (error) throw error;
+        st.out.results = st.out.results.filter((r) => r !== x);
+        bans = null; read(); draw();
+        toast(`🚫 «${x.title}» больше не будет предлагаться`, '', { label: 'Отменить', fn: async () => { for (const r of rows) await sb.from('search_blocks').delete().eq('kind', r.kind).eq('value', r.value); toast('Вернул'); } });
+      } catch (err) { toast('Не сохранилось: ' + (err.message || err), 'err'); }
+      return;
+    }
     const ex = e.target.closest('[data-cs-ex]');
     if (ex) { box.querySelector('#cs-q').value = ex.dataset.csEx; return go(); }
     const k = e.target.closest('[data-cs-cat]');

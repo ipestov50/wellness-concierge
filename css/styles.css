@@ -1824,3 +1824,14 @@ details.g-handled .trow-wrap { opacity: .7; }
   .cs-filters { gap: 6px; } .cs-seg { width: 100%; }
   .cs-pill { flex: 1 1 100%; } .cs-pill input[type=text], .cs-pill select { flex: 1; width: auto; max-width: none; } .cs-pill input[type=date] { flex: 1; width: auto; }
 }
+/* доверие и запреты в поиске */
+.cs-trust { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.cs-trust b { font-weight: 700; }
+.cs-trust.high b { color: #2f7d55; } .cs-trust.medium b { color: var(--accent); } .cs-trust.low b { color: #8a6414; }
+.cs-card.low { border-style: dashed; }
+.cs-card.low .cs-title { opacity: .9; }
+.cs-ban { margin-left: auto; opacity: .55; } .cs-ban:hover { opacity: 1; border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); }
+.cs-bans-btn { font-size: 12.5px; }
+.cs-bans { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); animation: rise .2s var(--ease); }
+.cs-ban-i { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; background: var(--soft); font-size: 12.5px; }
+.cs-ban-i button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; } .cs-ban-i button:hover { background: var(--line); color: var(--ink); }
