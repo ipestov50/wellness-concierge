@@ -179,7 +179,7 @@ export default async function handler(req, res) {
       needs_review: !!x.needs_review,
     }));
     if (clean.length) await setCache(auth, ck, { requests: clean });
-    return res.status(200).json({ requests: clean });
+    return res.status(200).json({ requests: clean, ...(r.tried?.length ? { tried: r.tried } : {}) });
   } catch (e) {
     return res.status(504).json({ error: 'timeout' });
   }
