@@ -4,11 +4,12 @@ import { state, byId, save, remove, dataVersion } from '../data.js';
 import { ui, render } from '../router.js';
 import { getSupabase } from '../supabase.js';
 import { api, isAbort } from '../api.js';
-import { conflictsBlock, watchTraffic } from '../conflict-actions.js';
-import { optionsBadge, pickChips, stageButton } from '../options.js';
-import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda } from '../planner.js';
+import { conflictsBlock, watchTraffic, currentConflicts } from '../conflict-actions.js';
+import { tripState, parisToday } from '../dossier.js';
+import { optionsBadge, pickChips, stageButton, venueOf } from '../options.js';
+import { planDay, why, hmIn, dayIn, zoned, OWNER_TZ, weekAgenda, guestTz } from '../planner.js';
 import { setStatus, completeRequest, reopenRequest, isDone } from '../actions.js';
-import { statusLabel, statusOf } from '../statuses.js';
+import { statusLabel, statusOf, isClosed as isClosedKey } from '../statuses.js';
 import { editRequest } from '../lazy.js';
 
 let settings = null;
@@ -68,11 +69,13 @@ function blockHtml(b, { big = false, future = false } = {}) {
       <div class="db-title"><span class="db-ic">${b.icon}</span><b>${esc(b.title)}</b></div>
       ${c || b.who ? `<div class="db-who">${c ? avatar(c, 'av-xs') : ''}<span>${esc(b.who || c?.name || '')}</span>${r ? `<span class="db-st">${esc(statusLabel(r.status))}</span>` : ''}</div>` : ''}
       ${b.detail || r?.summary ? `<p class="db-detail">${esc(b.detail || r.summary)}</p>` : ''}
+      ${guestPills(c, r)}
       ${r && !future ? `${optionsBadge(r)}${pickChips(r)}` : ''}
       ${w ? `<p class="db-why">${esc(w)}</p>` : ''}
       <div class="db-actions">
         ${r && stageButton(r) ? stageButton(r) : b.kind === 'guest' || b.kind === 'partner' ? `<button type="button" class="btn small" data-db-draft="${esc(b.key)}">✍ Черновик</button>` : ''}
         ${r ? `<button type="button" class="btn small ghostish" data-db-open="${esc(r.id)}">Открыть</button>` : ''}
+        ${r && c ? `<button type="button" class="btn small ghostish" data-db-brief="${esc(r.id)}" title="Скопировать бриф по гостю и запросу">Бриф</button>` : ''}
         ${r && !r.options?.sent_at && !r.options?.booking ? `<button type="button" class="btn small" data-options="${esc(r.id)}">✦ Варианты</button>` : ''}
         ${/^t:.+:(chk|out)$/.test(b.key) ? `<button type="button" class="btn small" data-flight-delay="${esc(b.key.split(':')[1])}" data-dir="${b.key.endsWith(':out') ? 'out' : 'in'}">⏱ Рейс задерживается</button>` : ''}
         <span class="db-sp"></span>
@@ -88,8 +91,59 @@ function blockHtml(b, { big = false, future = false } = {}) {
   </article>`;
 }
 
+
+// ---------- пилюли гостя (аллергии, вкусы) и время гостя ----------
+const pill = (cls, t) => `<span class="pl ${cls}">${esc(t)}</span>`;
+function guestPills(c, r) {
+  if (!c) return '';
+  const al = [...(c.allergies || []), ...(c.diet || [])].slice(0, 3);
+  const likes = (c.likes || []).slice(0, 2);
+  const g = r?.deadline ? guestTz(c, state.trips, Date.parse(r.deadline)) : null;
+  const tz = g && g.tz !== OWNER_TZ ? `${hmIn(OWNER_TZ, Date.parse(r.deadline))} → ${hmIn(g.tz, Date.parse(r.deadline))} ${g.place ? esc(g.place) : 'у гостя'}` : '';
+  if (!al.length && !likes.length && !tz) return '';
+  return `<div class="db-pills">${al.map((x) => pill('al', '⚠ ' + x)).join('')}${likes.map((x) => pill('lk', x)).join('')}${tz ? `<span class="pl tz" title="Время в Париже → время у гостя">${tz}</span>` : ''}</div>`;
+}
+// «Бриф»: короткая справка по запросу и гостю — вставить в чат, CRM или передать коллеге
+function briefText(r) {
+  const c = byId('clients', r.client_id);
+  const v = venueOf(r);
+  const g = r.deadline && c ? guestTz(c, state.trips, Date.parse(r.deadline)) : null;
+  const when = r.deadline ? `${whenLabel(r.deadline)} (Париж)${g && g.tz !== OWNER_TZ ? ` · у гостя ${hmIn(g.tz, Date.parse(r.deadline))}` : ''}` : '';
+  const lines = [
+    c && `Гость: ${c.name}${c.vip ? ' · VIP' : ''}${c.language ? ' · ' + c.language : ''}`,
+    `Запрос: ${r.summary}${r.category ? ' · ' + r.category : ''}`,
+    when && `Когда: ${when}`,
+    v?.name && `Место: ${v.name}${v.address ? ', ' + v.address : ''}`,
+    r.budget_amount && `Бюджет: ${r.budget_amount} ${r.currency || ''}`.trim(),
+    c && [...(c.allergies || []), ...(c.diet || []), ...(c.health || [])].length && `⚠ Аллергии и ограничения: ${[...(c.allergies || []), ...(c.diet || []), ...(c.health || [])].join(', ')}`,
+    c?.likes?.length && `Любит: ${c.likes.join(', ')}`,
+    c?.dislikes?.length && `Избегает: ${c.dislikes.join(', ')}`,
+    r.clarifying_questions && `Уточнить: ${String(r.clarifying_questions).split('\n')[0]}`,
+    `Статус: ${statusLabel(r.status)}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+// ---------- «Утренний пульс»: три цифры, с которых начинается смена ----------
+function pulse() {
+  const now = Date.now(), today = parisToday();
+  const transit = new Set();
+  for (const t of state.trips) {
+    const fl = (iso) => iso && Math.abs(Date.parse(iso) - now) < 12 * 36e5;
+    if (tripState(t, today).kind === 'now' || fl(t.flight_in_at) || fl(t.flight_out_at)) transit.add(t.client_id);
+  }
+  const vipN = [...transit].filter((id) => byId('clients', id)?.vip).length;
+  const pend = state.requests.filter((r) => r.deadline && !isClosedKey(r.status) && r.status !== 'confirmed' && Date.parse(r.deadline) > now && Date.parse(r.deadline) <= now + 48 * 36e5).length;
+  const cf = currentConflicts().length;
+  const item = (n, label, tone, icon) => `<div class="pu ${n ? tone : ''}" role="status"><span class="pu-ic">${icon}</span><b>${n}</b><span class="pu-l">${label}</span></div>`;
+  const plane = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l7 2.5L12.5 21 21 4zM10 13.5L21 4"/></svg>';
+  const clock = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  const alert = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4.5M12 17.5h.01"/></svg>';
+  return `<section class="pulse" aria-label="Утренний пульс">${item(vipN || transit.size, vipN ? 'VIP в пути' : 'гостей в пути', 'ok', plane)}${item(pend, 'броней ближе 48 ч без подтверждения', 'warn', clock)}${item(cf, cf === 1 ? 'конфликт расписания' : 'конфликтов расписания', 'crit', alert)}</section>`;
+}
+
 // ---------- вкладка ----------
-export function dayView() {
+export function dayView(rail = '') {
   if (!settings) { loadSettings(); return `<div class="dayv"><div class="empty">Собираю ваш день…</div></div>`; }
   const P = currentPlan();
   const now = Date.now();
@@ -112,17 +166,21 @@ export function dayView() {
   const sel = selectedDay();
   const focus = sel && sel !== P.day ? sel : null;
   const section = (title, list, opts = {}) => list.length ? `<section class="day-line${opts.future ? ' day-future' : ''}"><h3 class="day-line-h">${title} · ${list.length}</h3>${list.map((b) => blockHtml(b, opts)).join('')}</section>` : '';
+  const partOf = (b) => { const h = +hmIn(OWNER_TZ, b.start).slice(0, 2); return h < 12 ? 'm' : h < 17 ? 'a' : 'e'; };
+  const parts = [['m', 'Утро'], ['a', 'День'], ['e', 'Вечер']];
+  const timeline = parts.map(([k, t]) => section(t, restToday.filter((b) => partOf(b) === k))).join('');
   return `<div class="dayv">
     <header class="day-head">
       <div><h2>${P.tomorrow ? 'План на завтра' : 'Мой день'}</h2><span>${esc(dateLabel)}</span>${tzBadge()}</div>
       <div class="day-stats"><b>${todays.length}</b><small>сегодня</small><b>${week.length + later.length}</b><small>впереди</small><b>${doneN}</b><small>сделано</small></div>
       <button type="button" class="icon-btn" id="daySettings" title="Рабочие часы и окна">⚙</button>
     </header>
+    ${pulse()}
     ${conflictsBlock()}
-    ${weekStrip()}
+    <div class="day-grid"><div class="day-main">
     ${focus ? dayFocus(focus, uniq, dueDay) : `
     ${first ? `<section class="day-now"><span class="day-now-l">${P.tomorrow ? 'Первым делом' : 'Сейчас'}</span>${blockHtml(first, { big: true })}</section>` : ''}
-    ${section(P.tomorrow ? 'Ещё на завтра' : 'Ещё сегодня', restToday)}
+    ${timeline}
     ${!todays.length ? `<div class="empty calm">${P.tomorrow ? 'На завтра пока пусто.' : 'На сегодня всё сделано. Можно выдохнуть ✨'}</div>` : ''}
     ${readyBlock(readyFor(P.day, new Set(uniq.map((b) => b.request_id).filter(Boolean))), P.tomorrow ? 'Завтра · уже готово' : 'Сегодня · уже готово')}
     ${section('На этой неделе', week, { future: true })}
@@ -132,6 +190,7 @@ export function dayView() {
     ${doneN ? `<details class="day-done"${doneReqs.length ? ' open' : ''}><summary>Сделано сегодня · ${doneN}</summary>
       ${doneReqs.map((r) => `<div class="day-done-i is-req"><span>✓ <s>${esc(r.summary)}</s>${byId('clients', r.client_id) ? ` · ${esc(byId('clients', r.client_id).name)}` : ''} <em>запрос выполнен</em></span><button type="button" class="link" data-db-reopen="${esc(r.id)}">вернуть в работу</button></div>`).join('')}
       ${P.done.map((a) => `<div class="day-done-i"><span>✓ <s>${esc(a.title)}</s>${a.who ? ` · ${esc(a.who)}` : ''}</span><button type="button" class="link" data-db-undo="${esc(a.key)}">вернуть</button></div>`).join('')}</details>` : ''}`}
+    </div><aside class="day-rail">${weekStrip()}${rail}</aside></div>
   </div>`;
 }
 
@@ -252,6 +311,12 @@ export function bindDay(app) {
       comp.classList.add('checked');
       await new Promise((r) => setTimeout(r, 240));
       try { await completeRequest(comp.dataset.dbComplete); } catch { el?.classList.remove('leaving'); }
+      return;
+    }
+    const br = t.closest('[data-db-brief]');
+    if (br) {
+      const r = byId('requests', br.dataset.dbBrief);
+      if (r) { try { await navigator.clipboard.writeText(briefText(r)); toast('Бриф скопирован — вставьте в чат или CRM'); } catch { toast('Не удалось скопировать', 'err'); } }
       return;
     }
     const ro = t.closest('[data-db-reopen]');

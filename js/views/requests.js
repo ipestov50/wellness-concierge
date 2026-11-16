@@ -249,7 +249,7 @@ function view(app) {
       ${board ? `<button type="button" class="btn small arc-btn${arc ? ' on' : ''}" data-arc-toggle aria-pressed="${arc}">${arc ? '← Доска' : `🗄 Архив${archivedN ? ' · ' + archivedN : ''}`}</button>` : ''}
     </div>`;
   app.innerHTML = myday
-    ? `<div class="stack daystack">${dayNotes()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
+    ? `<div class="stack daystack">${dayNotes()}${smartBar()}${toolbar}${dayView(suggestionsBlock())}</div>`
     : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : arc ? (arc$ ? arc$.archiveView(list) : (loadArc(), viewSkeleton())) : boardView(list.filter((r) => !r.archived_at))}`;
   if (myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {

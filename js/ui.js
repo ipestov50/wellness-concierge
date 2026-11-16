@@ -1,4 +1,5 @@
 import { TZ } from './const.js';
+import { applyMask } from './privacy.js';
 import { scope, abortScope } from './api.js';
 
 export const $ = (s, el = document) => el.querySelector(s);
@@ -97,6 +98,7 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
       </form>
     </div>`;
   document.body.classList.add('modal-open');
+  applyMask(host);
   const form = $('#frm');
   // запросы окна отменяются, когда окно закрыто или открыто другое
   const signal = scope('modal');

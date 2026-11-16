@@ -6,8 +6,8 @@
   <meta name="app-headers" content="csp-2026-11-16-search">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#f6f1e8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#15120f" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141917" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -50,9 +50,11 @@
 <body>
   <!-- каркас приложения: виден сразу, пока грузятся скрипты и данные -->
   <div id="root">
-    <header class="top"><div class="brand">Wellness Concierge<small>клиенты · запросы · партнёры</small></div>
-      <nav class="tabs vs-tabs" aria-hidden="true"><i></i><i></i><i></i><i></i></nav></header>
+    <header class="top"><div class="brand"><span class="brand-mark" aria-hidden="true">W</span><span class="brand-t">Wellness Concierge<small>клиенты · запросы · партнёры</small></span></div>
+      <nav class="tabs vs-tabs" aria-hidden="true"><i></i><i></i><i></i><i></i></nav>
+      <div class="tools vs-tools" aria-hidden="true"><i class="vs-cmd"></i><i class="vs-ic"></i><i class="vs-btn"></i><i class="vs-ic"></i><i class="vs-ic"></i></div></header>
     <main id="app"><div class="vskel" aria-busy="true" aria-label="Загрузка"><i class="vs-h"></i><i></i><i></i><i></i></div></main>
+    <nav class="vs-bnav" aria-hidden="true"><i></i><i></i><i></i><i></i></nav>
   </div>
   <script type="module" src="js/app.js"></script>
 </body>
