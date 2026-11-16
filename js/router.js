@@ -1,5 +1,4 @@
 // Состояние экрана и перерисовка текущего раздела
-import { applyMask } from './privacy.js';
 let savedView = 'day';
 try { savedView = localStorage.getItem('reqView') || 'day'; } catch {}
 if (!['day', 'board', 'calendar'].includes(savedView)) savedView = 'day';
@@ -47,7 +46,6 @@ export function render() {
     clearTimeout(enterTimer); enterTimer = setTimeout(() => app.classList.remove('enter'), 900);
     countUp(app);
   }
-  applyMask(app);
   updateGliders();
   if (scroll != null) { const b = app.querySelector('.board'); if (b) b.scrollLeft = scroll; }
   if (keepId) {

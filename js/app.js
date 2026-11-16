@@ -78,7 +78,7 @@ function renderShell(session) {
   setLastBackupFromSession(session);
   root.innerHTML = `
     <header class="top">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">W</span><span class="brand-t">Wellness Concierge<small>клиенты · запросы · партнёры</small></span></div>
+      <div class="brand">Wellness Concierge<small>клиенты · запросы · партнёры</small></div>
       <nav class="tabs" role="tablist">
         <button class="tab" role="tab" data-tab="requests" type="button">Запросы</button>
         <button class="tab" role="tab" data-tab="clients" type="button">Клиенты</button>
@@ -86,8 +86,6 @@ function renderShell(session) {
         <button class="tab" role="tab" data-tab="partners" type="button">Партнёры</button>
       </nav>
       <div class="tools">
-        <button class="cmdk" id="cmdk" type="button" aria-label="Поиск Jarvis"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span class="cmdk-t">Поиск</span><kbd>⌘K</kbd></button>
-        <button class="icon-btn" id="privacy" type="button" aria-pressed="false" aria-label="Скрыть фамилии гостей" title="Скрыть фамилии гостей"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="eye-off" d="M4 4l16 16"/></svg></button>
         <button class="btn primary" id="addBtn" type="button">+ Новый запрос</button>
         <button class="icon-btn" id="theme" type="button"></button>
         <div class="menu">
@@ -105,11 +103,9 @@ function renderShell(session) {
     </header>
     <div class="offline-bar" id="offbar" role="status" hidden></div>
     <main id="app">${viewSkeleton()}</main>
-    <nav class="bnav" aria-label="Разделы"><button type="button" data-tab="requests" aria-label="Запросы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span>Запросы</span></button><button type="button" data-tab="clients" aria-label="Клиенты"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.2a3 3 0 010 5.6M18.5 14.3c1.6.8 2.5 2.7 2.5 5.7"/></svg><span>Клиенты</span></button><button type="button" data-tab="trips" aria-label="Кто где"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l7 2.5L12.5 21 21 4zM10 13.5L21 4"/></svg><span>Кто где</span></button><button type="button" data-tab="partners" aria-label="Партнёры"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7L12 3z"/></svg><span>Партнёры</span></button></nav>
     <button type="button" class="fab" id="fab" aria-label="Новый запрос">＋</button>
     <div id="modal"></div>`;
   applyTheme(getTheme());
-  import('./privacy.js').then((m) => m.syncMaskButton());
   render();
   firstLoad();
 }
@@ -160,7 +156,7 @@ addEventListener('online', () => { offlineBar(); if (shown === 'app' && state.of
 registerSW();
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#cmdk,#privacy,#menuBtn,#setPass,#logout,#backupBtn,[data-backup],#tgBtn,#fab');
+  const t = e.target.closest('[data-tab],[data-req],[data-cl],[data-newreq],[data-editcl],[data-editp],#addBtn,#theme,#menuBtn,#setPass,#logout,#backupBtn,[data-backup],#tgBtn,#fab');
   const menu = $('#menuList');
   if (menu && !menu.hidden && !e.target.closest('.menu')) { menu.hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); }
   if (!t) return;
@@ -180,10 +176,6 @@ document.addEventListener('click', (e) => {
     const next = THEMES[(THEMES.indexOf(getTheme()) + 1) % THEMES.length];
     try { localStorage.setItem('theme', next); } catch {}
     applyTheme(next); toast(THEME_LABEL[next]);
-  } else if (t.id === 'cmdk') {
-    import('./search.js').then((m) => m.openSearch());
-  } else if (t.id === 'privacy') {
-    import('./privacy.js').then((m) => { m.setMasked(!m.isMasked()); render(); });
   } else if (t.id === 'menuBtn') {
     menu.hidden = !menu.hidden; t.setAttribute('aria-expanded', String(!menu.hidden));
     if (!menu.hidden) showUsage();
@@ -214,10 +206,6 @@ document.addEventListener('input', (e) => { if (e.target.id === 'q') { ui.q = e.
 document.addEventListener('change', (e) => {
   if (e.target.id === 'ptype') { ui.ptype = e.target.value; render(); }
   if (e.target.id === 'pcity') { ui.pcity = e.target.value; render(); }
-});
-// ⌘K / Ctrl+K — быстрый поиск Jarvis из любого места
-document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && shown === 'app') { e.preventDefault(); import('./search.js').then((m) => m.openSearch()); }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); const m = $('#menuList'); if (m) m.hidden = true; } });
 
