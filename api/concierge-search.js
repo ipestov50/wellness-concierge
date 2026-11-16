@@ -54,7 +54,7 @@ async function gemini(model, prompt, tools) {
   bump(curAuth, model === LITE ? 'lite' : 'flash');
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(tools ? { tools } : {}), generationConfig: { temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } } }),
+    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(tools ? { tools } : {}), generationConfig: { temperature: 0.3, ...(model === LITE ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } }),
     signal: AbortSignal.timeout(60000),
   });
   if (!r.ok) return { status: r.status };

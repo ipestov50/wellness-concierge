@@ -36,12 +36,14 @@ export function bump(auth, field) {
 // Запрос к Gemini с учётом в счётчике: модели пробуются по очереди (лёгкая → основная или наоборот), пока одна не ответит
 export const FLASH = 'gemini-2.5-flash';
 export const LITE = 'gemini-3.5-flash-lite';
+// модели 3.x не принимают thinkingBudget (ответ 400) — для лёгкой модели убираем этот параметр
+export const liteBody = (body) => { try { const j = JSON.parse(body); if (j.generationConfig) delete j.generationConfig.thinkingConfig; return JSON.stringify(j); } catch { return body; } };
 export async function gfetch(auth, models, init) {
   let r;
   const tried = []; // что пробовали и чем ответило — видно в ответе функции при сбое
   for (const m of [].concat(models)) {
     const counted = bump(auth, m === LITE ? 'lite' : 'flash');
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, init);
+    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, m === LITE ? { ...init, body: liteBody(init.body) } : init);
     await counted;
     r.tried = tried;
     if (r.ok) return r;
