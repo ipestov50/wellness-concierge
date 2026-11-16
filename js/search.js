@@ -24,8 +24,10 @@ function trustLine(x) {
 const srcLink = (x) => (x.source_url ? ` · <a class="cs-srcl" href="${esc(x.source_url)}" target="_blank" rel="noopener noreferrer" title="Источник, не официальный сайт">${esc(domainOf(x.source_url))}</a>` : '');
 
 const SOURCE = { black_book: 'ваш партнёр', ticketmaster: 'Ticketmaster', tavily: 'Tavily', gemini: 'Google' };
+const LANG_RU = { de: 'немецком', fr: 'французском', it: 'итальянском', es: 'испанском', en: 'английском', pt: 'португальском', nl: 'нидерландском', tr: 'турецком', el: 'греческом', cs: 'чешском', pl: 'польском', ja: 'японском', ar: 'арабском' };
+const FLAG = { de: 'DE', fr: 'FR', it: 'IT', es: 'ES', en: 'EN', ru: 'RU', pt: 'PT', nl: 'NL', tr: 'TR', el: 'GR', cs: 'CZ', pl: 'PL', ja: 'JP', ar: 'AR', guide: 'гиды' };
 const CATS = [['auto', 'Всё'], ['venues', 'Места'], ['events', 'События'], ['general', 'Разузнать']];
-const EXAMPLES = ['Бельгийское пиво на кране, без туристов', 'VIP-ложа на хоккей', 'Тихий спа с хаммамом', 'Рестораны, открытые 26 декабря'];
+const EXAMPLES = ['Аренда Ferrari на день в Берлине', 'Бельгийское пиво на кране в Брюсселе', 'VIP-ложа на хоккей в Берлине', 'Тихий спа с хаммамом в Ницце'];
 const CAT_OF = (x, q) => (x.kind === 'event' ? 'Activities' : /спа|массаж|хаммам|wellness|spa/i.test(q + ' ' + x.title) ? 'Spa & Wellness' : /ресторан|ужин|обед|бар|пив|вин|кафе|кухн|restaurant|bar|beer|wine|café|cafe/i.test(q + ' ' + x.title + ' ' + x.summary) ? 'Dining' : 'Activities');
 const PTYPE = { Dining: 'restaurant', 'Spa & Wellness': 'spa', Activities: 'activity' };
 const fmtDate = (ymd) => (ymd ? new Date(ymd + 'T12:00:00Z').toLocaleDateString('ru-RU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '');
@@ -55,7 +57,7 @@ export function openSearch({ query = '' } = {}) {
     return `<article class="cs-card${x.sourceProvider === 'black_book' ? ' own' : ''}${x.trust?.level === 'low' ? ' low' : ''}">
       ${x.image ? `<div class="cs-img"><img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}
       <div class="cs-body">
-        <p class="cs-src">${x.kind === 'event' ? 'Событие' : 'Место'} · ${esc(SOURCE[x.sourceProvider] || x.sourceProvider)}</p>
+        <p class="cs-src">${x.kind === 'event' ? 'Событие' : x.kind === 'service' ? 'Сервис' : 'Место'} · ${esc(SOURCE[x.sourceProvider] || x.sourceProvider)}${x.lang && x.lang !== 'ru' && LANG_RU[x.lang] ? `<span class="cs-lang" title="Сайт на ${LANG_RU[x.lang]} языке">${FLAG[x.lang] || x.lang.toUpperCase()}</span>` : ''}</p>
         <h3 class="cs-title">${esc(x.title)}</h3>
         ${meta.length ? `<p class="cs-meta">${meta.map(esc).join(' · ')}</p>` : ''}
         ${trustLine(x).replace(/<\/p>$/, srcLink(x) + '</p>') || (x.source_url ? `<p class="cs-trust">источник${srcLink(x)}</p>` : '')}
@@ -75,13 +77,14 @@ export function openSearch({ query = '' } = {}) {
   };
   const results = () => {
     const o = st.out;
-    if (st.busy) return `<p class="cs-status"><span class="spin"></span> Ищу в ваших партнёрах и в сети…</p><div class="cs-grid">${[0, 1, 2].map(() => '<div class="cs-card skel"><i></i><i></i><i></i></div>').join('')}</div>`;
+    if (st.busy) return `<p class="cs-status"><span class="spin"></span> Определяю город и язык, ищу на местном, английском и русском, проверяю каждое место…</p><div class="cs-grid">${[0, 1, 2].map(() => '<div class="cs-card skel"><i></i><i></i><i></i></div>').join('')}</div>`;
     if (!o) return `<div class="cs-empty"><p>Например</p><div>${EXAMPLES.map((e) => `<button type="button" class="cs-ex" data-cs-ex="${esc(e)}">${esc(e)}</button>`).join('')}</div></div>`;
     if (o.error) return `<div class="cs-empty"><p>${o.error === 'rate_limited' ? 'Все источники сейчас упёрлись в лимит. Попробуйте через минуту.' : 'Поиск не удался.'}</p><div><button type="button" class="vo-btn" data-cs-go>Повторить</button></div></div>`;
     if (!o.results.length) return '<div class="cs-empty"><p>Ничего не нашлось. Попробуйте иначе сформулировать или убрать даты.</p></div>';
     const via = [...new Set((o.tried || []).filter((t) => t.status === 'ok' && t.provider !== 'cards').map((t) => SOURCE[t.provider] || t.provider))];
     return `${o.answer ? `<p class="cs-answer">${esc(o.answer)}</p>` : ''}
       <div class="cs-grid">${o.results.map(card).join('')}</div>
+      ${(o.queries || []).length ? `<p class="cs-queries"><span>Искал</span>${o.queries.map((x) => `<i><b>${esc(FLAG[x.lang] || x.lang.toUpperCase())}</b>${esc(x.q)}</i>`).join('')}</p>` : ''}
       <p class="cs-foot"><button type="button" class="link cs-bans-btn" data-cs-bans>Мои запреты${bans ? ` · ${bans.length}` : ''}</button> · ${o.results.length} · ${[o.city_en || o.city, o.from && fmtDate(o.from)].filter(Boolean).map(esc).join(', ')}${via.length ? ` · через ${esc(via.join(', '))}` : ''}${o.cached ? ' · сохранённый поиск' : ''}
         ${(o.sources || []).length ? ` · <span class="cs-links">${o.sources.slice(0, 4).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc((s.title || 'источник').slice(0, 40))}</a>`).join(', ')}</span>` : ''}</p>`;
   };

@@ -4,7 +4,7 @@
 // Ключи — только на сервере (Vercel): TAVILY_API_KEYS, TICKETMASTER_API_KEYS (через запятую — пул с ротацией).
 // Только для владельца, данные — с его токеном (RLS). Имена гостя в поиск не уходят.
 import { cacheKey, getCache, setCache } from './_cache.js';
-import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
+import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, mentions, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
 import { verify } from './options.js';
 
 const SMART = 'gemini-2.5-flash';
@@ -61,6 +61,35 @@ async function gemini(model, prompt, tools) {
   return { text: (cand?.content?.parts || []).map((p) => p.text || '').join(''), chunks: cand?.groundingMetadata?.groundingChunks || [] };
 }
 
+// ---------- разбор запроса: город из текста, язык страны, тип, переводы (лёгкая модель ~1 с) ----------
+const COUNTRY_EN = { DE: 'germany', AT: 'austria', CH: 'switzerland', FR: 'france', MC: 'monaco', BE: 'belgium', NL: 'netherlands', LU: 'luxembourg', IT: 'italy', ES: 'spain', PT: 'portugal',
+  GB: 'united kingdom', IE: 'ireland', US: 'united states', AE: 'united arab emirates', QA: 'qatar', SA: 'saudi arabia', TR: 'turkey', GR: 'greece', CY: 'cyprus', MT: 'malta', HR: 'croatia',
+  ME: 'montenegro', CZ: 'czech republic', PL: 'poland', HU: 'hungary', DK: 'denmark', SE: 'sweden', NO: 'norway', FI: 'finland', JP: 'japan', TH: 'thailand', SG: 'singapore', MV: 'maldives',
+  IL: 'israel', EG: 'egypt', MA: 'morocco', RU: 'russia', KZ: 'kazakhstan', GE: 'georgia', AM: 'armenia', AZ: 'azerbaijan', UZ: 'uzbekistan' };
+async function planQuery(q, cityHint) {
+  const prompt = `Разбери запрос консьержа для поиска в интернете. Запрос: «${q}».${cityHint ? ` Если город в запросе не указан — город: ${cityHint}.` : ''}
+Верни ТОЛЬКО JSON: {"city":"город по-английски в именительном падеже или пусто","city_local":"название города на местном языке","cc":"ISO2 страны","lang":"ISO 639-1 основного языка этого города","kind":"dining|wellness|hotel|nightlife|service|event|shopping|other","must":["1–4 обязательных ключевых слова по-английски (бренд, вид услуги)"],"q_local":"короткая поисковая фраза на местном языке, как искал бы местный житель, с городом","q_en":"короткая поисковая фраза на английском с городом"}`;
+  try {
+    const g = await gemini(LITE, prompt);
+    if (g.text) {
+      const j = extractJSON(g.text);
+      const cc = str(j.cc, 2).toUpperCase();
+      return { city: str(j.city, 60) || cityHint, city_local: str(j.city_local, 60), cc, country: COUNTRY_EN[cc] || '', lang: str(j.lang, 5).toLowerCase(),
+        kind: str(j.kind, 20), must: (Array.isArray(j.must) ? j.must : []).map((x) => str(x, 40)).filter(Boolean).slice(0, 4), q_local: str(j.q_local, 200), q_en: str(j.q_en, 200), ai: true };
+    }
+  } catch {}
+  // запасной разбор без ИИ: «… в Берлине» → «Берлин»
+  let city = cityHint;
+  if (!city) {
+    const m = q.match(/(?:^|\s)(?:в|во|in)\s+([А-ЯЁA-Z][\p{L}-]+(?:[\s-][А-ЯЁA-Z][\p{L}-]+)?)/u);
+    if (m) {
+      const w = m[1];
+      for (const cand of [w, w.replace(/[еиу]$/u, ''), w.replace(/[еиу]$/u, 'а'), w.replace(/е$/u, 'ь')]) { if (await place(cand)) { city = cand; break; } }
+    }
+  }
+  return { city, kind: '', must: [], q_local: '', q_en: '', lang: '' };
+}
+
 // ---------- поставщики ----------
 async function ticketmaster(q, loc, from, to) {
   return withKeys('TICKETMASTER_API_KEYS', async (key) => {
@@ -87,11 +116,11 @@ async function ticketmaster(q, loc, from, to) {
     }) };
   });
 }
-async function tavily(q, exclude = [], { depth = 'basic', include = null, max = 10 } = {}) {
+async function tavily(q, exclude = [], { depth = 'basic', include = null, max = 10, country = '' } = {}) {
   return withKeys('TAVILY_API_KEYS', async (key) => {
     const r = await fetch('https://api.tavily.com/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ query: q, search_depth: depth, include_answer: !include, max_results: max, ...(include ? { include_domains: include } : { exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }) }), signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({ query: q, search_depth: depth, include_answer: !include, max_results: max, ...(include ? { include_domains: include } : { exclude_domains: [...new Set([...EXCLUDE_DOMAINS, ...exclude])].slice(0, 100) }), ...(country && !include ? { country } : {}) }), signal: AbortSignal.timeout(20000),
     });
     if (!r.ok) return { status: r.status };
     const j = await r.json();
@@ -138,7 +167,6 @@ export default async function handler(req, res) {
   const isId = (x) => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x);
   const q = str(b.query, 300);
   if (!q) return res.status(400).json({ error: 'empty' });
-  const category = ['events', 'venues', 'general'].includes(b.category) ? b.category : EVENT_RX.test(q) ? 'events' : 'venues';
   const ymd = (x) => (/^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '');
   try {
     // ---------- контекст гостя (без имён) ----------
@@ -152,16 +180,22 @@ export default async function handler(req, res) {
       if (!from && t) { from = t.start_date > day ? t.start_date : day; to = t.end_date || from; }
     }
     const prefs = c ? [c.diet?.length && `диета: ${c.diet.join(', ')}`, c.allergies?.length && `аллергии: ${c.allergies.join(', ')}`, c.dislikes?.length && `не любит: ${c.dislikes.join(', ')}`, c.likes?.length && `любит: ${c.likes.join(', ')}`].filter(Boolean).join('; ') : '';
-    const ck = cacheKey('cs', q, category, city, from, to, c?.id || '');
+    const ck = cacheKey('cs2', q, b.category || '', city, from, to, c?.id || '');
     if (!b.force) {
-      const hit = await getCache(auth, ck, category === 'events' ? 30 * 60e3 : 6 * 3600e3);
-      if (hit) {
+      const hit = await getCache(auth, ck, 6 * 3600e3);
+      if (hit && (hit.category !== 'events' || Date.now() - Date.parse(hit.at || 0) < 30 * 60e3)) {
         const bl = await rest('search_blocks?select=kind,value', auth).catch(() => []);
-        const kv = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+        const kv = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
         const vs = new Set(bl.filter((x) => x.kind === 'venue').map((x) => x.value)), ds = bl.filter((x) => x.kind === 'domain').map((x) => x.value);
         return res.status(200).json({ ...hit, results: hit.results.filter((x) => !vs.has(kv(x.title)) && !(x.url && ds.includes(domainOf(x.url)))), cached: true });
       }
     }
+
+    // ---------- 1) разбор запроса: город из текста («в Берлине»), язык страны, тип, переводы ----------
+    const pl = await planQuery(q, city);
+    if (!city && pl.city) city = pl.city;
+    const category = ['events', 'venues', 'general'].includes(b.category) ? b.category : pl.kind === 'event' || EVENT_RX.test(q) ? 'events' : pl.kind === 'other' ? 'general' : 'venues';
+
     // параллельно: город, ваш чёрный список, ваши партнёры
     const [loc, blocks, partners] = await Promise.all([
       place(city),
@@ -171,55 +205,65 @@ export default async function handler(req, res) {
     const tried = [];
     let results = [], answer = '', sources = [], rawSources = [];
     const ownDomains = blocks.filter((x) => x.kind === 'domain').map((x) => x.value);
+    const cityNames = [...new Set([city, loc?.en, pl.city, pl.city_local].filter(Boolean))];
+    const country = pl.country || COUNTRY_EN[loc?.cc] || '';
 
     // ---------- 0) ваша база партнёров — бесплатно ----------
-    const words = q.toLowerCase().split(/[^a-zа-яё0-9]+/i).filter((w) => w.length > 3);
+    const words = [...new Set([...q.toLowerCase().split(/[^a-zа-яё0-9]+/i), ...(pl.must || []).map((w) => w.toLowerCase())])].filter((w) => w.length > 3);
     const own = partners.filter((p) => words.some((w) => `${p.name} ${p.notes || ''} ${p.type}`.toLowerCase().includes(w))).slice(0, 3)
       .map((p) => ({ kind: 'venue', title: p.name, summary: str(p.notes, 200), addressOrVenue: p.address || city, url: '', contact: p.contact || '', partner_id: p.id, sourceProvider: 'black_book' }));
 
-    // ---------- 1) события: Ticketmaster ----------
+    // ---------- 2) события: Ticketmaster ----------
     if (category === 'events') {
-      const tm = await ticketmaster(q, loc, from, to);
+      const tm = await ticketmaster(pl.q_en || q, loc, from, to);
       tried.push({ provider: 'ticketmaster', status: tm.results ? (tm.results.length ? 'ok' : 'empty') : tm.skipped || tm.error || tm.status });
       if (tm.results?.length) results = tm.results;
     }
-    // ---------- 2) Tavily + сборка карточек лёгкой моделью ----------
+    // ---------- 3) Tavily на нескольких языках параллельно + гиды ----------
     const where = [loc?.en || city, loc?.cc].filter(Boolean).join(', ');
     const when = from ? (to && to !== from ? `${from} – ${to}` : from) : '';
+    const queries = [];
+    const addQ = (lang, text) => { const t = str(text, 250); if (t && !queries.some((x) => x.q.toLowerCase() === t.toLowerCase())) queries.push({ lang, q: t }); };
+    if (pl.lang && pl.lang !== 'ru' && pl.lang !== 'en') addQ(pl.lang, pl.q_local);
+    addQ('en', pl.q_en || (where ? `${q} ${where}` : q));
+    addQ('ru', /[а-яё]/i.test(q) ? `${q}${city && !q.toLowerCase().includes(city.toLowerCase().slice(0, 5)) ? ` ${city}` : ''}` : '');
     if (!results.length) {
-      const tq = `${q}${where ? ` in ${where}` : ''}${when ? ` ${when}` : ''}${category === 'venues' ? ' authentic local insider recommendations, opening hours' : ''}`;
-      // параллельно: общий поиск и поиск только по признанным гидам (быстрый режим — оба вместе ~2 кредита)
-      const [tv, tg] = await Promise.all([
-        tavily(tq, ownDomains),
-        category !== 'events' ? tavily(`${q}${where ? ` ${where}` : ''}`, [], { include: Object.keys(GUIDES), max: 6 }) : Promise.resolve({}),
+      const guideKinds = ['dining', 'wellness', 'hotel', 'nightlife'];
+      const runs = await Promise.all([
+        ...queries.slice(0, 3).map((x) => tavily(x.q, ownDomains, { country }).then((r) => ({ ...r, lang: x.lang }))),
+        guideKinds.includes(pl.kind) ? tavily(pl.q_en || `${q} ${where}`, [], { include: Object.keys(GUIDES), max: 6 }).then((r) => ({ ...r, lang: 'guide' })) : Promise.resolve({}),
       ]);
-      if (tg.sources?.length) tv.sources = [...(tv.sources || []), ...tg.sources.filter((g) => !(tv.sources || []).some((s) => s.url === g.url))];
-      tried.push({ provider: 'tavily', status: tv.sources ? (tv.sources.length ? 'ok' : 'empty') : tv.skipped || tv.error || tv.status });
-      if (tv.sources?.length) {
-        rawSources = tv.sources.filter((s) => !isBlocked(s.url, ownDomains));
-        answer = tv.answer; sources = rawSources.map(({ title, url }) => ({ title, url }));
-        const prompt = `Ты консьерж уровня Les Clefs d'Or. По ИСТОЧНИКАМ ниже (и только по ним) собери до 6 карточек под запрос: «${q}»${where ? `, город: ${where}` : ''}${when ? `, даты: ${when}` : ''}${prefs ? `, гость: ${prefs}` : ''}.
-Только аутентичные, не туристические, по-настоящему лучшие места или реальные события. Ничего не выдумывай: адрес/дата — только если есть в источниках, url — только из списка источников, ЛУЧШЕ официальный сайт заведения или первичная продажа билетов; перепродавцов и сомнительные сайты не используй. Если место упомянуто в признанном гиде (Michelin, Gault&Millau, Falstaff, Time Out и т.п.) — укажи это в summary.
-Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event", "title": "", "summary": "1–2 предложения по-русски: что это и почему подходит", "addressOrVenue": "", "date": "YYYY-MM-DD или пусто", "time": "HH:MM или пусто", "url": "", "holiday": "часы в праздники/особые дни, если указаны, иначе пусто", "red_flags": ["по-русски, если есть"] } ] }
-ИСТОЧНИКИ: ${JSON.stringify(rawSources)}`;
-        // собираем карточки: лёгкая модель (свой лимит), если она недоступна — основная
+      const seen = new Set();
+      for (const r of runs) for (const s0 of r.sources || []) if (!seen.has(s0.url)) { seen.add(s0.url); rawSources.push({ ...s0, lang: r.lang }); }
+      // краткий ответ Tavily показываем, только если он про нужный город
+      answer = runs.map((r) => r.answer).find((t) => t && cityNames.some((n) => t.toLowerCase().includes(n.toLowerCase()))) || '';
+      const okRuns = runs.filter((r) => r.sources);
+      tried.push({ provider: 'tavily', status: okRuns.length ? (rawSources.length ? 'ok' : 'empty') : runs[0]?.skipped || runs[0]?.error || runs[0]?.status });
+      rawSources = rawSources.filter((s0) => !isBlocked(s0.url, ownDomains));
+      if (rawSources.length) {
+        sources = rawSources.map(({ title, url }) => ({ title, url }));
+        const prompt = `Ты консьерж уровня Les Clefs d'Or. Запрос гостя: «${q}». ГОРОД: ${cityNames.join(' / ') || 'не указан'}${country ? ` (${country})` : ''}${when ? `, даты: ${when}` : ''}${prefs ? `, гость: ${prefs}` : ''}.
+${(pl.must || []).length ? `ОБЯЗАТЕЛЬНО должно совпадать: ${pl.must.join(', ')}.\n` : ''}По ИСТОЧНИКАМ ниже (они на разных языках — это нормально) собери до 6 карточек.
+СТРОГО: только то, что находится в этом городе (или рядом, до 30 км). Всё в других городах и странах — исключи. Только то, что точно отвечает запросу (например, если просят Ferrari — именно Ferrari, а не любые авто).
+Лучшие, проверенные, не туристические варианты. Ничего не выдумывай: адрес/дата/цена — только если есть в источниках, url — только из списка источников, лучше официальный сайт. Перепродавцов и сомнительные сайты не используй. Упоминание в признанном гиде — укажи в summary.
+Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event|service", "title": "название", "summary": "1–2 предложения по-русски: что это и почему подходит", "addressOrVenue": "", "date": "YYYY-MM-DD или пусто", "time": "HH:MM или пусто", "price": "если указана", "url": "", "lang": "язык сайта: de|fr|it|es|en|ru…", "holiday": "", "red_flags": ["по-русски, если есть"] } ] }
+ИСТОЧНИКИ: ${JSON.stringify(rawSources.map(({ title, url, content }) => ({ title, url, content })))}`;
         let g = await gemini(LITE, prompt), synth = LITE;
         if (!g.text) { const st1 = g.status; g = await gemini(SMART, prompt); synth = g.text ? SMART : `lite:${st1}/smart:${g.status}`; }
         if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'tavily' })); } catch { synth = 'bad_json'; } }
         tried.push({ provider: 'cards', status: results.length ? 'ok' : synth });
-        // Gemini недоступен — отдаём найденное Tavily как есть (с источниками)
-        if (!results.length) results = rawSources.slice(0, 6).map((s) => ({ kind: category === 'events' ? 'event' : 'venue', title: s.title, summary: str(s.content, 240), addressOrVenue: '', url: s.url, sourceProvider: 'tavily' }));
+        if (!results.length && synth !== LITE && synth !== SMART) results = rawSources.slice(0, 6).map((s0) => ({ kind: category === 'events' ? 'event' : 'venue', title: s0.title, summary: str(s0.content, 240), addressOrVenue: '', url: s0.url, sourceProvider: 'tavily' }));
       }
     }
-    // ---------- 3) последний запас: Gemini с поиском Google ----------
+    // ---------- 4) последний запас: Gemini с поиском Google (тоже на местном языке) ----------
     if (!results.length && process.env.GEMINI_API_KEY) {
-      const prompt = `Ты консьерж уровня Les Clefs d'Or. Найди через поиск Google до 6 ${category === 'events' ? 'реальных событий (с датой, временем, площадкой и ссылкой на билеты)' : 'аутентичных, НЕ туристических мест (с точным адресом и часами)'} под запрос: «${q}»${where ? `, город: ${where}` : ''}${when ? `, даты: ${when}` : ''}${prefs ? `, гость: ${prefs}` : ''}. Учитывай праздничные часы на эти даты. Не уверен — не включай.
-Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event", "title": "", "summary": "1–2 предложения по-русски", "addressOrVenue": "", "date": "", "time": "", "url": "официальный сайт или страница билетов", "holiday": "", "red_flags": [] } ] }`;
+      const prompt = `Ты консьерж уровня Les Clefs d'Or. Найди через поиск Google до 6 ${category === 'events' ? 'реальных событий (с датой, временем, площадкой и ссылкой на первичную продажу билетов)' : 'лучших, аутентичных, НЕ туристических вариантов (с точным адресом)'} под запрос: «${q}». ГОРОД: ${cityNames.join(' / ') || 'не указан'}${country ? ` (${country})` : ''} — строго в этом городе${when ? `, даты: ${when}` : ''}${prefs ? `, гость: ${prefs}` : ''}.
+Ищи также на местном языке${pl.q_local ? ` («${pl.q_local}»)` : ''} и на английском. ${(pl.must || []).length ? `Обязательно: ${pl.must.join(', ')}. ` : ''}Учитывай праздничные часы на эти даты. Не уверен — не включай.
+Ответь ТОЛЬКО JSON: { "results": [ { "kind": "venue|event|service", "title": "", "summary": "1–2 предложения по-русски", "addressOrVenue": "", "date": "", "time": "", "price": "", "url": "официальный сайт или страница билетов", "lang": "", "holiday": "", "red_flags": [] } ] }`;
       const g = await gemini(SMART, prompt, [{ google_search: {} }]);
       tried.push({ provider: 'gemini', status: g.text ? 'ok' : g.status || 'error' });
       if (g.text) { try { results = (extractJSON(g.text).results || []).map((x) => ({ ...x, sourceProvider: 'gemini' })); } catch {} }
       sources = g.chunks?.map((x) => x.web).filter(Boolean).slice(0, 6).map((w) => ({ title: str(w.title, 120), url: str(w.uri, 500) })) || [];
-      // у Google в источниках только домен — проверяем по нему
       rawSources = (g.chunks || []).map((x) => x.web).filter(Boolean).map((w) => ({ title: w.title || '', url: `https://${w.title || ''}`, content: '' }));
     }
     if (!results.length && !own.length) {
@@ -228,7 +272,7 @@ export default async function handler(req, res) {
     }
     // нормализация
     const clean = (x) => ({
-      kind: x.kind === 'event' ? 'event' : 'venue', title: str(x.title, 140), summary: str(x.summary, 400), addressOrVenue: str(x.addressOrVenue, 200),
+      kind: ['event', 'service'].includes(x.kind) ? x.kind : 'venue', lang: str(x.lang, 5).toLowerCase(), title: str(x.title, 140), summary: str(x.summary, 400), addressOrVenue: str(x.addressOrVenue, 200),
       date: ymd(x.date), time: /^\d{2}:\d{2}$/.test(x.time || '') ? x.time : '', tz: str(x.tz, 60) || loc?.tz || '', url: /^https?:\/\//.test(x.url || '') ? str(x.url, 500) : '',
       image: /^https:\/\//.test(x.image || '') ? str(x.image, 500) : '', price: str(x.price, 60), status: str(x.status, 20), holiday: str(x.holiday, 160),
       red_flags: (Array.isArray(x.red_flags) ? x.red_flags : []).map((f) => str(f, 120)).filter(Boolean).slice(0, 3),
@@ -242,18 +286,18 @@ export default async function handler(req, res) {
       if (x.url && isResale(x.url)) { x.resale = true; x.url = ''; x.red_flags.unshift('Билеты только у перепродавцов — высокий риск'); }
       else if (x.url && isBlocked(x.url, ownDomains)) x.url = '';
       // «Сайт» — только официальный сайт места (или первичная продажа билетов); остальное — просто «источник»
-      if (x.url && x.kind === 'venue' && !isOfficial(x.url, x.title)) { x.source_url = x.url; x.url = ''; }
+      if (x.url && x.kind !== 'event' && !isOfficial(x.url, x.title)) { x.source_url = x.url; x.url = ''; }
       // официальный сайт нашёлся среди источников — ставим его
-      if (!x.url && x.kind === 'venue') { const off = rawSources.find((s) => isOfficial(s.url, x.title)); if (off) x.url = off.url; }
+      if (!x.url && x.kind !== 'event') { const off = rawSources.find((s) => isOfficial(s.url, x.title)); if (off) x.url = off.url; }
       if (x.url && x.kind === 'event' && !isPrimaryTicket(x.url) && !isOfficial(x.url, x.title) && x.sourceProvider !== 'ticketmaster') { x.source_url = x.url; x.url = ''; }
       if (x.kind === 'event' && x.url && isPrimaryTicket(x.url)) x.primary = true;
     }
     // официальные сайты из OpenStreetMap для 4 главных мест без сайта — параллельно со сверкой адресов
-    const needSite = list.filter((x) => x.kind === 'venue' && !x.url && x.sourceProvider !== 'black_book').slice(0, 4);
+    const needSite = list.filter((x) => x.kind !== 'event' && !x.url && x.sourceProvider !== 'black_book').slice(0, 4);
     const sitesP = needSite.length ? osmSites(needSite.map((x) => x.title), loc?.en || city, auth).catch(() => ({})) : Promise.resolve({});
     const [sites] = await Promise.all([sitesP, Promise.all(list.map(async (x) => {
       if (x.sourceProvider === 'black_book' || x.sourceProvider === 'ticketmaster') return;
-      x._v = x.kind === 'venue' ? await verify({ name: x.title, address: x.addressOrVenue, city: loc?.en || city }, near).catch(() => ({ status: 'unverified' })) : { status: 'unverified' };
+      x._v = x.kind !== 'event' ? await verify({ name: x.title, address: x.addressOrVenue, city: loc?.en || city }, near).catch(() => ({ status: 'unverified' })) : { status: 'unverified' };
     }))]);
     for (const x of needSite) {
       const s = sites[x.title];
@@ -270,13 +314,24 @@ export default async function handler(req, res) {
       if (x.osm_official) { x.trust.official = true; x.trust.level = x.trust.sources >= 2 ? 'high' : 'medium'; delete x.osm_official; }
       if (x.trust.level === 'low') x.trust.missing = [!x.trust.official && 'официальный сайт', !x.trust.map && 'место на карте', x.trust.sources < 2 && 'второй источник'].filter(Boolean);
     }));
+    // строго в нужном городе: подтверждено картой рядом с городом, или адрес/источники называют этот город
+    if (cityNames.length) {
+      const cn = cityNames.map((n) => n.toLowerCase());
+      const inCity = (x) => {
+        if (x.sourceProvider === 'black_book' || x.sourceProvider === 'ticketmaster') return true;
+        if (x.trust?.map) return true;
+        if (cn.some((n) => (x.addressOrVenue || '').toLowerCase().includes(n))) return true;
+        return rawSources.some((s0) => mentions(s0, x.title) && cn.some((n) => `${s0.title} ${s0.content || ''} ${s0.url}`.toLowerCase().includes(n)));
+      };
+      list = list.filter(inCity);
+    }
     // ваш чёрный список мест
     const bannedVenue = new Set(blocks.filter((b) => b.kind === 'venue').map((b) => b.value));
     const keyOf = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/g, ' ').trim();
     list = list.filter((x) => !bannedVenue.has(keyOf(x.title)) && !(x.url && ownDomains.includes(domainOf(x.url))));
     const RANK = { own: 0, high: 1, medium: 2, low: 3 };
     list.sort((a, b) => (RANK[a.trust?.level] ?? 3) - (RANK[b.trust?.level] ?? 3) || (b.trust?.guides?.length || 0) - (a.trust?.guides?.length || 0));
-    const out = { results: list.slice(0, 9), answer, sources: sources.filter((s) => !isBlocked(s.url, ownDomains) || /vertexaisearch/.test(s.url)), tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
+    const out = { at: new Date().toISOString(), queries, plan: { city: pl.city, kind: pl.kind, lang: pl.lang, must: pl.must }, results: list.slice(0, 9), answer, sources: sources.filter((s) => !isBlocked(s.url, ownDomains) || /vertexaisearch/.test(s.url)), tried, category, city, city_en: loc?.en || '', tz: loc?.tz || '', from, to };
     await setCache(auth, ck, out);
     return res.status(200).json(out);
   } catch (e) {
