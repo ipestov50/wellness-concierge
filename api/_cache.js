@@ -35,7 +35,7 @@ export function bump(auth, field) {
 
 // Запрос к Gemini с учётом в счётчике: модели пробуются по очереди (лёгкая → основная или наоборот), пока одна не ответит
 export const FLASH = 'gemini-2.5-flash';
-export const LITE = 'gemini-2.5-flash-lite';
+export const LITE = 'gemini-3.5-flash-lite';
 export async function gfetch(auth, models, init) {
   let r;
   const tried = []; // что пробовали и чем ответило — видно в ответе функции при сбое

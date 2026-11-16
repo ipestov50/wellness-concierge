@@ -9,7 +9,7 @@ import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, mentions, isBlocked, isR
 import { verify } from './options.js';
 
 const SMART = 'gemini-2.5-flash';
-const LITE = 'gemini-2.5-flash-lite';
+const LITE = 'gemini-3.5-flash-lite';
 const EVENT_RX = /концерт|билет|матч|игр[аы]|театр|опер|балет|мюзикл|шоу|фестивал|выставк|спектакл|ложа|vip.?box|ticket|concert|game|match|show|festival|opera|ballet|theat/i;
 const str = (x, n = 300) => (typeof x === 'string' ? x.trim().slice(0, n) : '');
 
