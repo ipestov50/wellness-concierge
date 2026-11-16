@@ -99,6 +99,32 @@ async function tavily(q, exclude = [], { depth = 'basic', include = null, max = 
   });
 }
 
+// официальный сайт из OpenStreetMap (Nominatim): 1 запрос/сек по правилам сервиса, кэш на 30 дней
+const nm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+async function osmSites(names, city, auth) {
+  const out = {};
+  let first = true;
+  for (const name of names) {
+    const ck = cacheKey('osm', nm(name), nm(city));
+    const hit = await getCache(auth, ck, 30 * 864e5);
+    if (hit) { out[name] = hit; continue; }
+    if (!first) await new Promise((r) => setTimeout(r, 1050));
+    first = false;
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${name}, ${city}`)}&format=jsonv2&extratags=1&addressdetails=1&limit=1`,
+        { headers: { 'User-Agent': 'WellnessConciergeSearch/1.0', 'Accept-Language': 'en' }, signal: AbortSignal.timeout(5000) });
+      const [e] = await r.json();
+      const ok = e && (nm(e.name).includes(nm(name)) || nm(name).includes(nm(e.name)));
+      const site = ok ? (e.extratags?.website || e.extratags?.['contact:website'] || '') : '';
+      const a = e?.address || {};
+      const res = ok ? { website: /^https?:\/\//.test(site) ? site.replace(/^http:/, 'https:') : '', address: [[a.road, a.house_number].filter(Boolean).join(' '), [a.postcode, a.city || a.town].filter(Boolean).join(' ')].filter(Boolean).join(', ') } : { website: '', address: '' };
+      out[name] = res;
+      await setCache(auth, ck, res);
+    } catch { out[name] = { website: '', address: '' }; }
+  }
+  return out;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store'); // ответы персональные — кэш в базе, не в общем CDN
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
@@ -222,12 +248,26 @@ export default async function handler(req, res) {
       if (x.url && x.kind === 'event' && !isPrimaryTicket(x.url) && !isOfficial(x.url, x.title) && x.sourceProvider !== 'ticketmaster') { x.source_url = x.url; x.url = ''; }
       if (x.kind === 'event' && x.url && isPrimaryTicket(x.url)) x.primary = true;
     }
+    // официальные сайты из OpenStreetMap для 4 главных мест без сайта — параллельно со сверкой адресов
+    const needSite = list.filter((x) => x.kind === 'venue' && !x.url && x.sourceProvider !== 'black_book').slice(0, 4);
+    const sitesP = needSite.length ? osmSites(needSite.map((x) => x.title), loc?.en || city, auth).catch(() => ({})) : Promise.resolve({});
+    const [sites] = await Promise.all([sitesP, Promise.all(list.map(async (x) => {
+      if (x.sourceProvider === 'black_book' || x.sourceProvider === 'ticketmaster') return;
+      x._v = x.kind === 'venue' ? await verify({ name: x.title, address: x.addressOrVenue, city: loc?.en || city }, near).catch(() => ({ status: 'unverified' })) : { status: 'unverified' };
+    }))]);
+    for (const x of needSite) {
+      const s = sites[x.title];
+      if (s?.website && !isBlocked(s.website, ownDomains)) { x.url = s.website; x.osm_official = true; }
+      if (s?.address && !x.addressOrVenue) x.addressOrVenue = s.address;
+    }
     await Promise.all(list.map(async (x) => {
       if (x.sourceProvider === 'black_book') { x.trust = { level: 'own' }; return; }
       if (x.sourceProvider === 'ticketmaster') { x.trust = { level: 'high', official: true, primary: true, sources: 1 }; return; }
-      const v = x.kind === 'venue' ? await verify({ name: x.title, address: x.addressOrVenue, city: loc?.en || city }, near).catch(() => ({ status: 'unverified' })) : { status: 'unverified' };
+      const v = x._v || { status: 'unverified' };
+      delete x._v;
       if (v.status === 'corrected' && v.osm_address && !x.addressOrVenue) x.addressOrVenue = v.osm_address;
-      x.trust = { ...trustOf(x, rawSources, v.status === 'verified' || v.status === 'corrected'), primary: !!x.primary };
+      x.trust = { ...trustOf(x, rawSources, v.status === 'verified' || v.status === 'corrected' || !!x.osm_official), primary: !!x.primary };
+      if (x.osm_official) { x.trust.official = true; x.trust.level = x.trust.sources >= 2 ? 'high' : 'medium'; delete x.osm_official; }
       if (x.trust.level === 'low') x.trust.missing = [!x.trust.official && 'официальный сайт', !x.trust.map && 'место на карте', x.trust.sources < 2 && 'второй источник'].filter(Boolean);
     }));
     // ваш чёрный список мест
