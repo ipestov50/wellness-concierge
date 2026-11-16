@@ -41,9 +41,17 @@ function teaser(c) {
   </div>`;
 }
 
+function ideasEntry(c) {
+  const d = upcomingDates(c).find((x) => x.info.days <= 30);
+  const first = (c.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || 'гостя';
+  const n = d?.info.days;
+  const sub = d ? `${d.title}${d.kind === 'person' ? ' · ' + d.who.split(' · ')[0] : ''} — ${n === 0 ? 'сегодня' : n === 1 ? 'завтра' : 'через ' + n + ' дн.'}` : 'Jarvis подберёт 3 идеи под вкусы, сезон и прошлые запросы';
+  return `<button type="button" class="idea-entry" data-ideas="${c.id}"><span class="idea-spark">✦</span><span class="idea-et"><b>Что предложить ${esc(first)}?</b><small>${esc(sub)}</small></span><span class="idea-arrow" aria-hidden="true">→</span></button>`;
+}
+
 function tabOverview(c) {
   const prefs = [['🍽', 'Еда', c.pref_food], ['💆', 'Спа', c.pref_spa], ['🚗', 'Транспорт', c.pref_transport], ['🏨', 'Отели', c.pref_hotels]].filter(([, , v]) => v);
-  return `${clientSuggestions(c.id)}${teaser(c)}
+  return `${ideasEntry(c)}${clientSuggestions(c.id)}${teaser(c)}
     <section class="psec">
       ${chipEditor(c, 'likes', { title: 'Любит', cls: 'likes', placeholder: 'пионы, столик у окна…' })}
       ${chipEditor(c, 'dislikes', { title: 'Избегает', cls: 'dislikes', placeholder: 'лилии, шумные места…' })}

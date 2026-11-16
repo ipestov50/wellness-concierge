@@ -1,7 +1,7 @@
 import { getSupabase } from './supabase.js';
 
-export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], day_items: [], loaded: false };
-const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions', 'day_items'];
+export const state = { clients: [], requests: [], partners: [], statuses: [], trips: [], people: [], client_dates: [], suggestions: [], day_items: [], shift_logs: [], loaded: false };
+const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates', 'suggestions', 'day_items', 'shift_logs'];
 const listeners = new Set();
 let sb, channel;
 
@@ -53,7 +53,7 @@ export function loadAll() {
 const COLS = { trips: 'id,owner_id,client_id,city,country,hotel,start_date,end_date,flight_in,flight_in_at,flight_out,flight_out_at,companions,notes,created_at,updated_at,tz,country_code,lat,lon,flight_in_delay,flight_out_delay,flight_in_delay_done,flight_out_delay_done' };
 const cols = (t) => COLS[t] || '*';
 // таблицы с updated_at: при повторной загрузке сверяем только id+время и дочитываем лишь изменённые строки
-const STAMPED = new Set(['clients', 'requests', 'partners', 'trips', 'people', 'client_dates', 'day_items']);
+const STAMPED = new Set(['clients', 'requests', 'partners', 'trips', 'people', 'client_dates', 'day_items', 'shift_logs']);
 const ts = (v) => Date.parse(v) || 0;
 
 async function doLoad() {

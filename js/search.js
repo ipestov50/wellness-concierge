@@ -41,8 +41,8 @@ function localToUtc(ymd, hm, tz) {
   return new Date(guess - off(guess - off(guess))).toISOString();
 }
 
-export function openSearch({ query = '' } = {}) {
-  const st = { q: query, cat: 'auto', cid: '', city: '', from: '', to: '', out: null, busy: false };
+export function openSearch({ query = '', cid = '' } = {}) {
+  const st = { q: query, cat: 'auto', cid, city: '', from: '', to: '', out: null, busy: false };
   const m = openModal({ title: 'Поиск', saveLabel: 'Закрыть', body: '<div class="cs" id="cs"></div>', onSave: async () => {} });
   m.form.classList.add('wide', 'vo-dlg', 'cs-dlg');
   m.form.querySelector('#cancel').hidden = true;

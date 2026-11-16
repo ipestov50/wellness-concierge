@@ -18,6 +18,8 @@ export async function setStatus(id, status, { position, undo = true, quiet = fal
     toast('Не сохранилось: ' + (e.message || e), 'err');
     throw e;
   }
+  // выполнили запрос — предлагаем запомнить новое о госте (кнопка, без расхода лимита)
+  if (statusOf(status)?.kind === 'done' && r.client_id && !r.archived_at) import('./memory.js').then((m) => m.offerMemory(id)).catch(() => {});
   if (!quiet) toast(`${statusOf(status)?.kind === 'done' ? '✓ ' : ''}${statusLabel(status)}: ${r.summary}`, '',
     undo ? { label: 'Отменить', fn: () => setStatus(id, before.status, { position: before.position, undo: false, quiet: true }).then(() => { if (before.archived_at) archiveRequests([id], { quiet: true }); }) } : null);
   return r;

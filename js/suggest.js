@@ -8,6 +8,7 @@ import { firstKey, isClosed, statusLabel } from './statuses.js';
 import { preview } from './smart.js';
 import { render } from './router.js';
 import { quietNote } from './tz.js';
+import { upcomingDates } from './dossier.js';
 
 const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂', reconnect: '💬' };
 const drafting = new Set();   // какие планы сейчас составляются
@@ -110,6 +111,23 @@ function gaps(r) {
   if (c && (c.allergies?.length || c.diet?.length)) out.push('⚠ учесть аллергии и диету');
   return out;
 }
+// «Радар»: гости, у которых в ближайшие 3 недели повод (день рождения, важная дата) — по кнопке Jarvis предложит идеи
+function radar() {
+  const out = [];
+  for (const c of state.clients) {
+    const d = upcomingDates(c).find((x) => x.info.days <= 21);
+    if (d) out.push({ c, d });
+  }
+  out.sort((a, b) => a.d.info.days - b.d.info.days);
+  if (!out.length) return '';
+  return `<div class="radar"><div class="radar-h">✦ Радар поводов</div><div class="radar-l">${out.slice(0, 6).map(({ c, d }) => `<button type="button" class="radar-i" data-ideas="${c.id}">
+    <span class="radar-ic">${d.kind === 'date' ? '📅' : '🎂'}</span><span><b>${esc((c.name || '').replace(/\s*\(.*?\)/g, ''))}</b><small>${esc(d.title)}${d.kind === 'person' ? ' · ' + esc(d.who.split(' · ')[0]) : ''} · ${d.info.days === 0 ? 'сегодня' : d.info.days === 1 ? 'завтра' : 'через ' + d.info.days + ' дн.'}</small></span><i>Идеи →</i></button>`).join('')}</div></div>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ideas]');
+  if (b) { e.preventDefault(); e.stopPropagation(); import('./ideas.js').then((m) => m.openIdeas(b.dataset.ideas)); }
+});
+
 function aheadBlock() {
   const list = upcoming();
   const when = (iso) => new Date(iso).toLocaleString('ru-RU', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(',', '');
@@ -120,6 +138,7 @@ function aheadBlock() {
         <span class="ah-main"><b>${CATEGORIES[r.category] || '📌'} ${esc(r.summary)}</b><small>${c ? esc(c.name) + ' · ' : ''}${esc(statusLabel(r.status))}</small>
         ${g.length ? `<span class="ah-gaps">${g.map((x) => `<i>${esc(x)}</i>`).join('')}</span>` : '<span class="ah-ok">✓ всё готово</span>'}</span></button>`; }).join('')}</div>`
       : '<p class="muted">На ближайшие две недели запросов со сроком нет.</p>'}
+    ${radar()}
   </section>`;
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-ahead-close]')) { deep.ahead = false; render(); } });

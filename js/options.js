@@ -297,6 +297,11 @@ document.addEventListener('click', (e) => {
 export function requestOptionsBar(r) {
   const o = r?.options;
   if (o?.sent_at && o.chosen == null) return `<div class="req-opts"><span class="opt-badge wait">Ждём выбор гостя</span>${pickChips(r)}</div>`;
-  if (o?.chosen != null || r?.venue?.name) return '';
-  return `<div class="req-opts"><button type="button" class="vo-btn" data-options="${esc(r.id)}">✦ Варианты для гостя</button></div>`;
+  const mem = r?.client_id && statusOf(r.status)?.kind === 'done' ? `<button type="button" class="vo-btn" data-mem="${esc(r.id)}">✦ Запомнить о госте</button>` : '';
+  if (o?.chosen != null || r?.venue?.name) return mem ? `<div class="req-opts">${mem}</div>` : '';
+  return `<div class="req-opts">${mem || `<button type="button" class="vo-btn" data-options="${esc(r.id)}">✦ Варианты для гостя</button>`}</div>`;
 }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-mem]');
+  if (b) { e.preventDefault(); import('./memory.js').then((m) => m.openMemory(b.dataset.mem)); }
+});
