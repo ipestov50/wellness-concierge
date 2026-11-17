@@ -10,7 +10,7 @@ export { restrictionsBlock };
 import { birthdayField, birthdayValue } from './birthday.js';
 import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
 import { roadSlot, bindRoad } from './road.js';
-import { ZONES, CITIZENSHIPS, lookupPlace, guestTimeLine, timeIn } from './tz.js';
+import { ZONES, CITIZENSHIPS, lookupPlace, guestTimeLine, timeIn, guestWhere, diffHours, fmtDiff, isQuiet } from './tz.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -86,22 +86,23 @@ const SPRING = typeof CSS !== 'undefined' && CSS.supports?.('animation-timing-fu
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
 
+// капсула гостя: имя, живое время, стоп-лист — раскрывается при выборе
 function gpFace(id) {
   const chev = '<span class="gp-chev" aria-hidden="true">▾</span>';
-  if (id === '__new') return `<span class="av gp-av av-none">＋</span><span class="gp-txt"><b>Новый гость</b><small>впишите имя ниже</small></span>${chev}`;
+  if (id === '__new') return `<span class="gp-row"><span class="av gp-av av-none">＋</span><span class="gp-txt"><b>Новый гость</b><small>впишите имя ниже</small></span>${chev}</span>`;
   const c = byId('clients', id);
-  if (!c) return `<span class="av gp-av av-none">?</span><span class="gp-txt"><b class="gp-ph">Выберите гостя</b><small>поиск по имени и городу</small></span>${chev}`;
-  const sub = [c.city, c.home_tz && `${timeIn(c.home_tz)} у гостя`].filter(Boolean).join(' · ');
-  return `${avatar(c, 'gp-av')}<span class="gp-txt"><b>${esc(c.name)}${c.vip ? ' <span class="gp-star">★</span>' : ''}</b><small>${esc(sub || 'город не указан')}</small></span>${chev}`;
+  if (!c) return `<span class="gp-row"><span class="av gp-av av-none">?</span><span class="gp-txt"><b class="gp-ph">Выберите гостя</b><small>поиск по имени и городу</small></span>${chev}</span>`;
+  const w = guestWhere(c);
+  const d = w ? diffHours('Europe/Paris', w.tz) : 0;
+  const clock = w ? `<span class="gp-clock${isQuiet(w.tz) ? ' quiet' : ''}"><i aria-hidden="true"></i><b data-tz-clock="${esc(w.tz)}">${timeIn(w.tz)}</b> ${esc(w.place)}${d ? ` · ${fmtDiff(d)} к Парижу` : ''}${isQuiet(w.tz) ? ' · ночь' : ''}</span>` : '';
+  const risk = ['allergies', 'diet', 'health'].flatMap((k) => c[k] || []);
+  const avoid = c.dislikes || [];
+  const pills = risk.slice(0, 4).map((x) => `<span class="gp-pill">⚠ ${esc(x)}</span>`).join('') + (risk.length > 4 ? `<span class="gp-pill">+${risk.length - 4}</span>` : '')
+    + avoid.slice(0, 2).map((x) => `<span class="gp-pill soft">✕ ${esc(x)}</span>`).join('');
+  return `<span class="gp-row">${avatar(c, 'gp-av')}<span class="gp-txt"><b>${esc(c.name)}${c.vip ? ' <span class="gp-star">★</span>' : ''}</b><small>${esc([c.city, c.language].filter(Boolean).join(' · ') || 'город не указан')}</small></span>${chev}</span>
+    ${clock || pills ? `<span class="gp-extra">${clock}${pills}</span>` : ''}`;
 }
 const hasRisk = (c) => ['allergies', 'diet', 'health'].some((k) => (c[k] || []).length);
-function riskRibbon(c) {
-  if (!c) return '';
-  const g = [['Аллергии', c.allergies], ['Диета', c.diet], ['Здоровье', c.health], ['Избегать', c.dislikes]].filter(([, l]) => l && l.length);
-  if (!g.length) return '';
-  const first = (c.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0];
-  return `<div class="rq-risk-in"><span class="rq-risk-ico" aria-hidden="true">⚠</span><span><b>${esc(first)}</b>${g.map(([t, l]) => ` <span class="rq-rk"><em>${t}:</em> ${l.map(esc).join(', ')}</span>`).join('')}</span></div>`;
-}
 
 function bindGuest(form) {
   const sel = form.client_id, box = form.querySelector('#gp');
@@ -127,9 +128,13 @@ function bindGuest(form) {
     if (!calm()) pop.animate([{ opacity: 0, transform: 'translateY(-6px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: SPRING });
   };
   const pick = (id) => {
+    const h0 = btn.offsetHeight;
     sel.value = id; sel.dispatchEvent(new Event('change', { bubbles: true }));
     btn.innerHTML = gpFace(id); open(false); btn.focus();
-    if (!calm()) btn.animate([{ transform: 'scale(.985)' }, { transform: 'none' }], { duration: 380, easing: SPRING });
+    if (calm()) return;
+    const h1 = btn.offsetHeight;
+    btn.animate([{ height: h0 + 'px', transform: 'scale(.985)' }, { height: h1 + 'px', transform: 'none' }], { duration: 560, easing: SPRING });
+    btn.querySelectorAll('.gp-extra > *').forEach((el, i) => el.animate([{ opacity: 0, transform: 'translateY(6px) scale(.9)' }, { opacity: 1, transform: 'none' }], { duration: 460, delay: 90 + i * 45, easing: SPRING, fill: 'backwards' }));
   };
   btn.addEventListener('click', () => open(pop.hidden));
   list.addEventListener('click', (e) => { const o = e.target.closest('[data-id]'); if (o) pick(o.dataset.id); });
@@ -221,6 +226,7 @@ function bindRequestForm(form) {
   }));
   // «Сохранить» чуть тянется за курсором
   const ok = form.querySelector('#ok');
+  ok?.classList.add('rq-shine');
   if (ok && matchMedia('(pointer: fine)').matches && !calm()) {
     ok.addEventListener('pointermove', (e) => { const r = ok.getBoundingClientRect(); ok.style.translate = `${(e.clientX - r.left - r.width / 2) * .15}px ${(e.clientY - r.top - r.height / 2) * .25}px`; });
     ok.addEventListener('pointerleave', () => { ok.style.translate = ''; });
@@ -245,11 +251,10 @@ export function editRequest(id, presetClient, preset = {}) {
     `<div class="f rq-guest"><label for="f-client_pick">Гость</label>${select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'), 'class="gp-native" tabindex="-1" aria-hidden="true"')}
       <div class="gp" id="gp"><button type="button" class="gp-btn" id="f-client_pick" aria-haspopup="listbox" aria-expanded="false">${gpFace(r.client_id)}</button>
         <div class="gp-pop" hidden><input type="search" class="gp-q" placeholder="Найти гостя…" autocomplete="off" aria-label="Найти гостя"><div class="gp-list" role="listbox"></div></div></div></div>` +
-    `<div class="rq-risk${riskRibbon(byId('clients', r.client_id)) ? ' open' : ''}" id="req-restr"><div>${riskRibbon(byId('clients', r.client_id))}</div></div>` +
     `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
     field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
     field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
-    `<div class="f rq-what"><label for="f-summary">Что нужно</label>${input('summary', r.summary, 'type="text" required class="rq-hero" placeholder="Массаж на двоих в пятницу вечером"')}
+    `<div class="f rq-what"><label for="f-summary">Что нужно</label><div class="rq-cmd"><span class="rq-cmd-ico" aria-hidden="true">✦</span>${input('summary', r.summary, 'type="text" required class="rq-hero" placeholder="Массаж на двоих в пятницу вечером"')}</div>
       <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
@@ -317,9 +322,6 @@ export function editRequest(id, presetClient, preset = {}) {
   if (matchMedia('(pointer:fine)').matches) (r.client_id ? m.form.summary : m.form.querySelector('#f-client_pick')).focus();
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
-    const box = m.form.querySelector('#req-restr'), html = isNew ? '' : riskRibbon(byId('clients', e.target.value));
-    if (html) { box.firstElementChild.innerHTML = html; box.classList.add('open'); }
-    else { box.classList.remove('open'); setTimeout(() => { if (!box.classList.contains('open')) box.firstElementChild.innerHTML = ''; }, 420); }
     m.form.querySelector('#newguest').hidden = !isNew;
     m.form.new_name.required = isNew;
     if (isNew) m.form.new_name.focus();
