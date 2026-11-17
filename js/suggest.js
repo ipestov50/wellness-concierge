@@ -14,7 +14,7 @@ const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂',
 const drafting = new Set();   // какие планы сейчас составляются
 const deep = { on: false, text: '', ahead: false }; // ручной запуск «Что впереди?»; ahead — показать обзор запросов
 const failed = new Set();
-const expanded = new Set();   // у каких карточек открыт полный план
+const deckAt = new Map();     // какая карточка открыта в каждой стопке: 'main' или id гостя
 
 export function visibleSuggestions(clientId) {
   const now = Date.now();
@@ -58,36 +58,73 @@ const fmtWhen = (local) => {
 const firstName = (c) => (c?.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
 const personal = (msg, c) => String(msg || '').replace(/\{имя\}/g, firstName(c));
 
-function card(s, { compact = false } = {}) {
+// старые планы (warnings/insight/message) показываем в новом виде
+const alertsOf = (p) => p.alerts || (p.warnings || []).filter((w) => w.level !== 'info').map((w) => ({ text: w.text, level: w.level === 'critical' ? 'stop' : 'missing' }));
+const tipOf = (p) => p.concierge_tip ?? p.insight ?? '';
+const msgOf = (p) => p.client_message_draft || p.message || '';
+
+function card(s) {
   const c = byId('clients', s.client_id);
   const p = s.payload || {};
   const tasks = p.tasks || [];
   const busy = drafting.has(s.id);
-  const open = expanded.has(s.id) || !compact;
+  const alerts = alertsOf(p), tip = tipOf(p), msg = personal(msgOf(p), c);
+  const phone = (c?.phone || '').replace(/[^\d]/g, '');
   return `<article class="sg" data-sg="${s.id}">
-    <div class="sg-head"><span class="sg-ico">${KIND_ICON[s.kind] || '✨'}</span>
-      <div class="sg-txt"><b>${esc(s.title.replace(/^\S+\s/, ''))}</b><small>${esc(s.reason || '')}</small></div></div>
-    ${busy ? `<div class="sg-drafting"><span class="spin"></span> Jarvis составляет план с учётом вкусов гостя…</div>` : ''}
+    <header class="sg-head"><span class="sg-ico" aria-hidden="true">${KIND_ICON[s.kind] || '✨'}</span>
+      <div class="sg-txt"><h3 class="sg-h">${esc(s.title.replace(/^\S+\s/, ''))}</h3><small>${esc(s.reason || '')}</small></div></header>
+    ${busy ? `<div class="sg-drafting"><span class="spin"></span> Jarvis составляет план с учётом вкусов и стоп-листа…</div>` : ''}
     ${!busy && !tasks.length ? `<div class="sg-empty">${failed.has(s.id) ? 'Не получилось составить план. ' : ''}<button type="button" class="btn small" data-sg-draft="${s.id}">✦ Составить план</button></div>` : ''}
-    ${tasks.length ? `<ul class="sg-tasks">${tasks.map((t, i) => `<li${!open && i > 2 ? ' hidden' : ''}>
-        <label><input type="checkbox" data-sg-task="${i}" checked><span class="sg-cat">${CATEGORIES[t.category] || '📌'}</span>
-        <span class="sg-tmain"><b>${esc(t.summary)}</b><small>${esc(fmtWhen(t.when_local))}${t.partner_id && byId('partners', t.partner_id) ? ' · ' + esc(byId('partners', t.partner_id).name) : ''}${t.note ? ' · ' + esc(t.note) : ''}</small></span></label></li>`).join('')}</ul>
-      ${!open && tasks.length > 3 ? `<button type="button" class="sg-more" data-sg-expand="${s.id}">Ещё ${tasks.length - 3}</button>` : ''}
-      ${(p.warnings || []).length ? `<div class="sg-warn"><b>Jarvis заметил</b><ul>${p.warnings.map((w) =>
-        `<li class="w-${esc(w.level)}"><span>${w.level === 'critical' ? '⚠️' : w.level === 'important' ? '❗' : 'ℹ️'}</span>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
-      ${(p.touches || []).length ? `<div class="sg-touch"><b>Детали, которые удивят</b><ul>${p.touches.map((t) => `<li>✦ ${esc(t)}</li>`).join('')}</ul></div>` : ''}
-      ${p.insight ? `<p class="sg-insight">✦ ${esc(p.insight)}</p>` : ''}
-      ${p.message ? `<details class="sg-msg"><summary>Сообщение гостю</summary><p>${esc(personal(p.message, c))}</p>
-        <div class="sg-msg-actions">${quietNote(c)}<button type="button" class="btn small" data-sg-copy="${s.id}">Скопировать</button>
-        ${c?.phone ? `<a class="btn small" target="_blank" rel="noopener" href="https://wa.me/${esc((c.phone || '').replace(/[^\d]/g, ''))}?text=${encodeURIComponent(personal(p.message, c))}">WhatsApp</a>` : ''}</div></details>` : ''}` : ''}
+    ${tasks.length ? `<ul class="sg-tasks">${tasks.map((t, i) => {
+        const partner = t.partner_id && byId('partners', t.partner_id);
+        return `<li class="sg-task"><label>
+          <input type="checkbox" class="sg-check" data-sg-task="${i}" checked><span class="sg-box" aria-hidden="true"></span>
+          <span class="sg-tmain"><b><span class="sg-cat" aria-hidden="true">${CATEGORIES[t.category] || '📌'}</span> ${esc(t.summary)}</b>
+            <small class="sg-meta"><span class="sg-when">${esc(fmtWhen(t.when_local))}</span>${partner ? `<span class="sg-partner">★ ${esc(partner.name)}</span>` : ''}${t.note ? `<span class="sg-note">${esc(t.note)}</span>` : ''}</small></span></label></li>`;
+      }).join('')}</ul>
+      ${alerts.length ? `<div class="sg-alerts">${alerts.map((a) => `<p class="sg-alert ${a.level === 'stop' ? 'stop' : 'missing'}"><span aria-hidden="true">${a.level === 'stop' ? '⚠' : '?'}</span>${esc(a.text)}</p>`).join('')}</div>` : ''}
+      ${tip ? `<p class="sg-tip"><span aria-hidden="true">✦</span>${esc(tip)}</p>` : ''}
+      ${msg ? `<div class="sg-bubble"><div class="sg-bubble-h"><span>Сообщение клиенту${firstName(c) ? ' · ' + esc(firstName(c)) : ''}</span>${quietNote(c)}</div>
+        <p class="sg-bubble-t">${esc(msg)}</p>
+        <div class="sg-bubble-a"><button type="button" class="sg-copy" data-sg-copy="${s.id}"><i aria-hidden="true">⧉</i> Скопировать</button>
+          ${phone ? `<a class="sg-wa" target="_blank" rel="noopener" href="https://wa.me/${esc(phone)}?text=${encodeURIComponent(msg)}">WhatsApp ↗</a>` : ''}</div></div>` : ''}` : ''}
     <div class="sg-actions">
-      ${tasks.length ? `<button type="button" class="btn small primary" data-sg-accept="${s.id}">Принять</button>
+      ${tasks.length ? `<button type="button" class="btn small primary sg-accept" data-sg-accept="${s.id}">Принять</button>
       <button type="button" class="btn small" data-sg-edit="${s.id}">Изменить</button>` : ''}
-      ${tasks.length && s.kind !== 'transfer' ? `<button type="button" class="btn small ghostish" data-sg-redraft="${s.id}" title="Составить план заново">↻</button>` : ''}
+      ${tasks.length && s.kind !== 'transfer' ? `<button type="button" class="btn small ghostish" data-sg-redraft="${s.id}" title="Составить план заново" aria-label="Составить план заново">↻</button>` : ''}
+      <span class="sg-gap"></span>
       <button type="button" class="btn small ghostish" data-sg-snooze="${s.id}">Позже</button>
       <button type="button" class="btn small ghostish" data-sg-dismiss="${s.id}">Не нужно</button>
     </div>
   </article>`;
+}
+
+// стопка карточек «1 / N» с листанием
+const deckList = (key) => (key === 'main' ? visibleSuggestions() : visibleSuggestions(key));
+function deck(key, list, extra = '') {
+  const n = list.length;
+  const i = Math.min(deckAt.get(key) || 0, n - 1);
+  deckAt.set(key, i);
+  return `<section class="jarvis-sg deck${key === 'main' ? '' : ' in-profile'}" data-deck="${esc(key)}">
+    <div class="sg-title"><span class="sg-eyebrow">✦ Jarvis предлагает</span>${extra}
+      ${n > 1 ? `<span class="sg-pager"><button type="button" data-sg-nav="-1" aria-label="Предыдущее предложение">←</button><b class="sg-count"><span>${i + 1}</span> / ${n}</b><button type="button" data-sg-nav="1" aria-label="Следующее предложение">→</button></span>` : ''}</div>
+    <div class="sg-stage">${card(list[i])}</div>
+  </section>`;
+}
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SPRING = CSS.supports?.('animation-timing-function', 'linear(0, 1)')
+  ? 'linear(0, .06 2%, .23 5%, .5 9.5%, .77 15%, .93 21%, 1.01 28%, 1.03 34%, 1.015 44%, 1 60%, 1)' : 'cubic-bezier(.22, 1, .36, 1)';
+function navDeck(sec, dir) {
+  const key = sec.dataset.deck, list = deckList(key), n = list.length;
+  if (n < 2) return;
+  const i = ((deckAt.get(key) || 0) + dir + n) % n;
+  deckAt.set(key, i);
+  const stage = sec.querySelector('.sg-stage');
+  stage.innerHTML = card(list[i]);
+  sec.querySelector('.sg-count span').textContent = i + 1;
+  if (reducedMotion()) return;
+  stage.firstElementChild.animate([{ opacity: 0, transform: `translateX(${dir * 36}px) scale(.985)` }, { opacity: 1, transform: 'none' }], { duration: 460, easing: SPRING });
+  sec.querySelector('.sg-count').animate([{ transform: `translateY(${dir * -6}px)`, opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: SPRING });
 }
 
 // ---------- «Что впереди?»: ваши запросы на 14 дней и чего в каждом не хватает (без ИИ, мгновенно) ----------
@@ -149,19 +186,16 @@ export function suggestionsBlock() {
 }
 function suggestionsOnly() {
   const list = visibleSuggestions();
-  if (!list.length && deep.on) return `<section class="jarvis-sg"><div class="sg-title"><span>✦ Jarvis предлагает</span><span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span></div></section>`;
+  const progress = deep.on ? `<span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span>` : '';
+  if (!list.length && deep.on) return `<section class="jarvis-sg"><div class="sg-title"><span class="sg-eyebrow">✦ Jarvis предлагает</span>${progress}</div></section>`;
   if (!list.length) return '';
-  const top = list.slice(0, 3);
   // план по подсказке Jarvis составляет только по кнопке «✦ Составить план» — без фоновых трат лимита Gemini
-  return `<section class="jarvis-sg">
-    <div class="sg-title"><span>✦ Jarvis предлагает</span>${deep.on ? `<span class="sg-progress"><span class="spin"></span> ${esc(deep.text)}</span>` : list.length > 3 ? `<button type="button" class="link" data-sg-all>Все · ${list.length}</button>` : `<span class="muted">${list.length}</span>`}</div>
-    <div class="sg-list">${top.map((s) => card(s, { compact: true })).join('')}</div>
-  </section>`;
+  return deck('main', list, progress || (list.length > 3 ? '<button type="button" class="link sg-all" data-sg-all>Все</button>' : ''));
 }
 
 export function clientSuggestions(clientId) {
   const list = visibleSuggestions(clientId);
-  return list.length ? `<section class="psec jarvis-sg in-profile"><h4>✦ Jarvis предлагает</h4><div class="sg-list">${list.map((s) => card(s, { compact: true })).join('')}</div></section>` : '';
+  return list.length ? deck(clientId, list) : '';
 }
 
 // ---------- действия ----------
@@ -205,24 +239,30 @@ function showAll() {
   openModal({
     title: 'Jarvis предлагает',
     saveLabel: 'Закрыть',
-    body: `<div class="jarvis-sg in-modal"><div class="sg-list">${visibleSuggestions().map((s) => card(s)).join('')}</div></div>`,
+    body: `<div class="jarvis-sg in-modal"><div class="sg-list">${visibleSuggestions().map((x) => card(x)).join('')}</div></div>`,
     onSave: async () => {},
   }).form.querySelector('#cancel').hidden = true;
 }
 
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-sg-draft],[data-sg-redraft],[data-sg-accept],[data-sg-edit],[data-sg-snooze],[data-sg-dismiss],[data-sg-copy],[data-sg-expand],[data-sg-all]');
+  const b = e.target.closest('[data-sg-draft],[data-sg-redraft],[data-sg-accept],[data-sg-edit],[data-sg-snooze],[data-sg-dismiss],[data-sg-copy],[data-sg-all],[data-sg-nav]');
   if (!b) return;
   if (b.hasAttribute('data-sg-all')) return showAll();
-  const id = b.dataset.sgDraft || b.dataset.sgRedraft || b.dataset.sgAccept || b.dataset.sgEdit || b.dataset.sgSnooze || b.dataset.sgDismiss || b.dataset.sgCopy || b.dataset.sgExpand;
+  if (b.dataset.sgNav) return navDeck(b.closest('[data-deck]'), +b.dataset.sgNav);
+  const id = b.dataset.sgDraft || b.dataset.sgRedraft || b.dataset.sgAccept || b.dataset.sgEdit || b.dataset.sgSnooze || b.dataset.sgDismiss || b.dataset.sgCopy;
   const s = state.suggestions.find((x) => x.id === id);
   if (!s) return;
   const root = b.closest('.jarvis-sg') || document;
   try {
     if (b.dataset.sgDraft) draft(s);
     else if (b.dataset.sgRedraft) draft(s, true);
-    else if (b.dataset.sgExpand) { expanded.add(id); render(); }
-    else if (b.dataset.sgAccept) { b.disabled = true; await accept(s, selected(root, s)); }
+    else if (b.dataset.sgAccept) {
+      b.disabled = true;
+      const picked = selected(root, s);
+      await accept(s, picked);
+      if (picked.length) { b.classList.add('done'); b.textContent = '✓ Создано'; if (!reducedMotion()) b.animate([{ transform: 'scale(.92)' }, { transform: 'scale(1.06)' }, { transform: 'none' }], { duration: 520, easing: SPRING }); }
+      else b.disabled = false;
+    }
     else if (b.dataset.sgEdit) edit(s, selected(root, s));
     else if (b.dataset.sgSnooze) {
       const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + 864e5));
@@ -232,7 +272,9 @@ document.addEventListener('click', async (e) => {
       await save('suggestions', id, { status: 'dismissed' });
       toast('Понял. Этому гостю такое не предложу ещё месяц', '', { label: 'Вернуть', fn: () => save('suggestions', id, { status: 'new' }) });
     } else if (b.dataset.sgCopy) {
-      await navigator.clipboard.writeText(personal(s.payload?.message, byId('clients', s.client_id)));
+      await navigator.clipboard.writeText(personal(msgOf(s.payload || {}), byId('clients', s.client_id)));
+      b.classList.add('ok'); b.querySelector('i').textContent = '✓';
+      setTimeout(() => { b.classList.remove('ok'); const i = b.querySelector('i'); if (i) i.textContent = '⧉'; }, 1600);
       toast('Сообщение скопировано');
     }
   } catch (err) { b.disabled = false; toast('Не получилось: ' + (err.message || err), 'err'); }
@@ -259,3 +301,18 @@ export async function runDeep() {
     toast('Не получилось: ' + (e.message || e), 'err');
   } finally { deep.on = false; render(); }
 }
+
+// листание стопки свайпом и стрелками клавиатуры
+let swipe = null;
+document.addEventListener('pointerdown', (e) => { const st = e.target.closest('.deck .sg-stage'); swipe = st ? { st, x: e.clientX, y: e.clientY } : null; });
+document.addEventListener('pointerup', (e) => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, sec = swipe.st.closest('[data-deck]');
+  swipe = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) navDeck(sec, dx < 0 ? 1 : -1);
+});
+document.addEventListener('keydown', (e) => {
+  const sec = e.target.closest?.('[data-deck]');
+  if (!sec || /input|textarea|select/i.test(e.target.tagName) && e.target.type !== 'checkbox') return;
+  if (e.key === 'ArrowRight') navDeck(sec, 1); else if (e.key === 'ArrowLeft') navDeck(sec, -1);
+});
