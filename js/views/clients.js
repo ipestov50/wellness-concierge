@@ -102,9 +102,9 @@ function passport(c, i, today) {
     </div>
     ${tags.length ? `<div class="pp-tags">${tags.slice(0, 3).map((x) => `<span>${esc(x)}</span>`).join('')}${tags.length > 3 ? `<span class="more">+${tags.length - 3}</span>` : ''}</div>` : ''}
     <footer class="pp-foot">
-      ${digits ? `<a class="pp-act" data-stop href="https://wa.me/${esc(digits.replace('+', ''))}" target="_blank" rel="noopener" aria-label="WhatsApp">💬<span>WhatsApp</span></a>
-        <button type="button" class="pp-act" data-copy="${esc(c.phone)}" aria-label="Скопировать телефон"><i class="cp-ico" aria-hidden="true">⧉</i><span>Телефон</span></button>`
-        : c.email ? `<button type="button" class="pp-act" data-copy="${esc(c.email)}" aria-label="Скопировать почту"><i class="cp-ico" aria-hidden="true">⧉</i><span>Почта</span></button>` : ''}
+      ${digits ? `<a class="pp-act" data-stop href="https://wa.me/${esc(digits.replace('+', ''))}" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">💬<span>WhatsApp</span></a>
+        <button type="button" class="pp-act" data-copy="${esc(c.phone)}" aria-label="Скопировать телефон" title="Скопировать телефон"><i class="cp-ico" aria-hidden="true">⧉</i><span>Телефон</span></button>`
+        : c.email ? `<button type="button" class="pp-act" data-copy="${esc(c.email)}" aria-label="Скопировать почту" title="Скопировать почту"><i class="cp-ico" aria-hidden="true">⧉</i><span>Почта</span></button>` : ''}
       <span class="pp-open">Открыть досье <span aria-hidden="true">→</span></span>
     </footer>
   </article>`;
