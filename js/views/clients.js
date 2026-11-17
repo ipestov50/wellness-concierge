@@ -7,6 +7,7 @@ import { requestCard } from './requests.js';
 import { clientSuggestions } from '../suggest.js';
 import { guestClock, guestWhere, timeIn, diffHours, fmtDiff, isQuiet } from '../tz.js';
 import { editClient } from '../lazy.js';
+import { hydrateStories, ringClass } from '../stories.js';
 import { tripState, tripCard, fmtRange, parisToday, upcomingDates, chipEditor, bindChipEditors, personCard, editTrip, editPerson, editDate } from '../dossier.js';
 
 const mobile = () => matchMedia('(max-width: 760px)').matches;
@@ -88,7 +89,7 @@ function passport(c, i, today) {
   const vt = ui.clBack === c.id ? ' style="view-transition-name: cl-av"' : '';
   return `<article class="pp" data-cl="${c.id}" tabindex="0" role="link" aria-label="Открыть досье: ${nm(c)}" style="--i:${Math.min(i, 10)}">
     <header class="pp-head">
-      <span class="pp-avwrap"${vt}>${avatar(c, 'pp-av')}</span>
+      <span class="pp-avwrap${ringClass(c)}" data-story="${c.id}"${vt}>${avatar(c, 'pp-av')}</span>
       <div class="pp-id"><h3 class="pp-name"${ui.clBack === c.id ? ' style="view-transition-name: cl-name"' : ''}>${nm(c)}${c.vip ? ' <span class="cl-star" title="VIP">★</span>' : ''}</h3>
         <p class="pp-meta">${[c.language, c.city].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</p></div>
       ${clockPill(c)}
@@ -280,7 +281,7 @@ function dossier(c) {
     </aside>
     <section class="cl-dos">
       <header class="dh">
-        <span class="dh-avwrap" style="view-transition-name: cl-av">${avatar(c, 'dh-av')}</span>
+        <span class="dh-avwrap${ringClass(c)}" data-story="${c.id}" style="view-transition-name: cl-av">${avatar(c, 'dh-av')}</span>
         <div class="dh-id">
           <p class="cl-label">Частное досье${c.vip ? ' · VIP' : ''}</p>
           <h2 class="dh-name" style="view-transition-name: cl-name">${nm(c)}${c.vip ? ' <span class="cl-star" title="VIP">★</span>' : ''}</h2>
@@ -360,6 +361,7 @@ function view(app) {
   magnetic(app.querySelector('.jv'));
 
   bindChipEditors(app);
+  hydrateStories(app);
   app.querySelectorAll('[data-ctab],[data-ctab-go]').forEach((b) => b.addEventListener('click', () => { ui.ctab = b.dataset.ctab || b.dataset.ctabGo; render(); }));
   app.querySelectorAll('[data-trip]').forEach((b) => b.addEventListener('click', () => editTrip(b.dataset.trip)));
   app.querySelectorAll('[data-person]').forEach((b) => b.addEventListener('click', () => editPerson(b.dataset.person)));
