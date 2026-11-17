@@ -9,6 +9,11 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SPRING = CSS.supports?.('animation-timing-function', 'linear(0, 1)')
   ? 'linear(0, .06 2%, .23 5%, .5 9.5%, .77 15%, .93 21%, 1.01 28%, 1.03 34%, 1.015 44%, 1 60%, 1)' : 'cubic-bezier(.22, 1, .36, 1)';
 const ruCountry = (cc) => { try { return cc ? new Intl.DisplayNames(['ru'], { type: 'region' }).of(cc) : ''; } catch { return ''; } };
+// категории консьержа: подпись и цвет плашки
+const TAGS = { logistics: '✈ Логистика', gastronomy: '🍽 Гастрономия', culture: '🎭 Культура', local_pulse: '📍 Пульс города' };
+// вкусы гостя для сортировки новостей (используются только на нашем сервере)
+const interests = (c) => [...(c.likes || []), c.pref_food, c.pref_hotels, c.pref_spa, c.pref_transport]
+  .flatMap((v) => String(v || '').split(/[,;\n]/)).map((v) => v.trim()).filter((v) => v && v.length <= 40).slice(0, 16);
 const firstName = (c) => (c.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0] || '';
 
 // где гость: город активной поездки, иначе домашний город и гражданство
@@ -30,7 +35,7 @@ export function ringClass(c) {
 function load(c) {
   const p = storyPlace(c);
   if (!p.city && !p.cc) return Promise.resolve([]);
-  return cached(`stories:${p.city.toLowerCase()}|${p.cc}`, 30 * 60e3, () => api('client-stories', { city: p.city, country: p.cc }))
+  return cached(`stories:${c.id}|${p.city.toLowerCase()}|${p.cc}`, 30 * 60e3, () => api('client-stories', { city: p.city, country: p.cc, interests: interests(c) }))
     .then(({ value }) => value?.stories || []).catch(() => []);
 }
 
@@ -97,7 +102,8 @@ function openStories(c, from) {
     bars.forEach((b, k) => { b.style.transform = `scaleX(${k < i ? 1 : 0})`; });
     stage.innerHTML = `<article class="st-slide${s.imageUrl ? '' : ' paper'}">
       ${s.imageUrl ? `<img class="st-img" src="${esc(s.imageUrl)}" alt="" referrerpolicy="no-referrer" decoding="async">` : ''}
-      <div class="st-body"><span class="st-scope ${s.scope}">${s.scope === 'city' ? 'Город' : 'Страна'}</span>
+      <div class="st-body"><div class="st-tags"><span class="st-tag ${esc(s.conciergeTag || 'local_pulse')}">${TAGS[s.conciergeTag] || TAGS.local_pulse}</span>
+          <span class="st-scope ${s.scope}">${s.scope === 'city' ? 'Город' : 'Страна'}</span>${s.tasteMatch ? '<span class="st-taste">✦ во вкусе гостя</span>' : ''}</div>
         <h2 class="st-title">${esc(s.title)}</h2>${s.summary ? `<p class="st-sum">${esc(s.summary)}</p>` : ''}
         <p class="st-from">${esc(s.source || '')}${s.source && s.publishedAt ? ' · ' : ''}${esc(ago(s.publishedAt))}</p></div></article>`;
     card.classList.toggle('on-paper', !s.imageUrl);
