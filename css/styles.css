@@ -2018,3 +2018,265 @@ select.flash { animation: flash-ring 1s var(--ease); }
   .db-actions .btn, .db-check, .db-grip, .day-head .icon-btn { transition: none !important; }
   .day-now-l::before { animation: none; }
 }
+
+/* ===== Календарь — editorial warm redesign ===== */
+
+/* --- keyframes --- */
+@keyframes calSlide { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes calFade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes calNowPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+@keyframes calPop { 0% { transform: scale(.92); opacity: 0; } 100% { transform: none; opacity: 1; } }
+
+/* --- контейнер --- */
+.cal {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 24px;
+  padding: 20px; box-shadow: 0 4px 24px rgba(44,37,32,.04);
+  animation: calSlide .5s var(--ease) both;
+}
+
+/* --- шапка --- */
+.cal-top {
+  display: flex; flex-wrap: wrap; justify-content: space-between;
+  align-items: center; gap: 12px; margin-bottom: 14px;
+  animation: calFade .4s var(--ease) .06s both;
+}
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-title {
+  font-family: var(--f-head); font-size: 26px; font-weight: 500;
+  letter-spacing: -.01em; margin: 0 8px; white-space: nowrap;
+}
+.cal-nav .icon-btn {
+  font-size: 20px; width: 40px; height: 40px; border-radius: 12px;
+  transition: transform .25s var(--ease), background .2s, border-color .2s;
+}
+.cal-nav .icon-btn:hover { transform: scale(1.12); }
+.cal-nav .btn.small {
+  border-radius: 12px; font-weight: 600;
+  transition: transform .2s var(--ease), box-shadow .2s, background .2s;
+}
+.cal-nav .btn.small:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(40,30,20,.08); }
+
+/* --- переключатель режимов --- */
+.cal-modes { height: 42px; border-radius: 14px; }
+.cal-modes button {
+  padding: 0 18px; border-radius: 11px; font-weight: 600; font-size: 13.5px;
+  transition: color .2s, background .2s, box-shadow .2s;
+}
+.cal-modes button[aria-selected="true"] {
+  box-shadow: 0 2px 8px rgba(40,30,20,.08);
+}
+
+/* --- фильтры --- */
+.cal-filters { gap: 8px; margin-bottom: 14px; animation: calSlide .4s var(--ease) .1s both; }
+.cf {
+  gap: 8px; border-radius: 99px; padding: 6px 14px 6px 10px;
+  font-size: 13px; font-weight: 600;
+  transition: transform .2s var(--ease), box-shadow .2s, background .2s, border-color .2s, color .2s;
+}
+.cf:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(40,30,20,.06); }
+.cf i { width: 10px; height: 10px; border-radius: 50%; transition: opacity .2s, transform .2s; }
+.cf:hover i { transform: scale(1.2); }
+.cf.on {
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+/* --- zoom --- */
+.zoom {
+  border-radius: 14px; padding: 4px; height: 42px;
+  transition: box-shadow .2s;
+}
+.zoom:hover { box-shadow: 0 2px 8px rgba(40,30,20,.06); }
+.zoom .icon-btn {
+  width: 34px; height: 34px; border-radius: 10px;
+  transition: transform .2s var(--ease), background .2s;
+}
+.zoom .icon-btn:hover:not(:disabled) { transform: scale(1.1); }
+.zoom-v { font-weight: 600; }
+
+/* --- сетка времени --- */
+.tg {
+  border-radius: 18px; overflow: hidden;
+  border: 1px solid var(--line);
+  animation: calSlide .45s var(--ease) .14s both;
+}
+.tg-head { border-bottom: 1px solid var(--line); }
+.tg-day {
+  padding: 10px 4px; gap: 2px;
+  transition: background .2s;
+}
+.tg-day small { font-size: 11px; letter-spacing: .08em; }
+.tg-day b {
+  font-family: var(--f-head); font-size: 24px; font-weight: 500;
+  width: 44px; height: 44px; border-radius: 50%;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.tg-day.today b {
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.tg-day:hover b { background: var(--soft); }
+.tg-day.today:hover b { background: var(--accent); filter: brightness(1.08); }
+.tg-col.today { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.tg-slot { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.tg-slot::after { border-top: 1px dashed color-mix(in srgb, var(--line) 35%, transparent); }
+.tg-col:hover .tg-slot:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+
+/* --- линия «сейчас» --- */
+.now-line { height: 2px; background: var(--accent); z-index: 3; }
+.now-line::before {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: calNowPulse 2.5s ease-in-out infinite;
+}
+
+/* --- события на сетке --- */
+.ev {
+  border-radius: 12px; padding: 7px 9px;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ink-c) 50%, transparent);
+  transition: transform .25s var(--ease), box-shadow .25s var(--ease), z-index 0s;
+}
+.ev:hover {
+  z-index: 4; transform: translateY(-2px) scale(1.01);
+  box-shadow: inset 3px 0 0 var(--ink-c), 0 8px 22px rgba(40,30,20,.14);
+}
+.ev.dragging {
+  box-shadow: inset 3px 0 0 var(--ink-c), 0 16px 36px rgba(40,30,20,.22);
+  transform: scale(1.03);
+}
+.ev-t { font-size: 13px; line-height: 1.3; }
+.ev-who { font-size: 12px; gap: 6px; }
+.ev-time { font-size: 11px; font-variant-numeric: tabular-nums; }
+.ev.done { opacity: .45; }
+.ev.done:hover { opacity: .7; }
+.ev.late {
+  box-shadow: inset 3px 0 0 var(--crit), 0 0 0 1.5px color-mix(in srgb, var(--crit) 50%, transparent);
+}
+
+/* --- чипы событий --- */
+.chipev {
+  border-radius: 10px; padding: 4px 8px;
+  transition: transform .2s var(--ease), box-shadow .2s;
+}
+.chipev:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(40,30,20,.08); }
+
+/* --- месяц --- */
+.mg-grid {
+  border-radius: 18px; gap: 1px;
+  animation: calSlide .45s var(--ease) .14s both;
+}
+.mg-cell {
+  min-height: 112px; padding: 8px;
+  transition: background .2s;
+}
+.mg-cell:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+.mg-cell.other:hover { background: color-mix(in srgb, var(--accent) 3%, var(--bg)); }
+.mg-num {
+  width: 30px; height: 30px; border-radius: 50%;
+  font-weight: 600; font-size: 13.5px;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.mg-num:hover { background: var(--soft); }
+.mg-cell.today .mg-num {
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.mg-evs { gap: 4px; }
+.mg-more {
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  transition: color .2s;
+}
+.mg-more:hover { color: var(--ink); }
+
+/* --- полоса дней (день) --- */
+.daystrip {
+  gap: 6px; margin-bottom: 12px; border-radius: 18px;
+  padding: 6px; background: var(--bg);
+  border: 1px solid var(--line);
+  animation: calSlide .4s var(--ease) .1s both;
+}
+.ds {
+  border-radius: 14px; padding: 8px 0;
+  transition: transform .25s var(--ease), background .25s, box-shadow .25s;
+}
+.ds:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(40,30,20,.07); }
+.ds small { font-size: 11px; }
+.ds b { font-family: var(--f-head); font-size: 20px; font-weight: 500; }
+.ds i { color: var(--accent); font-size: 12px; letter-spacing: 2px; }
+.ds.today b { color: var(--accent); }
+.ds.on {
+  background: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+  transform: translateY(-1px);
+}
+.ds.on small, .ds.on b, .ds.on i { color: var(--accent-ink); }
+
+/* --- повестка (телефон) --- */
+.agenda { gap: 12px; animation: calSlide .45s var(--ease) .14s both; }
+.ag-day { gap: 12px; }
+.ag-head b {
+  font-family: var(--f-head); font-size: 24px; font-weight: 500;
+  width: 44px; height: 44px; border-radius: 50%;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.ag-day.today .ag-head b {
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.ag-ev {
+  border-radius: 14px; padding: 12px 14px;
+  transition: transform .25s var(--ease), box-shadow .25s;
+}
+.ag-ev:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(40,30,20,.1); }
+.ag-time { font-size: 13px; font-variant-numeric: tabular-nums; }
+.ag-main b { font-size: 14.5px; }
+.ag-main small { font-size: 12.5px; }
+.ag-empty {
+  border-radius: 14px; padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+  transition: background .2s, border-color .2s;
+}
+.ag-empty:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+/* --- stagger entry для событий в повестке --- */
+.ag-day:nth-child(1) { animation: calSlide .4s var(--ease) .06s both; }
+.ag-day:nth-child(2) { animation: calSlide .4s var(--ease) .12s both; }
+.ag-day:nth-child(3) { animation: calSlide .4s var(--ease) .18s both; }
+.ag-day:nth-child(4) { animation: calSlide .4s var(--ease) .24s both; }
+.ag-day:nth-child(5) { animation: calSlide .4s var(--ease) .30s both; }
+.ag-day:nth-child(6) { animation: calSlide .4s var(--ease) .36s both; }
+.ag-day:nth-child(7) { animation: calSlide .4s var(--ease) .42s both; }
+
+/* --- responsive calendar --- */
+@media (max-width: 760px) {
+  .cal { padding: 14px; border-radius: 20px; margin: 0; }
+  .cal-top { flex-direction: column; align-items: stretch; gap: 10px; }
+  .cal-nav { justify-content: space-between; }
+  .cal-title { font-size: 21px; flex: 1; text-align: center; }
+  .cal-modes { width: 100%; border-radius: 12px; }
+  .cal-modes button { flex: 1; padding: 0 10px; }
+  .cal-filters {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin: 0 -14px 10px; padding: 0 14px;
+  }
+  .tg { border-radius: 14px; }
+  .tg-head .tg-day b { width: 38px; height: 38px; font-size: 20px; }
+  .mg-cell { min-height: 64px; padding: 4px 2px; }
+  .ag-ev { padding: 10px 12px; border-radius: 12px; }
+  .daystrip { padding: 4px; border-radius: 14px; }
+  .ds { border-radius: 12px; }
+}
+
+/* --- reduced motion calendar --- */
+@media (prefers-reduced-motion: reduce) {
+  .cal, .cal-top, .cal-filters, .tg, .mg-grid, .daystrip, .agenda,
+  .ag-day, .ag-day:nth-child(n) { animation: none !important; }
+  .ev, .chipev, .cf, .ds, .ag-ev, .ag-empty, .tg-day b, .mg-num,
+  .cal-nav .icon-btn, .cal-nav .btn, .zoom .icon-btn,
+  .mg-cell, .mg-more { transition: none !important; }
+  .now-line::before { animation: none; }
+}
