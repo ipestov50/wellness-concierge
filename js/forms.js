@@ -1,5 +1,5 @@
 import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
-import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast } from './ui.js';
+import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast, avatar } from './ui.js';
 import { state, byId, save, remove } from './data.js';
 import { requestOptionsBar } from './options.js';
 import { ui, render } from './router.js';
@@ -10,7 +10,7 @@ export { restrictionsBlock };
 import { birthdayField, birthdayValue } from './birthday.js';
 import { checklistSection, bindChecklist, buildChecklist } from './checklist.js';
 import { roadSlot, bindRoad } from './road.js';
-import { ZONES, CITIZENSHIPS, lookupPlace, guestTimeLine } from './tz.js';
+import { ZONES, CITIZENSHIPS, lookupPlace, guestTimeLine, timeIn } from './tz.js';
 
 const input = (name, value, attrs = '') => `<input id="f-${name}" name="${name}" value="${esc(value)}" ${attrs}>`;
 const area = (name, value, attrs = '') => `<textarea id="f-${name}" name="${name}" ${attrs}>${esc(value)}</textarea>`;
@@ -80,6 +80,153 @@ function bindVenue(form) {
   pop.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pop.querySelector('[data-vp-ok]').click(); } });
 }
 
+// ---------- форма запроса: выбор гостя, стоп-лист, срочность, место, раскрытие полей ----------
+const SPRING = typeof CSS !== 'undefined' && CSS.supports?.('animation-timing-function', 'linear(0, 1)')
+  ? 'linear(0, .06 2%, .23 5%, .5 9.5%, .77 15%, .93 21%, 1.01 28%, 1.03 34%, 1.015 44%, 1 60%, 1)' : 'cubic-bezier(.22, 1, .36, 1)';
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
+
+function gpFace(id) {
+  const chev = '<span class="gp-chev" aria-hidden="true">▾</span>';
+  if (id === '__new') return `<span class="av gp-av av-none">＋</span><span class="gp-txt"><b>Новый гость</b><small>впишите имя ниже</small></span>${chev}`;
+  const c = byId('clients', id);
+  if (!c) return `<span class="av gp-av av-none">?</span><span class="gp-txt"><b class="gp-ph">Выберите гостя</b><small>поиск по имени и городу</small></span>${chev}`;
+  const sub = [c.city, c.home_tz && `${timeIn(c.home_tz)} у гостя`].filter(Boolean).join(' · ');
+  return `${avatar(c, 'gp-av')}<span class="gp-txt"><b>${esc(c.name)}${c.vip ? ' <span class="gp-star">★</span>' : ''}</b><small>${esc(sub || 'город не указан')}</small></span>${chev}`;
+}
+const hasRisk = (c) => ['allergies', 'diet', 'health'].some((k) => (c[k] || []).length);
+function riskRibbon(c) {
+  if (!c) return '';
+  const g = [['Аллергии', c.allergies], ['Диета', c.diet], ['Здоровье', c.health], ['Избегать', c.dislikes]].filter(([, l]) => l && l.length);
+  if (!g.length) return '';
+  const first = (c.name || '').replace(/\s*\(.*?\)/g, '').split(/\s+/)[0];
+  return `<div class="rq-risk-in"><span class="rq-risk-ico" aria-hidden="true">⚠</span><span><b>${esc(first)}</b>${g.map(([t, l]) => ` <span class="rq-rk"><em>${t}:</em> ${l.map(esc).join(', ')}</span>`).join('')}</span></div>`;
+}
+
+function bindGuest(form) {
+  const sel = form.client_id, box = form.querySelector('#gp');
+  const btn = box.querySelector('.gp-btn'), pop = box.querySelector('.gp-pop'), q = box.querySelector('.gp-q'), list = box.querySelector('.gp-list');
+  const clients = [...state.clients].sort((a, b) => (b.vip - a.vip) || a.name.localeCompare(b.name, 'ru'));
+  let items = [], idx = 0;
+  const row = (c, i) => c.id === '__new'
+    ? `<button type="button" role="option" class="gp-opt new${i === idx ? ' act' : ''}" data-id="__new"><span class="av gp-av av-none">＋</span><span class="gp-txt"><b>Новый гость…</b><small>добавить в клиенты</small></span></button>`
+    : `<button type="button" role="option" aria-selected="${c.id === sel.value}" class="gp-opt${i === idx ? ' act' : ''}" data-id="${c.id}">${avatar(c, 'gp-av')}<span class="gp-txt"><b>${esc(c.name)}${c.vip ? ' <span class="gp-star">★</span>' : ''}</b><small>${esc(c.city || c.language || '')}</small></span>${hasRisk(c) ? '<i class="gp-risk" title="Есть стоп-лист"></i>' : ''}</button>`;
+  const draw = () => {
+    const t = q.value.trim().toLowerCase();
+    items = clients.filter((c) => !t || [c.name, c.city, c.telegram].join(' ').toLowerCase().includes(t));
+    items = t ? [...items, { id: '__new' }] : [{ id: '__new' }, ...items];
+    idx = Math.min(idx, items.length - 1);
+    list.innerHTML = items.map(row).join('');
+    list.querySelector('.act')?.scrollIntoView({ block: 'nearest' });
+  };
+  const open = (on) => {
+    if (on === !pop.hidden) return;
+    pop.hidden = !on; btn.setAttribute('aria-expanded', String(on)); box.classList.toggle('open', on);
+    if (!on) return;
+    q.value = ''; idx = Math.max(0, clients.findIndex((c) => c.id === sel.value) + 1); draw(); q.focus();
+    if (!calm()) pop.animate([{ opacity: 0, transform: 'translateY(-6px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: SPRING });
+  };
+  const pick = (id) => {
+    sel.value = id; sel.dispatchEvent(new Event('change', { bubbles: true }));
+    btn.innerHTML = gpFace(id); open(false); btn.focus();
+    if (!calm()) btn.animate([{ transform: 'scale(.985)' }, { transform: 'none' }], { duration: 380, easing: SPRING });
+  };
+  btn.addEventListener('click', () => open(pop.hidden));
+  list.addEventListener('click', (e) => { const o = e.target.closest('[data-id]'); if (o) pick(o.dataset.id); });
+  q.addEventListener('input', () => { idx = 0; draw(); });
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (items[idx]) pick(items[idx].id); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); open(false); btn.focus(); }
+  });
+  form.addEventListener('click', (e) => { if (!box.contains(e.target)) open(false); });
+}
+
+// подложка, которая пружиной переезжает к выбранному варианту
+function slidePill(track, ink, target, color) {
+  if (!target) { ink.style.opacity = 0; return; }
+  const to = { x: target.offsetLeft, y: target.offsetTop, w: target.offsetWidth, h: target.offsetHeight };
+  const frame = (p) => ({ transform: `translate(${p.x}px, ${p.y}px)`, width: p.w + 'px', height: p.h + 'px' });
+  const from = ink._at;
+  ink._at = to;
+  if (color) ink.dataset.u = color;
+  Object.assign(ink.style, frame(to), { opacity: 1 });
+  if (from && (from.x !== to.x || from.w !== to.w) && !calm()) ink.animate([frame(from), frame(to)], { duration: 560, easing: SPRING });
+}
+
+function bindRequestForm(form) {
+  // срочность
+  const urg = form.querySelector('.seg-pick');
+  if (urg) {
+    const ink = document.createElement('span'); ink.className = 'u-ink'; ink.setAttribute('aria-hidden', 'true'); urg.prepend(ink);
+    const place = () => { const r = urg.querySelector('input:checked'); slidePill(urg, ink, r?.parentElement, r?.value); };
+    urg.addEventListener('change', place);
+    requestAnimationFrame(place);
+    addEventListener('resize', () => { ink._at = null; place(); });
+  }
+  // быстрые варианты «Что нужно»
+  const sum = form.summary, chips = form.querySelector('#rq-quick');
+  const syncChips = () => chips?.classList.toggle('gone', !!sum.value.trim());
+  sum.addEventListener('input', syncChips);
+  chips?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-qf]'); if (!b) return;
+    sum.value = b.dataset.qf + ' '; form.category.value = b.dataset.cat; syncChips();
+    sum.focus(); sum.setSelectionRange(sum.value.length, sum.value.length);
+  });
+  // бюджет > 500 → «Нужна проверка» (то же правило есть в базе)
+  const amt = form.budget_amount, auto = form.querySelector('#rq-auto');
+  let over = Number(amt.value) > 500;
+  const budget = () => {
+    const now = amt.value !== '' && Number(amt.value) > 500;
+    auto.classList.toggle('on', now);
+    if (now && !over && !form.needs_review.checked) {
+      form.needs_review.checked = true;
+      if (!calm()) form.needs_review.closest('.check').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.04)' }, { transform: 'none' }], { duration: 420, easing: SPRING });
+    }
+    over = now;
+  };
+  amt.addEventListener('input', budget); budget();
+  // партнёр или своё место
+  const vt = form.querySelector('.rq-vtabs');
+  if (vt) {
+    const ink = document.createElement('span'); ink.className = 'v-ink'; ink.setAttribute('aria-hidden', 'true'); vt.prepend(ink);
+    const dots = () => {
+      vt.querySelector('[data-vt="partner"]').classList.toggle('has', !!form.partner_id.value);
+      vt.querySelector('[data-vt="place"]').classList.toggle('has', !!form.querySelector('[name="venue_json"]')?.value);
+    };
+    const show = (k, anim) => {
+      vt.querySelectorAll('[data-vt]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vt === k)));
+      form.querySelectorAll('[data-vpane]').forEach((p) => {
+        p.hidden = p.dataset.vpane !== k;
+        if (!p.hidden && anim && !calm()) p.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, easing: SPRING });
+      });
+      slidePill(vt, ink, vt.querySelector(`[data-vt="${k}"]`));
+      if (k === 'partner') form.querySelector('#vpop').hidden = true;
+    };
+    vt.addEventListener('click', (e) => { const b = e.target.closest('[data-vt]'); if (b) show(b.dataset.vt, true); });
+    form.partner_id.addEventListener('change', dots);
+    form.addEventListener('click', () => setTimeout(dots, 0));
+    requestAnimationFrame(() => show(vt.dataset.start, false));
+    dots();
+    addEventListener('resize', () => { ink._at = null; slidePill(vt, ink, vt.querySelector('[aria-selected="true"]')); });
+  }
+  // «+ Уточнить у гостя», «+ Исходное сообщение» — поля раскрываются по нажатию
+  const grow = (t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; };
+  form.querySelectorAll('.rq-fold textarea').forEach((t) => { t.addEventListener('input', () => grow(t)); if (t.value) requestAnimationFrame(() => grow(t)); });
+  form.querySelectorAll('[data-unfold]').forEach((b) => b.addEventListener('click', () => {
+    const fold = form.querySelector(`[data-fold="${b.dataset.unfold}"]`);
+    fold.classList.add('open'); b.classList.add('gone');
+    setTimeout(() => fold.querySelector('textarea')?.focus({ preventScroll: true }), 120);
+    setTimeout(() => fold.scrollIntoView({ block: 'nearest', behavior: calm() ? 'auto' : 'smooth' }), 200);
+  }));
+  // «Сохранить» чуть тянется за курсором
+  const ok = form.querySelector('#ok');
+  if (ok && matchMedia('(pointer: fine)').matches && !calm()) {
+    ok.addEventListener('pointermove', (e) => { const r = ok.getBoundingClientRect(); ok.style.translate = `${(e.clientX - r.left - r.width / 2) * .15}px ${(e.clientY - r.top - r.height / 2) * .25}px`; });
+    ok.addEventListener('pointerleave', () => { ok.style.translate = ''; });
+  }
+}
+
 export function editRequest(id, presetClient, preset = {}) {
   const ex = id ? byId('requests', id) : null;
   if (ex && !ex.checklist) {
@@ -93,28 +240,39 @@ export function editRequest(id, presetClient, preset = {}) {
   const partners = [...state.partners].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((p) => [p.id, `${p.name} · ${PARTNER_TYPE_LABEL[p.type] || ''}${p.city ? ' · ' + p.city : ''}`]);
   const body =
     (id ? requestOptionsBar(r) : '') +
-    `<div id="req-restr">${restrictionsBlock(byId('clients', r.client_id))}</div>` +
     roadSlot(r) +
     checklistSection(r) +
-    field('client_id', 'Гость', select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'))) +
+    `<div class="f rq-guest"><label for="f-client_pick">Гость</label>${select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'), 'class="gp-native" tabindex="-1" aria-hidden="true"')}
+      <div class="gp" id="gp"><button type="button" class="gp-btn" id="f-client_pick" aria-haspopup="listbox" aria-expanded="false">${gpFace(r.client_id)}</button>
+        <div class="gp-pop" hidden><input type="search" class="gp-q" placeholder="Найти гостя…" autocomplete="off" aria-label="Найти гостя"><div class="gp-list" role="listbox"></div></div></div></div>` +
+    `<div class="rq-risk${riskRibbon(byId('clients', r.client_id)) ? ' open' : ''}" id="req-restr"><div>${riskRibbon(byId('clients', r.client_id))}</div></div>` +
     `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
     field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
     field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
-    field('summary', 'Что нужно', input('summary', r.summary, 'type="text" required placeholder="Массаж на двоих в пятницу вечером"')) +
+    `<div class="f rq-what"><label for="f-summary">Что нужно</label>${input('summary', r.summary, 'type="text" required class="rq-hero" placeholder="Массаж на двоих в пятницу вечером"')}
+      <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
     field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
-    `<div class="f2">${field('budget_amount', 'Бюджет', input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal"'))}` +
-    field('currency', 'Валюта', select('currency', options(CURRENCIES, r.currency || 'EUR'))) + '</div>' +
-    `<div class="f2 venue-pair">${field('partner_id', '★ Партнёр', select('partner_id', options(partners, r.partner_id, '— не выбран —')))}${field('venue_json', '📍 Место (не партнёр)', venueCell(r.venue))}</div>` + venuePop() +
-    field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions)) +
-    field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message)) +
+    `<div class="f rq-budget"><label for="f-budget_amount">Бюджет</label>
+      <div class="rq-money">${input('budget_amount', r.budget_amount, 'type="number" min="0" step="any" inputmode="decimal" placeholder="0"')}${select('currency', options(CURRENCIES, r.currency || 'EUR'), 'aria-label="Валюта"')}</div>
+      <span class="rq-auto" id="rq-auto">✦ Авто-проверка &gt; 500</span></div>` +
+    `<div class="f rq-venue"><label>Где</label>
+      <div class="rq-vtabs" role="tablist" data-start="${!r.partner_id && r.venue?.name ? 'place' : 'partner'}"><button type="button" role="tab" data-vt="partner" aria-selected="true">★ Партнёр<i aria-hidden="true"></i></button><button type="button" role="tab" data-vt="place" aria-selected="false">📍 Место (не партнёр)<i aria-hidden="true"></i></button></div>
+      <div data-vpane="partner">${select('partner_id', options(partners, r.partner_id, '— не выбран —'), 'aria-label="Партнёр"')}</div>
+      <div data-vpane="place" hidden>${venueCell(r.venue)}</div></div>` + venuePop() +
+    `<div class="rq-more">
+      <button type="button" class="rq-pill${r.clarifying_questions ? ' gone' : ''}" data-unfold="clarifying_questions">＋ Уточнить у гостя</button>
+      <button type="button" class="rq-pill${r.original_message ? ' gone' : ''}" data-unfold="original_message">＋ Исходное сообщение</button></div>` +
+    `<div class="rq-fold${r.clarifying_questions ? ' open' : ''}" data-fold="clarifying_questions"><div>${field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions, 'rows="2"'))}</div></div>` +
+    `<div class="rq-fold${r.original_message ? ' open' : ''}" data-fold="original_message"><div>${field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message, 'rows="2"'))}</div></div>` +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
     `${check('needs_review', 'Нужна проверка', r.needs_review)}</div><small class="hint">«Нужна проверка» ставится сама, если бюджет больше 500.</small>`;
   const m = openModal({
     title: id ? 'Запрос' : 'Новый запрос',
     body,
+    cls: 'rq',
     onSave: async (v) => {
       let clientId = nul(v.client_id);
       if (clientId === '__new') {
@@ -141,6 +299,8 @@ export function editRequest(id, presetClient, preset = {}) {
   });
   if (id) m.form.dataset.reqId = id; // окна, открытые отсюда, по «Закрыть» вернутся в карточку
   bindVenue(m.form);
+  bindGuest(m.form);
+  bindRequestForm(m.form);
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
@@ -154,9 +314,12 @@ export function editRequest(id, presetClient, preset = {}) {
   gtime();
   m.form.addEventListener('click', () => setTimeout(gtime, 0));
   m.form.client_id.addEventListener('change', gtime);
+  if (matchMedia('(pointer:fine)').matches) (r.client_id ? m.form.summary : m.form.querySelector('#f-client_pick')).focus();
   m.form.client_id.addEventListener('change', (e) => {
     const isNew = e.target.value === '__new';
-    m.form.querySelector('#req-restr').innerHTML = isNew ? '' : restrictionsBlock(byId('clients', e.target.value));
+    const box = m.form.querySelector('#req-restr'), html = isNew ? '' : riskRibbon(byId('clients', e.target.value));
+    if (html) { box.firstElementChild.innerHTML = html; box.classList.add('open'); }
+    else { box.classList.remove('open'); setTimeout(() => { if (!box.classList.contains('open')) box.firstElementChild.innerHTML = ''; }, 420); }
     m.form.querySelector('#newguest').hidden = !isNew;
     m.form.new_name.required = isNew;
     if (isNew) m.form.new_name.focus();

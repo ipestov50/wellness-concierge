@@ -80,13 +80,13 @@ export function toList(text) {
 }
 
 // ---------- всплывающее окно ----------
-export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохранить', onClose = null }) {
+export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохранить', onClose = null, cls = '' }) {
   const host = $('#modal');
   host.innerHTML = `
-    <div class="ov" id="ov">
+    <div class="ov${cls ? ' ' + cls : ''}" id="ov">
       <form class="dlg" role="dialog" aria-modal="true" aria-label="${esc(title)}" id="frm" novalidate>
         <div class="dlg-head"><h2>${esc(title)}</h2>
-          <button type="button" class="icon-btn" id="x" aria-label="Закрыть">✕</button></div>
+          <button type="button" class="icon-btn" id="x" aria-label="Закрыть">${cls ? '<kbd>Esc</kbd>' : ''}✕</button></div>
         <div class="notice err-box" id="frm-err" hidden></div>
         ${body}
         <div class="foot">
@@ -101,7 +101,7 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
   // запросы окна отменяются, когда окно закрыто или открыто другое
   const signal = scope('modal');
   // onClose — например, вернуться в карточку запроса, из которой открыли это окно
-  const close = () => { host.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); onClose?.(); };
+  const close = () => leave(host, () => { document.body.classList.remove('modal-open'); abortScope('modal'); onClose?.(); });
   const fail = (msg) => { const b = $('#frm-err'); b.textContent = msg; b.hidden = false; b.scrollIntoView({ block: 'nearest' }); };
   $('#cancel').onclick = close;
   $('#x').onclick = close;
@@ -130,7 +130,19 @@ export function openModal({ title, body, onSave, onDelete, saveLabel = 'Сохр
   };
   return { close, form, signal };
 }
-export const closeModal = () => { const h = $('#modal'); if (h) h.innerHTML = ''; document.body.classList.remove('modal-open'); abortScope('modal'); };
+export const closeModal = () => { const h = $('#modal'); if (h) leave(h); document.body.classList.remove('modal-open'); abortScope('modal'); };
+// выезжающая панель уходит анимацией; обычные окна закрываются сразу
+function leave(host, done) {
+  const ov = host.querySelector('.ov.rq');
+  const dlg = ov?.querySelector('.dlg');
+  if (!dlg || !dlg.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) { host.innerHTML = ''; done?.(); return; }
+  ov.style.pointerEvents = 'none';
+  const sheet = matchMedia('(max-width: 520px)').matches;
+  ov.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease', fill: 'forwards' });
+  dlg.animate([{ transform: 'none' }, { transform: sheet ? 'translateY(40%)' : 'translateX(48px)' }], { duration: 240, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' })
+    .finished.catch(() => {}).then(() => { if (host.contains(ov)) host.innerHTML = ''; });
+  done?.();
+}
 
 // ---------- короткое уведомление ----------
 let toastTimer;

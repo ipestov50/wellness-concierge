@@ -42,10 +42,23 @@ export function bindDeadlinePicker(root) {
   root.querySelectorAll('[data-dp]:not([data-bound])').forEach(bindOne);
 }
 
+// раскрытие панели по высоте — без рывка
+function slide(p, open, done) {
+  if (!p.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) { done?.(); return; }
+  const h = p.scrollHeight;
+  const shut = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 };
+  const full = { height: h + 'px', opacity: 1 };
+  p.style.overflow = 'hidden';
+  p.getAnimations().forEach((a) => a.cancel());
+  const a = p.animate(open ? [shut, full] : [full, shut], { duration: open ? 460 : 260, easing: open ? 'cubic-bezier(.22, 1, .36, 1)' : 'cubic-bezier(.4, 0, .2, 1)' });
+  a.onfinish = () => { p.style.overflow = ''; done?.(); };
+}
+
 function bindOne(el) {
   el.dataset.bound = '1';
   const st = { date: el.dataset.date || null, hour: el.dataset.hour === '' ? null : +el.dataset.hour, minute: +el.dataset.minute || 0 };
   let view = (st.date || parisToday()).slice(0, 7); // 'YYYY-MM'
+  let lastDay = st.date;
   const input = el.querySelector('input[type=hidden]');
   const panel = el.querySelector('.dp-panel');
   const disp = el.querySelector('.dp-display');
@@ -74,11 +87,12 @@ function bindOne(el) {
     const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
     const lead = weekday(first);
     const today = parisToday();
+    const pop = st.date !== lastDay; lastDay = st.date;
     let cells = '';
     for (let i = 0; i < lead; i++) cells += '<span></span>';
     for (let d = 1; d <= days; d++) {
       const ymd = `${view}-${pad(d)}`;
-      const cls = [ymd === st.date && 'on', ymd === today && 'today', ymd < today && 'past', weekday(ymd) > 4 && 'we'].filter(Boolean).join(' ');
+      const cls = [ymd === st.date && 'on', ymd === st.date && pop && 'pop', ymd === today && 'today', ymd < today && 'past', weekday(ymd) > 4 && 'we'].filter(Boolean).join(' ');
       cells += `<button type="button" class="day ${cls}" data-day="${ymd}">${d}</button>`;
     }
     el.querySelector('.dp-cal').innerHTML = `
@@ -104,9 +118,11 @@ function bindOne(el) {
   }
 
   function draw() { quick(); if (!panel.hidden) { cal(); if (el.dataset.dateonly) el.querySelector('.dp-time').innerHTML = '<button type="button" class="btn small primary dp-done">Готово</button>'; else time(); } }
-  const toggle = (open = panel.hidden) => {
-    panel.hidden = !open; disp.setAttribute('aria-expanded', String(open)); el.classList.toggle('open', open);
-    if (open) { view = (st.date || parisToday()).slice(0, 7); draw(); }
+  const toggle = (open = !el.classList.contains('open')) => {
+    if (open === el.classList.contains('open')) return;
+    disp.setAttribute('aria-expanded', String(open)); el.classList.toggle('open', open);
+    if (open) { panel.hidden = false; view = (st.date || parisToday()).slice(0, 7); draw(); slide(panel, true); }
+    else slide(panel, false, () => { if (!el.classList.contains('open')) panel.hidden = true; });
   };
 
   el.addEventListener('click', (e) => {
@@ -116,7 +132,7 @@ function bindOne(el) {
     if (b.dataset.q != null) {
       st.date = b.dataset.q || null;
       if (!st.date) { st.hour = null; toggle(false); }
-      else if (panel.hidden) toggle(true);
+      else if (!el.classList.contains('open')) toggle(true);
       return commit();
     }
     if (b.dataset.nav) {
