@@ -85,7 +85,6 @@ function passport(c, i, today) {
   const t = nextTrip(c, today);
   const st = t && tripState(t, today);
   const tags = prefTags(c);
-  const digits = (c.phone || '').replace(/[^\d+]/g, '');
   const vt = ui.clBack === c.id ? ' style="view-transition-name: cl-av"' : '';
   return `<article class="pp" data-cl="${c.id}" tabindex="0" role="link" aria-label="Открыть досье: ${nm(c)}" style="--i:${Math.min(i, 10)}">
     <header class="pp-head">
@@ -101,12 +100,7 @@ function passport(c, i, today) {
         : '<span class="pp-none">Нет активных маршрутов</span>'}
     </div>
     ${tags.length ? `<div class="pp-tags">${tags.slice(0, 3).map((x) => `<span>${esc(x)}</span>`).join('')}${tags.length > 3 ? `<span class="more">+${tags.length - 3}</span>` : ''}</div>` : ''}
-    <footer class="pp-foot">
-      ${digits ? `<a class="pp-act" data-stop href="https://wa.me/${esc(digits.replace('+', ''))}" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">💬<span>WhatsApp</span></a>
-        <button type="button" class="pp-act" data-copy="${esc(c.phone)}" aria-label="Скопировать телефон" title="Скопировать телефон"><i class="cp-ico" aria-hidden="true">⧉</i><span>Телефон</span></button>`
-        : c.email ? `<button type="button" class="pp-act" data-copy="${esc(c.email)}" aria-label="Скопировать почту" title="Скопировать почту"><i class="cp-ico" aria-hidden="true">⧉</i><span>Почта</span></button>` : ''}
-      <span class="pp-open">Открыть досье <span aria-hidden="true">→</span></span>
-    </footer>
+    <footer class="pp-foot"><span class="pp-open">Открыть досье</span></footer>
   </article>`;
 }
 
