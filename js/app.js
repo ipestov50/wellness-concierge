@@ -33,7 +33,7 @@ const AUTH_ERRORS = {
 };
 const authError = (e) => AUTH_ERRORS[e?.message] || (/rate limit|security purposes/i.test(e?.message || '')
   ? 'Слишком много попыток. Подождите минуту и попробуйте снова.'
-  : 'Не получилось: ' + (e?.message || 'неизвестная ошибка'));
+  : 'Не удалось: ' + (e?.message || 'неизвестная ошибка'));
 
 // ---------- вход ----------
 function renderLogin() {

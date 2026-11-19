@@ -1,7 +1,7 @@
 // Public guest trip page. Standalone: no app imports.
 // All NEW user-facing strings live here so they are easy to polish.
 const COPY = {
-  wa: 'Здравствуйте. Пишу по поводу поездки ({city}, {range}). Есть вопрос по дню {day}{event}.',
+  wa: 'Добрый день. Есть вопрос по вашему путешествию ({city}, {range}), день {day}{event}.',
   waEvent: ' — «{event}»',
   careRain: 'Ожидается дождь — пригодится зонт. Если понадобится сухой трансфер, скажите нам заранее.',
   careSnow: 'Ожидается снег — тёплая одежда не помешает. Если нужен трансфер, напишите нам заранее.',

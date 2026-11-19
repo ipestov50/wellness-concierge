@@ -98,7 +98,7 @@ function passport(c, i, today) {
     <div class="pp-pass${t ? '' : ' empty'}">
       ${t ? `<span class="pp-plane" aria-hidden="true">✈</span><span class="pp-trip"><small>${st.kind === 'now' ? 'Сейчас в поездке' : 'Ближайший рейс'}</small><b>${esc(t.city)}</b><em>${esc(fmtRange(t))}</em></span>
         <span class="pp-perf" aria-hidden="true"></span><span class="pp-count${st.kind === 'now' ? ' now' : ''}">${tripBadge(st)}</span>`
-        : '<span class="pp-none">Нет активных маршрутов</span>'}
+        : '<span class="pp-none">Ближайшей поездки нет</span>'}
     </div>
     ${tags.length ? `<div class="pp-tags">${tags.slice(0, 3).map((x) => `<span>${esc(x)}</span>`).join('')}${tags.length > 3 ? `<span class="more">+${tags.length - 3}</span>` : ''}</div>` : ''}
     <footer class="pp-foot"><span class="pp-open">Открыть досье</span></footer>
@@ -192,7 +192,7 @@ function tabOverview(c) {
     <div class="ov-main">
       ${jarvis(c)}
       ${clientSuggestions(c.id)}
-      ${t ? boardingPass(t) : `<button type="button" class="bp-empty" data-add-trip="${c.id}">✈ Нет активных маршрутов · <b>＋ Поездка</b></button>`}
+      ${t ? boardingPass(t) : `<button type="button" class="bp-empty" data-add-trip="${c.id}">✈ Ближайшей поездки нет · <b>＋ Поездка</b></button>`}
       ${date ? `<button type="button" class="ov-date" data-ctab-go="dates"><span aria-hidden="true">${date.kind === 'date' ? '📅' : '🎂'}</span><span><b>${esc(date.title)}${date.kind === 'person' ? ' · ' + esc(date.who.split(' · ')[0]) : ''}</b><small class="tnum">${esc(date.info.text)} · ${date.info.days === 0 ? 'сегодня' : `через ${date.info.days} дн.`}</small></span></button>` : ''}
       <section class="ov-sec"><h4 class="cl-label">Предпочтения</h4>
         <div class="pf-grid">${prefs.map(([i, l, v]) => `<button type="button" class="pf" data-editcl="${c.id}"><span class="pf-ico" aria-hidden="true">${i}</span><small class="cl-label">${l}</small><b>${esc(v)}</b><span class="pf-edit" aria-hidden="true">✎</span></button>`).join('')}
@@ -277,7 +277,7 @@ function dossier(c) {
       <label class="cl-search mini"><span class="sr-only">Поиск клиента</span><input type="search" id="q" placeholder="Найти клиента" value="${esc(ui.q)}" autocomplete="off"></label>
       <nav class="rl-list" aria-label="Клиенты">${rail.map((x) => `<button type="button" class="rl" data-cl="${x.id}" aria-current="${x.id === c.id}">
         ${avatar(x, 'rl-av')}<span class="rl-txt"><b>${nm(x)}${x.vip ? ' <span class="cl-star">★</span>' : ''}</b><small>${esc(x.city || x.language || '')}</small></span>
-        ${risks(x).length ? '<i class="rl-risk" title="Есть стоп-лист"></i>' : ''}</button>`).join('')}</nav>
+        ${risks(x).length ? '<i class="rl-risk" title="Есть стоп-лист" role="img" aria-label="Есть стоп-лист"></i>' : ''}</button>`).join('')}</nav>
     </aside>
     <section class="cl-dos">
       <header class="dh">

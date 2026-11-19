@@ -3,7 +3,9 @@ export async function owner(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'POST') { res.status(405).json({ error: 'method_not_allowed' }); return null; }
   const auth = req.headers.authorization || '';
-  const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
+  let u;
+  try { u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth }, signal: AbortSignal.timeout(6000) }); }
+  catch { res.status(504).json({ error: 'auth_timeout' }); return null; }
   if (!u.ok) { res.status(401).json({ error: 'unauthorized' }); return null; }
   const user = await u.json();
   const who = (process.env.OWNER_EMAIL || '').toLowerCase();

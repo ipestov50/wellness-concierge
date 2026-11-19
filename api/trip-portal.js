@@ -76,7 +76,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error('db_' + r.status);
     d = await r.json();
   } catch { res.setHeader('Cache-Control', 'no-store'); return res.status(502).json({ error: 'upstream' }); }
-  if (!d || typeof d !== 'object') { res.setHeader('Cache-Control', 'public, s-maxage=10'); return res.status(404).json({ error: 'not_found' }); }
+  if (!d || typeof d !== 'object') { res.setHeader('Cache-Control', 'no-store'); return res.status(404).json({ error: 'not_found' }); }
 
   const t = d.trip || {};
   const wx = await weather(t.lat, t.lon);

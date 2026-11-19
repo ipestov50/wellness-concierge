@@ -123,7 +123,7 @@ function boardView(list) {
         <h3><span class="col-name">${esc(c.label)}</span><span class="col-count">${items.length}</span>
           ${c.kind !== 'active' && items.length ? `<button class="col-arc" data-archive-col="${esc(c.key)}" type="button" title="Убрать выполненные с доски в архив — история гостя сохранится">🗄 В архив</button>` : ''}
           <button class="col-menu" data-colmenu="${c.id}" type="button" aria-label="Настроить колонку «${esc(c.label)}»">⋯</button></h3>
-        <div class="col-body">${items.map((r) => requestCard(r)).join('') || '<div class="col-empty">Пусто</div>'}</div>
+        <div class="col-body">${items.map((r) => requestCard(r)).join('') || '<div class="col-empty">Пока ничего нет</div>'}</div>
       </section>`;
     }).join('')}
     <button class="col-add" id="colAdd" type="button"><span>＋</span>Новая колонка</button></div>

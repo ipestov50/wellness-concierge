@@ -56,10 +56,21 @@ const cols = (t) => COLS[t] || '*';
 const STAMPED = new Set(['clients', 'requests', 'partners', 'trips', 'people', 'client_dates', 'day_items', 'shift_logs']);
 const ts = (v) => Date.parse(v) || 0;
 
+// PostgREST отдаёт максимум 1000 строк за запрос — читаем страницами, чтобы при росте базы ничего не пропадало
+async function pageAll(t, sel) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from(t).select(sel).order('id').range(from, from + 999);
+    if (error) return { data: null, error };
+    out.push(...data);
+    if (data.length < 1000) return { data: out, error: null };
+  }
+}
+
 async function doLoad() {
   sb = await getSupabase();
   const again = state.loaded;
-  const results = await Promise.allSettled(TABLES.map((t) => sb.from(t).select(again && STAMPED.has(t) ? 'id,updated_at' : cols(t))));
+  const results = await Promise.allSettled(TABLES.map((t) => pageAll(t, again && STAMPED.has(t) ? 'id,updated_at' : cols(t))));
   const failed = [];
   let dirty = !again;
   await Promise.all(results.map(async (r, i) => {
@@ -72,7 +83,7 @@ async function doLoad() {
       if (!changed.length && rows.length === state[t].length) return;
       let fresh = new Map();
       if (changed.length) {
-        const q = changed.length > 80 ? sb.from(t).select(cols(t)) : sb.from(t).select(cols(t)).in('id', changed);
+        const q = changed.length > 80 ? pageAll(t, cols(t)) : sb.from(t).select(cols(t)).in('id', changed);
         const f = await q;
         if (f.error) err = f.error; else fresh = new Map(f.data.map((x) => [x.id, x]));
       }
