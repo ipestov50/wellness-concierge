@@ -485,7 +485,7 @@ export function editClient(id) {
       const row = await save('clients', id, {
         name: v.name.trim(), language: v.language, city: nul(v.city.trim()), citizenship: nul(v.citizenship), home_tz: nul(v.home_tz) || (await lookupPlace(v.city))?.tz || null, telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
-        pref_food: nul(v.pref_food.trim()), pref_music: nul(v.pref_music.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
+        pref_food: nul(v.pref_food.trim()), ...(v.pref_music.trim() || 'pref_music' in c ? { pref_music: nul(v.pref_music.trim()) } : {}), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),
         likes: toList(v.likes), dislikes: toList(v.dislikes), travel_habits: nul(v.travel_habits.trim()),
         loyalty: v.loyalty.split('\n').map((s) => s.trim()).filter(Boolean),
