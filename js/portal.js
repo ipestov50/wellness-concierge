@@ -205,7 +205,6 @@ function render() {
       <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>${esc(String(trip.city || '').trim() ? fill(COPY.clockLocal, { city: String(trip.city).trim() }) : COPY.clockLocalBare)}</small></div>
       <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
-    ${hotelCard()}
     <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Дни путешествия" id="tabs"><span class="ind" id="ind"></span>
       ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}${dayDots.has(d.date) && d.date !== activeDate ? ' upd' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}${dayDots.has(d.date) && d.date !== activeDate ? ` <span class="sr">· ${COPY.dayUpdated}</span>` : ''}</button>`).join('')}
     </div></div>
@@ -347,7 +346,9 @@ function renderDay() {
   const panel = $('#panel');
   panel.setAttribute('aria-labelledby', 't-' + activeDate);
   const items = day ? day.items || [] : [];
-  panel.innerHTML = items.length ? items.map((it, i) => card(it, i, activeDate)).join('') : `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
+  // перелёты — якорь дня и идут первыми; карточка проживания — сразу после них
+  const nA = items.filter(isAnchor).length, cards = items.map((it, i) => card(it, i, activeDate));
+  panel.innerHTML = items.length ? cards.slice(0, nA).join('') + hotelCard() + cards.slice(nA).join('') : hotelCard() + `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
   panel.onclick = (e) => { const c = e.target.closest('.card'); if (c && c.dataset.sig && badgeSet.has(c.dataset.sig)) { const it = items.find((x) => sigOf(activeDate, x) === c.dataset.sig); dropBadge(c.dataset.sig, it && dkey(c.dataset.sig, it)); } };
   panel.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
 }
