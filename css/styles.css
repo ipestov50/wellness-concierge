@@ -3158,17 +3158,17 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
   --tp-sheet: #F5F1EB; --tp-well: #EFEAE1; --tp-card: #FFFFFF; --tp-ink: #2C2520; --tp-mut: #6B625B; --tp-hair: rgba(44,37,32,.08);
   --tp-acc: #265D56; --tp-acc-ink: #fff; --tp-risk: #C85A48; --tp-gold: #B89356; --tp-out: cubic-bezier(.22, 1, .36, 1);
   --tp-serif: 'Cormorant Garamond', 'Newsreader', Georgia, serif;
-  background: rgba(44,37,32,.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: var(--tp-ink);
+  background: rgba(44,37,32,.42); color: var(--tp-ink); -webkit-backdrop-filter: none; backdrop-filter: none;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ov.tp {
   --tp-sheet: #1c1915; --tp-well: #2a251f; --tp-card: #332d26; --tp-ink: #efe8dd; --tp-mut: #a89d8f; --tp-hair: rgba(239,232,221,.1);
-  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.5); } }
+  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.6); } }
 :root[data-theme="dark"] .ov.tp {
   --tp-sheet: #1c1915; --tp-well: #2a251f; --tp-card: #332d26; --tp-ink: #efe8dd; --tp-mut: #a89d8f; --tp-hair: rgba(239,232,221,.1);
-  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.5); }
+  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.6); }
 
-.ov.tp .dlg { max-width: 660px; padding: 24px 32px 20px; border-radius: 26px; background: var(--tp-sheet); box-shadow: 0 30px 70px -24px rgba(44,37,32,.45); animation: tpIn .5s var(--tp-out) both; }
-@keyframes tpIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+.ov.tp .dlg { max-width: 660px; padding: 24px 32px 20px; border-radius: 26px; background: var(--tp-sheet); box-shadow: 0 12px 32px -12px rgba(44,37,32,.35); animation: tpIn .32s var(--tp-out) both; }
+@keyframes tpIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes tpFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* шапка */
@@ -3216,7 +3216,7 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .ov.tp .seg button { min-height: 44px; border-radius: 999px; color: var(--tp-mut); font-size: 13.5px; font-weight: 600; letter-spacing: .01em; transition: background .35s var(--tp-out), color .25s, box-shadow .35s var(--tp-out); }
 .ov.tp .seg button[aria-selected="true"] { background: var(--tp-card); color: var(--tp-ink); box-shadow: 0 1px 1px rgba(44,37,32,.06), 0 4px 12px -4px rgba(44,37,32,.18); }
 .ov.tp .seg-dot { background: var(--tp-gold); }
-.ov.tp .seg-panel:not([hidden]) { animation: tpFade .4s var(--tp-out) both; }
+.ov.tp .seg-panel:not([hidden]) { animation: tpFade .25s var(--tp-out) both; }
 .ov.tp .seg-sub { margin: 4px 0 10px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
 .ov.tp .seg-panel .hint { margin: -4px 0 16px; font-size: 13px; color: var(--tp-mut); }
 .ov.tp .seg-linked { background: transparent; border-top: 1px solid var(--tp-hair); border-radius: 0; padding: 16px 2px 0; margin-top: 4px; color: var(--tp-mut); }
