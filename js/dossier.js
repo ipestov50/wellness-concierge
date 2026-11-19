@@ -117,30 +117,34 @@ const inp = (n, v, a = '') => `<input id="f-${n}" name="${n}" value="${esc(v)}" 
 const AC = { sec: 'Проживание', hint: 'Гость увидит эти данные в блоке «Ваше проживание»', name: 'Название отеля', namePh: 'Cheval Blanc', addr: 'Адрес отеля', addrPh: 'Unter den Linden 77, Berlin', guests: 'Гости в номере', room: 'Тип номера', roomPh: 'Сьют с видом на сад', checkin: 'Время заезда', ref: 'Код брони', refPh: 'Необязательно', note: 'Заметка для гостя', notePh: 'Например: номер подготовлен к вашему приезду, ранний заезд согласован', minus: 'Меньше', plus: 'Больше' };
 const acStepper = (name, label, val) => `<div class="tr-step" data-step="${name}" data-min="1"><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(AC.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(AC.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="${name}" value="${esc(val)}"></div>`;
 
+const TT = { tabs: 'Разделы поездки', stay: 'Проживание', fl: 'Перелёты', nt: 'Заметки', ntTitle: 'Заметки консьержа', ntHint: 'Только для вас: гость этого не увидит.', linked: 'Связанные запросы', linkedNone: 'Пока нет', who: 'С кем', whoPh: 'муж, двое детей, няня', outb: 'Туда', back: 'Обратно', fn: 'Рейс / PNR', arr: 'Прилёт · время Парижа', dep: 'Вылет · время Парижа', link: 'Ссылка для гостя', copied: 'Скопировано', more: 'Ещё действия', rot: 'Заменить ссылку на новую', off: 'Закрыть доступ' };
+const segBtn = (key, label, sel) => `<button type="button" role="tab" id="tt-${key}" aria-controls="tp-${key}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}">${esc(label)}<i class="seg-dot" hidden></i></button>`;
+
 export function editTrip(id, clientId) {
   const t = id ? state.trips.find((x) => x.id === id) : { client_id: clientId || '' };
   if (!t) return;
   const ac = t.accommodation || {};
+  const linked = id ? state.requests.filter((r) => r.trip_id === id) : [];
+  const dp = (iso, n, e) => deadlinePicker(iso, n, { empty: e, quick: false });
   const body =
-    field('client_id', 'Гость', `<select id="f-client_id" name="client_id" required>${options(guestOptions(), t.client_id, '— выберите —')}</select>`) +
-    `<div class="f2">${field('city', 'Город', inp('city', t.city, 'type="text" required placeholder="Куршевель"'))}${field('country', 'Страна', inp('country', t.country, 'type="text" placeholder="Франция"'))}</div>` +
-    `<h3 class="form-sec">${AC.sec}</h3><small class="hint">${AC.hint}</small>` +
+    `<div class="f2 tm-grid">${field('client_id', 'Гость', `<select id="f-client_id" name="client_id" required>${options(guestOptions(), t.client_id, '— выберите —')}</select>`)}${field('companions', TT.who, inp('companions', t.companions, `type="text" autocomplete="off" placeholder="${esc(TT.whoPh)}"`))}</div>` +
+    `<div class="f2 tm-grid">${field('city', 'Город', inp('city', t.city, 'type="text" required placeholder="Куршевель"'))}${field('country', 'Страна', inp('country', t.country, 'type="text" placeholder="Франция"'))}</div>` +
+    `<div class="f2 tm-dates">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
+    field('end', 'Выезд', deadlinePicker(t.end_date ? t.end_date + 'T12:00:00Z' : null, 'end', { dateOnly: true, empty: 'Не указан', quick: false })) + '</div>' +
+    `<div class="seg" role="tablist" aria-label="${esc(TT.tabs)}">${segBtn('stay', TT.stay, true)}${segBtn('fl', TT.fl, false)}${segBtn('nt', TT.nt, false)}</div>` +
+    `<section class="seg-panel" role="tabpanel" id="tp-stay" aria-labelledby="tt-stay"><small class="hint">${esc(AC.hint)}</small>` +
     field('ac_name', AC.name, inp('ac_name', ac.hotelName || t.hotel, `type="text" autocomplete="off" placeholder="${esc(AC.namePh)}"`)) +
     field('ac_addr', AC.addr, inp('ac_addr', ac.hotelAddress || t.hotel_address, `type="text" autocomplete="street-address" placeholder="${esc(AC.addrPh)}"`)) +
-    `<div class="tr-steps">${acStepper('ac_guests', AC.guests, Math.max(1, parseInt(ac.guestsCount, 10) || 1))}</div>` +
-    `<div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, timeField('ac_checkin', ac.checkInTime))}${field('ac_room', AC.room, inp('ac_room', ac.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div>` +
+    `<div class="tr-steps ac-pair">${acStepper('ac_guests', AC.guests, Math.max(1, parseInt(ac.guestsCount, 10) || 1))}${field('ac_room', AC.room, inp('ac_room', ac.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div>` +
+    field('ac_checkin', AC.checkin, timeField('ac_checkin', ac.checkInTime)) +
     field('ac_ref', AC.ref, inp('ac_ref', ac.bookingReference, `type="text" autocomplete="off" autocapitalize="characters" placeholder="${esc(AC.refPh)}"`)) +
-    field('ac_note', AC.note, `<textarea id="f-ac_note" name="ac_note" rows="2" placeholder="${esc(AC.notePh)}">${esc(ac.conciergeGuestNote)}</textarea>`) +
-    `<div class="f2">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
-    field('end', 'Выезд', deadlinePicker(t.end_date ? t.end_date + 'T12:00:00Z' : null, 'end', { dateOnly: true, empty: 'Не указан', quick: false })) + '</div>' +
-    '<h3 class="form-sec">Перелёты</h3>' +
-    `<div class="f2">${field('flight_in', 'Рейс туда', inp('flight_in', t.flight_in, 'type="text" placeholder="AF 1145" autocapitalize="characters"'))}` +
-    field('flight_in_at', 'Прилёт (время Парижа)', deadlinePicker(t.flight_in_at, 'flight_in_at', { empty: 'Не указано', quick: false })) + '</div>' +
-    `<div class="f2">${field('flight_out', 'Рейс обратно', inp('flight_out', t.flight_out, 'type="text" placeholder="AF 1146" autocapitalize="characters"'))}` +
-    field('flight_out_at', 'Вылет (время Парижа)', deadlinePicker(t.flight_out_at, 'flight_out_at', { empty: 'Не указано', quick: false })) + '</div>' +
-    field('companions', 'С кем', inp('companions', t.companions, 'type="text" placeholder="муж, двое детей, няня"')) +
-    field('notes', 'Заметки', `<textarea id="f-notes" name="notes" rows="2">${esc(t.notes)}</textarea>`) +
-    (id ? `<h3 class="form-sec">Путеводитель гостя</h3><div class="trip-delays"><button type="button" class="btn small" id="tripShare">🔗 Ссылка для гостя</button>${byId('clients', t.client_id)?.portal_token ? '<button type="button" class="trip-delay" id="tripRotate">Заменить ссылку на новую</button><button type="button" class="trip-delay" id="tripRevoke">Закрыть доступ</button>' : ''}</div><small class="hint">Гость увидит только отмеченные «для гостя» запросы, рейсы и отель.</small>` : '');
+    field('ac_note', AC.note, `<textarea id="f-ac_note" name="ac_note" rows="2" class="autogrow" placeholder="${esc(AC.notePh)}">${esc(ac.conciergeGuestNote)}</textarea>`) + '</section>' +
+    `<section class="seg-panel" role="tabpanel" id="tp-fl" aria-labelledby="tt-fl" hidden><div class="seg-sub">${esc(TT.outb)}</div>` +
+    `<div class="f2 tm-fl">${field('flight_in', TT.fn, inp('flight_in', t.flight_in, 'type="text" placeholder="AF 1145" autocapitalize="characters" autocomplete="off"'))}${field('flight_in_at', TT.arr, dp(t.flight_in_at, 'flight_in_at', 'Не указано'))}</div>` +
+    `<div class="seg-sub">${esc(TT.back)}</div><div class="f2 tm-fl">${field('flight_out', TT.fn, inp('flight_out', t.flight_out, 'type="text" placeholder="AF 1146" autocapitalize="characters" autocomplete="off"'))}${field('flight_out_at', TT.dep, dp(t.flight_out_at, 'flight_out_at', 'Не указано'))}</div></section>` +
+    `<section class="seg-panel" role="tabpanel" id="tp-nt" aria-labelledby="tt-nt" hidden><div class="seg-sub">${esc(TT.ntTitle)}</div><small class="hint">${esc(TT.ntHint)}</small>` +
+    field('notes', TT.ntTitle, `<textarea id="f-notes" name="notes" rows="4" class="autogrow">${esc(t.notes)}</textarea>`) +
+    (id ? `<div class="seg-linked"><span>${esc(TT.linked)}</span><b class="tnum">${linked.length || esc(TT.linkedNone)}</b></div>` : '') + '</section>';
   const m = openModal({
     title: id ? 'Поездка' : 'Новая поездка',
     body,
@@ -172,18 +176,90 @@ export function editTrip(id, clientId) {
     paint();
   });
   const cid = state.trips.find((x) => x.id === id)?.client_id || clientId;
-  const bar = m.form.querySelector('#tripShare')?.parentElement;
-  const mkBtns = () => {
-    if (!bar || bar.querySelector('#tripRevoke')) return;
-    const mk = (idn, txt, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'trip-delay'; b.id = idn; b.textContent = txt; b.addEventListener('click', fn); bar.append(b); };
-    mk('tripRotate', 'Заменить ссылку на новую', async () => { if (confirm('Старая ссылка перестанет открываться. Выдать новую?')) await shareClient(cid, 'rotate'); });
-    mk('tripRevoke', 'Закрыть доступ', async () => { if (confirm('Гость больше не сможет открыть путеводитель по этой ссылке. Закрыть доступ?')) { await shareClient(cid, 'off'); bar.querySelector('#tripRotate')?.remove(); bar.querySelector('#tripRevoke')?.remove(); } });
-  };
-  m.form.querySelector('#tripShare')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; await shareClient(cid, 'on'); e.target.disabled = false;
-    if (byId('clients', cid)?.portal_token) mkBtns();
+  wireTripTabs(m.form);
+  wireTripDates(m.form, !id);
+  if (id) wireTripShare(m.form, cid);
+}
+
+// вкладки: все поля остаются в форме, «Сохранить» сохраняет всё сразу
+function wireTripTabs(form) {
+  const tabs = [...form.querySelectorAll('.seg [role=tab]')];
+  const show = (tab, focus) => tabs.forEach((b) => {
+    const on = b === tab;
+    b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;
+    form.querySelector('#' + b.getAttribute('aria-controls')).hidden = !on;
+    if (on && focus) b.focus();
   });
-  if (byId('clients', cid)?.portal_token) { bar?.querySelector('#tripRotate')?.remove(); bar?.querySelector('#tripRevoke')?.remove(); mkBtns(); }
+  tabs.forEach((b, i) => {
+    b.addEventListener('click', () => show(b));
+    b.addEventListener('keydown', (e) => {
+      const k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (k) { e.preventDefault(); show(tabs[(i + k + tabs.length) % tabs.length], true); }
+    });
+  });
+  const flDot = tabs[1].querySelector('.seg-dot');
+  const paint = () => { flDot.hidden = !(form.flight_in.value.trim() || form.flight_out.value.trim() || form.flight_in_at.value || form.flight_out_at.value); };
+  form.addEventListener('input', paint); form.addEventListener('click', () => setTimeout(paint));
+  paint();
+  form.querySelectorAll('textarea.autogrow').forEach((ta) => {
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 260) + 'px'; };
+    ta.addEventListener('input', grow); form.addEventListener('click', () => requestAnimationFrame(grow), { once: true }); setTimeout(grow, 0);
+  });
+}
+
+// Заезд/Выезд → Прилёт/Вылет, пока даты перелётов пусты или остались авто-подставленными
+function wireTripDates(form, isNew) {
+  void isNew;
+  const val = (n) => form[n].value.slice(0, 10);
+  let seen = { start: val('start'), end: val('end') };
+  const auto = { flight_in_at: '', flight_out_at: '' };
+  const fill = (name, date) => {
+    const cur = form[name].value;
+    if (!date || (cur && cur !== auto[name])) return;
+    const v = `${date}T00:00`;
+    form[name].closest('[data-dp]').dpSet(v);
+    auto[name] = v;
+  };
+  const upd = () => {
+    const now = { start: val('start'), end: val('end') };
+    if (now.start !== seen.start) fill('flight_in_at', now.start);
+    if (now.end !== seen.end) fill('flight_out_at', now.end);
+    seen = now;
+  };
+  form.addEventListener('click', () => setTimeout(upd));
+}
+
+// шапка: ссылка для гостя в один тап + меню «•••»
+function wireTripShare(form, cid) {
+  const head = form.querySelector('.dlg-head'), x = head.querySelector('#x');
+  const has = () => !!byId('clients', cid)?.portal_token;
+  const box = document.createElement('div');
+  box.className = 'trip-hd';
+  box.innerHTML = `<button type="button" class="tr-link" id="tripShare"><span class="tr-link-t">🔗 ${esc(TT.link)}</span></button>
+    <div class="tr-more"><button type="button" class="tr-dots" id="tripMore" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(TT.more)}">•••</button>
+    <div class="tr-menu" role="menu" hidden><button type="button" role="menuitem" id="tripRotate">${esc(TT.rot)}</button><button type="button" role="menuitem" id="tripRevoke" class="danger">${esc(TT.off)}</button></div></div>`;
+  head.insertBefore(box, x);
+  const share = box.querySelector('#tripShare'), dots = box.querySelector('#tripMore'), menu = box.querySelector('.tr-menu');
+  const items = [...menu.querySelectorAll('button')];
+  const paint = () => items.forEach((b) => (b.disabled = !has()));
+  const setMenu = (open) => { menu.hidden = !open; dots.setAttribute('aria-expanded', String(open)); if (open) { paint(); items.find((b) => !b.disabled)?.focus(); } };
+  let tm;
+  share.onclick = async () => {
+    share.disabled = true;
+    const tok = await shareClient(cid, 'on', true);
+    share.disabled = false; paint();
+    if (!tok) return;
+    const ok = await copyText(portalUrl(tok));
+    const t = share.querySelector('.tr-link-t'); clearTimeout(tm);
+    t.textContent = ok ? `${TT.copied} ✓` : portalUrl(tok); share.classList.add('done');
+    tm = setTimeout(() => { t.textContent = `🔗 ${TT.link}`; share.classList.remove('done'); }, 2200);
+  };
+  dots.onclick = () => setMenu(menu.hidden);
+  box.querySelector('#tripRotate').onclick = async () => { setMenu(false); if (confirm('Старая ссылка перестанет открываться. Выдать новую?')) await shareClient(cid, 'rotate'); paint(); };
+  box.querySelector('#tripRevoke').onclick = async () => { setMenu(false); if (confirm('Гость больше не сможет открыть путеводитель по этой ссылке. Закрыть доступ?')) { await shareClient(cid, 'off'); paint(); } };
+  const away = (e) => { if (!form.isConnected) { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc2, true); return; } if (!menu.hidden && !box.contains(e.target)) setMenu(false); };
+  const esc2 = (e) => { if (e.key === 'Escape' && !menu.hidden) { e.stopImmediatePropagation(); e.preventDefault(); setMenu(false); dots.focus(); } };
+  document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc2, true);
 }
 
 // ---------- окружение ----------

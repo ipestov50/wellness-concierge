@@ -150,6 +150,13 @@ function bindOne(el) {
     if (b.dataset.m != null) { if (st.hour == null) st.hour = 10; st.minute = +b.dataset.m; return commit(); }
     if (b.classList.contains('dp-done')) toggle(false);
   });
+  // программная установка значения (например, авто-подстановка даты перелёта из дат поездки)
+  el.dpSet = (v) => {
+    const [d, tm] = v ? String(v).split('T') : [null, null];
+    st.date = d || null;
+    if (tm && tm !== '00:00' && !el.dataset.dateonly) { st.hour = +tm.slice(0, 2); st.minute = +tm.slice(3, 5); } else { st.hour = null; st.minute = 0; }
+    commit();
+  };
   el.classList.toggle('empty', !st.date);
   quick();
 }
