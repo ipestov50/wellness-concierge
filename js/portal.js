@@ -13,15 +13,18 @@ const COPY = {
   copiedLive: 'Номер брони скопирован', copyFail: 'Не удалось скопировать. Номер можно выделить вручную',
   addCal: '+ В календарь', calLive: 'Файл календаря сохранён',
   clockAria: 'Местное время',
+  liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
+  updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
+  noteLabel: 'Заметка консьержа',
 };
-const REFRESH_MS = 60000;
+const REFRESH_MS = 15000, BADGE_MS = 30000, FRESH_MS = 24 * 36e5;
 const plural = (n, [a, b, c]) => { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; };
 const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? '');
 
 const $ = (s) => document.querySelector(s);
 const app = $('#app'), dock = $('#dock'), live = $('#live');
 const params = new URLSearchParams(location.search);
-const DEMO = params.get('demo') === '1';
+const DEMO = params.get('demo') === '1', LIVE = DEMO && params.get('live') === '1';
 const token = (location.pathname.match(/\/t\/([^/?#]+)/) || [])[1] || '';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -53,6 +56,39 @@ const CAT_RU = { 'Flight': 'Перелёт', 'Hotel': 'Проживание', 'A
 const svg = (k, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[k] || P.Other}</svg>`;
 
 let data = null, activeDate = null, clockTimer = null, copyTimer = null, userPicked = false, lastSig = '';
+// live sync state
+let lastOk = true, inflight = false, pollTimer = null, lastFetch = 0, prevMap = null, tripKey = '', entering = new Set(), dayDots = new Set();
+const badgeSet = new Set(), badgeTimers = new Map();
+const sigOf = (date, it) => `${date}|${it.time || ''}|${it.title || ''}`;
+const dkey = (sig, it) => sig + '#' + (it.updatedAt || '');
+const dismissed = (() => { try { return new Set(JSON.parse(sessionStorage.getItem('portalSeen') || '[]')); } catch { return new Set(); } })();
+const saveDismissed = () => { try { sessionStorage.setItem('portalSeen', JSON.stringify([...dismissed].slice(-200))); } catch {} };
+const isFresh = (t) => { const ms = Date.parse(t); return Number.isFinite(ms) && Date.now() - ms <= FRESH_MS && ms - Date.now() < 3e5; };
+function collect(j) {
+  const m = new Map();
+  (j.days || []).forEach((d) => (d.items || []).forEach((it) => {
+    if (!it) return;
+    const sig = sigOf(d.date, it);
+    m.set(sig, { fp: it.updatedAt || JSON.stringify(it), date: d.date, dk: dkey(sig, it), fresh: isFresh(it.updatedAt) });
+  }));
+  return m;
+}
+function dropBadge(sig, remember) {
+  badgeSet.delete(sig); clearTimeout(badgeTimers.get(sig)); badgeTimers.delete(sig);
+  document.querySelectorAll('.card').forEach((c) => { if (c.dataset.sig === sig) { const b = c.querySelector('.upd'); if (b) b.remove(); } });
+  if (remember) { dismissed.add(remember); saveDismissed(); }
+}
+function markUpdated(sig, e) {
+  if (dismissed.has(e.dk)) return;
+  badgeSet.add(sig); clearTimeout(badgeTimers.get(sig));
+  badgeTimers.set(sig, setTimeout(() => dropBadge(sig, e.dk), BADGE_MS));
+  if (e.date !== activeDate) dayDots.add(e.date);
+}
+function setLive(ok) {
+  const el = $('#lv'); if (!el) return;
+  el.classList.toggle('off', !ok);
+  el.querySelector('span').textContent = ok ? COPY.liveOn : COPY.liveOff;
+}
 
 /* ---------- dates ---------- */
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -161,9 +197,10 @@ function render() {
       </div>
       <p class="care" id="care" hidden></p>
       <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>местное время${trip.hotel ? ' · ' + esc(trip.hotel) : ''}</small></div>
+      <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
     <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Дни путешествия" id="tabs"><span class="ind" id="ind"></span>
-      ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}</button>`).join('')}
+      ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}${dayDots.has(d.date) && d.date !== activeDate ? ' upd' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}${dayDots.has(d.date) && d.date !== activeDate ? ` <span class="sr">· ${COPY.dayUpdated}</span>` : ''}</button>`).join('')}
     </div></div>
     <section id="panel" role="tabpanel" class="list" aria-live="polite"></section>`;
   bindTabs();
@@ -172,6 +209,7 @@ function render() {
   startClock(trip.tz);
   placeIndicator(false);
   setDock();
+  setLive(navigator.onLine !== false && lastOk);
 }
 
 function tabLabel(d, i) {
@@ -201,12 +239,12 @@ function setDock() {
   dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Написать консьержу</a>`;
 }
 
-function card(it, idx) {
+function card(it, idx, date) {
+  const sig = sigOf(date, it);
   const cat = CAT_ICON[it.category] || 'Other';
   const place = [it.venueName, it.address].filter(Boolean).join(', ');
   const rows = [];
   if (it.dressCode) rows.push(['Дресс-код', esc(it.dressCode)]);
-  if (it.guestNotes) rows.push(['Заметка', esc(it.guestNotes)]);
   if (it.bookingReference) rows.push(['Бронь', `<span class="ref">${esc(it.bookingReference)}</span>`]);
   const acts = [];
   if (it.bookingReference) {
@@ -215,15 +253,17 @@ function card(it, idx) {
   }
   acts.push(`<button class="btn" type="button" data-ics="${idx}">${svg('cal')}<span>${esc(COPY.addCal)}</span></button>`);
   if (place) acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>Показать на карте ↗</span></a>`);
-  return `<article class="card kind-${esc(it.kind || 'request')}">
+  const upd = badgeSet.has(sig) && !dismissed.has(dkey(sig, it));
+  return `<article class="card kind-${esc(it.kind || 'request')}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
     <div class="top">
       <div class="ico">${svg(cat)}</div>
       <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'В течение дня'}</div>
       <div class="cat">${esc(CAT_RU[it.category] || CAT_RU.Other)}</div>
+      ${upd ? `<span class="upd">✦ ${esc(COPY.updated)}</span>` : ''}
       <h2 class="title">${esc(it.title)}</h2>
       ${place ? `<p class="venue">${it.venueName ? `<b>${esc(it.venueName)}</b>` : ''}${it.venueName && it.address ? ' · ' : ''}${esc(it.address || '')}</p>` : ''}
     </div>
-    <div class="perf"></div><div class="bot">${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
+    <div class="perf"></div><div class="bot">${it.guestNotes ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(it.guestNotes)}</p></div>` : ''}${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
   </article>`;
 }
 
@@ -287,7 +327,8 @@ function renderDay() {
   const panel = $('#panel');
   panel.setAttribute('aria-labelledby', 't-' + activeDate);
   const items = day ? day.items || [] : [];
-  panel.innerHTML = items.length ? items.map((it, i) => card(it, i)).join('') : `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
+  panel.innerHTML = items.length ? items.map((it, i) => card(it, i, activeDate)).join('') : `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
+  panel.onclick = (e) => { const c = e.target.closest('.card'); if (c && c.dataset.sig && badgeSet.has(c.dataset.sig)) { const it = items.find((x) => sigOf(activeDate, x) === c.dataset.sig); dropBadge(c.dataset.sig, it && dkey(c.dataset.sig, it)); } };
   panel.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
   panel.querySelectorAll('[data-ics]').forEach((b) => (b.onclick = () => downloadIcs(items[+b.dataset.ics])));
 }
@@ -315,10 +356,11 @@ function placeIndicator(animate) {
   tabsFade();
 }
 function select(date, focus) {
-  activeDate = date;
+  activeDate = date; dayDots.delete(date);
   document.querySelectorAll('.tab').forEach((b) => {
     const on = b.dataset.date === date;
     b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1;
+    if (on) { b.classList.remove('upd'); const h = b.querySelector('.sr'); if (h) h.remove(); }
     if (on && focus) b.focus();
   });
   renderDay();
@@ -388,10 +430,13 @@ function resetCopy(btn) {
 }
 
 /* ---------- data ---------- */
-function demo() {
+let demoState = null;
+function demoData() {
+  if (demoState) return structuredClone(demoState);
   const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
-  const e = { venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: '' };
-  return {
+  const old = new Date(Date.now() - 5 * 864e5).toISOString(), recent = new Date(Date.now() - 2 * 36e5).toISOString();
+  const e = { venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: '', updatedAt: old };
+  demoState = {
     guest: { firstName: 'Анна' },
     trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', hotel: 'Hotel Adlon Kempinski', lat: 52.52, lon: 13.4 },
     weather: { tempC: 4, code: 61, text: 'Дождь', kind: 'rain', windKmh: 18, daily: [
@@ -399,43 +444,95 @@ function demo() {
     days: [
       { date: d(2), items: [
         { ...e, time: '09:30', title: 'Рейс SU 2310 Москва — Берлин', category: 'Flight', kind: 'flight', venueName: 'Шереметьево, терминал B', bookingReference: 'B43CSZ', guestNotes: 'Приоритетная регистрация' },
-        { ...e, time: null, title: 'Заселение, отель', category: 'Hotel', kind: 'hotel', venueName: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, Berlin', bookingReference: 'AD-448120', guestNotes: 'Номер с видом на Бранденбургские ворота' },
+        { ...e, time: null, title: 'Заселение, отель', category: 'Hotel', kind: 'hotel', venueName: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, Berlin', bookingReference: 'AD-448120', guestNotes: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.' },
         { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' } ] },
       { date: d(3), items: [
         { ...e, time: '11:00', title: 'Спа-программа «Восстановление»', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
       { date: d(6), items: [
-        { ...e, time: '14:15', title: 'Трансфер в аэропорт', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа' } ] },
+        { ...e, time: '14:15', title: 'Трансфер в аэропорт', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent } ] },
     ],
     concierge: { whatsapp: '+49 30 1234 5678' },
     updatedAt: new Date().toISOString(),
   };
+  return structuredClone(demoState);
+}
+function mutateDemo() {
+  const now = new Date().toISOString();
+  demoData();
+  demoState.days[1].items.push({ time: '16:30', title: 'Прогулка по Музейному острову', category: 'Activities', kind: 'request', venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: 'Гид встретит у входа.\nВозьмите паспорт.', updatedAt: now });
+  const din = demoState.days[0].items[2];
+  din.guestNotes = 'Столик у окна, без морепродуктов. Шеф подготовит безглютеновое меню.'; din.updatedAt = now;
+  demoState.updatedAt = now;
 }
 
-async function load() {
-  if (DEMO) { data = demo(); return render(); }
-  if (!token) return stateView('Эта ссылка неактивна', 'Ваш консьерж с радостью пришлёт новую.');
-  try {
-    const r = await fetch('/api/trip-portal?token=' + encodeURIComponent(token), { headers: { Accept: 'application/json' }, cache: 'no-store' });
-    if (r.status === 400 || r.status === 404) return stateView('Эта ссылка неактивна', 'Похоже, срок её действия истёк. Ваш консьерж с радостью пришлёт новую.');
-    if (!r.ok) throw new Error('http');
-    const j = await r.json();
-    if (!j || !j.trip || !Array.isArray(j.days)) throw new Error('shape');
-    const sig = JSON.stringify(j, (k, v) => (k === 'updatedAt' ? undefined : v));
-    if (data && sig === lastSig) return;
-    app.classList.toggle('norise', !!data);
-    lastSig = sig; data = j; render();
-  } catch {
-    if (data) return; // keep showing the last good data on a silent refresh failure
-    stateView('Минуту терпения', 'Маршрут пока не открывается. Проверьте соединение и попробуйте ещё раз.', true);
+function focusDesc() {
+  const a = document.activeElement;
+  if (!a || a === document.body) return null;
+  if (a.classList && a.classList.contains('tab')) return '#' + CSS.escape(a.id);
+  if (a.dataset && a.dataset.ics !== undefined) return `[data-ics="${a.dataset.ics}"]`;
+  if (a.dataset && a.dataset.copy !== undefined) return `[data-copy="${CSS.escape(a.dataset.copy)}"]`;
+  return null;
+}
+function applyData(j, sig) {
+  const key = [j.trip.start, j.trip.end, j.trip.title].join('|');
+  const first = !data, changedWindow = !first && key !== tripKey;
+  const cur = collect(j), y = scrollY, fd = first ? null : focusDesc();
+  entering = new Set();
+  let news = 0;
+  if (first || changedWindow) {
+    if (changedWindow) { activeDate = null; userPicked = false; dayDots.clear(); [...badgeSet].forEach((s) => dropBadge(s)); }
+    cur.forEach((e, s) => { if (e.fresh && !dismissed.has(e.dk)) badgeSet.add(s); });
+  } else {
+    cur.forEach((e, s) => {
+      const p = prevMap.get(s);
+      if (!p) { entering.add(s); markUpdated(s, e); news++; } else if (p.fp !== e.fp) { markUpdated(s, e); news++; }
+    });
+  }
+  prevMap = cur; tripKey = key; lastSig = sig;
+  app.classList.toggle('norise', !first);
+  data = j; render();
+  entering = new Set();
+  if (!first) {
+    scrollTo(0, y);
+    if (fd) { const el = $(fd); if (el) el.focus({ preventScroll: true }); }
+    if (news && !changedWindow) { live.textContent = COPY.updatedLive; setTimeout(() => { live.textContent = ''; }, 3000); }
   }
 }
 
-function refresh() {
-  if (document.hidden || DEMO || !token) return;
-  const y = scrollY; const sel = activeDate;
-  load().then(() => { activeDate = userPicked ? sel : activeDate; scrollTo(0, y); });
+async function load() {
+  if (inflight) return;
+  inflight = true; lastFetch = Date.now();
+  try {
+    let j;
+    if (DEMO) j = demoData();
+    else {
+      if (!token) return stateView('Эта ссылка неактивна', 'Ваш консьерж с радостью пришлёт новую.');
+      const r = await fetch('/api/trip-portal?token=' + encodeURIComponent(token), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      if (r.status === 400 || r.status === 404) { data = null; return stateView('Эта ссылка неактивна', 'Похоже, срок её действия истёк. Ваш консьерж с радостью пришлёт новую.'); }
+      if (!r.ok) throw new Error('http');
+      j = await r.json();
+    }
+    if (!j || !j.trip || !Array.isArray(j.days)) throw new Error('shape');
+    lastOk = true;
+    const sig = JSON.stringify(j, function (k, v) { return this === j && k === 'updatedAt' ? undefined : v; });
+    if (data && sig === lastSig) return setLive(navigator.onLine !== false);
+    applyData(j, sig);
+  } catch {
+    lastOk = false;
+    if (data) return setLive(false); // keep the last good data on a silent refresh failure
+    stateView('Минуту терпения', 'Маршрут пока не открывается. Проверьте соединение и попробуйте ещё раз.', true);
+  } finally { inflight = false; }
 }
-setInterval(refresh, REFRESH_MS);
-document.addEventListener('visibilitychange', refresh);
+
+/* ---------- live polling ---------- */
+const canPoll = () => !document.hidden && (DEMO ? LIVE : !!token);
+function startPoll() { stopPoll(); if (canPoll()) pollTimer = setInterval(() => { if (canPoll()) load(); }, REFRESH_MS); }
+function stopPoll() { clearInterval(pollTimer); pollTimer = null; }
+function refreshNow() { if (canPoll() && Date.now() - lastFetch > 1500) load(); }
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopPoll(); else { refreshNow(); startPoll(); } });
+addEventListener('focus', refreshNow);
+addEventListener('online', () => { lastFetch = 0; refreshNow(); });
+addEventListener('offline', () => setLive(false));
 addEventListener('resize', () => placeIndicator(false));
-load();
+load().then(() => { startPoll(); });
+if (LIVE) setTimeout(() => { mutateDemo(); load(); }, 8000);

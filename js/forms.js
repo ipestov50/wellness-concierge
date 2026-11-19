@@ -273,9 +273,10 @@ export function editRequest(id, presetClient, preset = {}) {
     `<div class="rq-fold${r.clarifying_questions ? ' open' : ''}" data-fold="clarifying_questions"><div>${field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions, 'rows="2"'))}</div></div>` +
     `<div class="rq-fold${r.original_message ? ' open' : ''}" data-fold="original_message"><div>${field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message, 'rows="2"'))}</div></div>` +
     `<details class="rq-forguest"${r.guest_visible === false || r.booking_ref || r.dress_code || r.guest_note ? ' open' : ''}><summary>Для гостя</summary>` +
-    `<div class="checks">${check('guest_hidden', 'Скрыть в путеводителе гостя', r.guest_visible === false)}</div>` +
+    `<div class="checks">${check('guest_hidden', 'Не показывать гостю в путеводителе', r.guest_visible === false)}</div>` +
+    `<div class="trip-delays"><span class="hint" id="rq-live" aria-live="polite"></span><button type="button" class="trip-delay" id="rq-livecopy">🔗 Скопировать live-ссылку</button></div>` +
     `<div class="f2">${field('booking_ref', 'Номер брони', input('booking_ref', r.booking_ref, 'type="text" autocomplete="off"'))}${field('dress_code', 'Дресс-код', input('dress_code', r.dress_code, 'type="text" placeholder="Smart casual"'))}</div>` +
-    field('guest_note', 'Заметка для гостя', area('guest_note', r.guest_note, 'rows="2" placeholder="Видит гость: что взять, как добраться"')) + `</details>` +
+    field('guest_note', 'Заметка для гостя', area('guest_note', r.guest_note, 'rows="2" placeholder="Видит гость: дресс-код, контакт водителя, детали столика"')) + `</details>` +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
     `${check('needs_review', 'Нужна проверка', r.needs_review)}</div><small class="hint">«Нужна проверка» ставится сама, если бюджет больше 500.</small>`;
   const m = openModal({
@@ -322,6 +323,26 @@ export function editRequest(id, presetClient, preset = {}) {
     el.innerHTML = c && v ? guestTimeLine(c, fromParisInput(v)) : '';
   };
   gtime();
+  const AUTO = ['Dining', 'Spa & Wellness', 'Transport', 'Accommodation', 'Activities', 'Health & Fitness'];
+  const live = () => {
+    const f = m.form, el = f.querySelector('#rq-live'), btn = f.querySelector('#rq-livecopy');
+    if (!el) return;
+    const st = f.status.value, hidden = f.guest_hidden.checked;
+    const done = statusOf(st)?.kind === 'done' || st === 'confirmed';
+    const shown = r.guest_visible === true || (r.guest_visible == null && AUTO.includes(f.category.value));
+    el.textContent = hidden ? 'Скрыто от гостя' : done && shown ? 'Гость видит это по live-ссылке' : done ? 'Не показывается: категория скрыта по умолчанию' : 'Появится у гостя после отметки «Выполнено»';
+    const hasClient = !!f.client_id.value && f.client_id.value !== '__new';
+    btn.disabled = !hasClient; btn.title = hasClient ? '' : 'Сначала выберите гостя';
+    if (!hasClient) el.textContent = 'Сначала выберите гостя';
+  };
+  live();
+  m.form.querySelector('#rq-livecopy')?.addEventListener('click', async (e) => {
+    const cid = m.form.client_id.value;
+    if (!cid || cid === '__new') return;
+    e.target.disabled = true;
+    try { const { shareClient } = await import('./dossier.js'); await shareClient(cid, 'on'); } finally { e.target.disabled = false; live(); }
+  });
+  ['status', 'category', 'guest_hidden', 'client_id'].forEach((n) => m.form[n]?.addEventListener('change', live));
   m.form.addEventListener('click', () => setTimeout(gtime, 0));
   m.form.client_id.addEventListener('change', gtime);
   if (matchMedia('(pointer:fine)').matches) (r.client_id ? m.form.summary : m.form.querySelector('#f-client_pick')).focus();

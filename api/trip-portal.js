@@ -1,6 +1,8 @@
 // Публичный путеводитель гостя по секретной ссылке. Без входа владельца: данные отдаёт только функция trip_portal (очищенный JSON).
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 const str = (v, n = 300) => (typeof v === 'string' && v ? v.slice(0, n) : null);
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const iso = (v) => (typeof v === 'string' && ISO.test(v) ? v : null);
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function wmo(c) {
@@ -53,7 +55,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error('db_' + r.status);
     d = await r.json();
   } catch { res.setHeader('Cache-Control', 'no-store'); return res.status(502).json({ error: 'upstream' }); }
-  if (!d || typeof d !== 'object') { res.setHeader('Cache-Control', 'public, s-maxage=60'); return res.status(404).json({ error: 'not_found' }); }
+  if (!d || typeof d !== 'object') { res.setHeader('Cache-Control', 'public, s-maxage=10'); return res.status(404).json({ error: 'not_found' }); }
 
   const t = d.trip || {};
   const wx = await weather(t.lat, t.lon);
@@ -66,13 +68,13 @@ export default async function handler(req, res) {
         time: /^\d{2}:\d{2}$/.test(String(i?.time)) ? i.time : null, title: str(i?.title, 200), category: str(i?.category, 40),
         kind: ['request', 'flight', 'hotel'].includes(i?.kind) ? i.kind : 'request',
         venueName: str(i?.venueName, 160), address: str(i?.address, 240), bookingReference: str(i?.bookingReference, 80),
-        dressCode: str(i?.dressCode, 120), guestNotes: str(i?.guestNotes, 600),
+        dressCode: str(i?.dressCode, 120), guestNotes: str(i?.guestNotes, 600), updatedAt: iso(i?.updatedAt),
       })),
     })),
     concierge: { whatsapp: /^\d{8,15}$/.test(String(d.concierge?.whatsapp || '')) ? d.concierge.whatsapp : null },
     weather: wx,
-    updatedAt: str(d.updatedAt, 30),
+    updatedAt: iso(d.updatedAt),
   };
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=30');
   return res.status(200).json(out);
 }

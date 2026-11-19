@@ -67,31 +67,24 @@ const portalUrl = (tok) => `${location.origin}/t/${tok}`;
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
 }
+export async function shareClient(clientId, mode = 'on', quiet = false) {
+  if (!clientId) { toast('У запроса нет гостя'); return null; }
+  try {
+    const sb = await getSupabase();
+    const had = byId('clients', clientId)?.portal_token;
+    if (mode === 'on' && !had) await ensureWhatsapp(sb);
+    const { data, error } = await sb.rpc('client_portal_share', { p_client: clientId, p_mode: mode });
+    if (error) throw error;
+    patchLocal('clients', clientId, { portal_token: data || null });
+    if (mode === 'off') { toast('Доступ по ссылке закрыт'); return null; }
+    if (!data) throw new Error('нет ссылки');
+    if (!quiet || mode === 'rotate') toast((await copyText(portalUrl(data))) ? (mode === 'rotate' ? 'Новая ссылка скопирована' : 'Ссылка для гостя скопирована') : portalUrl(data));
+    return data;
+  } catch (e) { toast('Не удалось обновить ссылку: ' + (e.message || e)); return null; }
+}
 export async function shareTrip(id) {
   const t = state.trips.find((x) => x.id === id);
-  if (!t) return;
-  try {
-    const sb = await getSupabase();
-    let tok = t.share_token;
-    if (!tok) {
-      await ensureWhatsapp(sb);
-      const { data, error } = await sb.rpc('trip_share', { p_trip: id });
-      if (error) throw error;
-      tok = data;
-      patchLocal('trips', id, { share_token: tok });
-    }
-    if (!tok) throw new Error('нет ссылки');
-    toast((await copyText(portalUrl(tok))) ? 'Ссылка для гостя скопирована' : portalUrl(tok));
-  } catch (e) { toast('Не удалось создать ссылку: ' + (e.message || e)); }
-}
-export async function revokeTrip(id) {
-  try {
-    const sb = await getSupabase();
-    const { error } = await sb.rpc('trip_share', { p_trip: id, p_on: false });
-    if (error) throw error;
-    patchLocal('trips', id, { share_token: null });
-    toast('Ссылка отозвана');
-  } catch (e) { toast('Не удалось отозвать: ' + (e.message || e)); }
+  if (t) await shareClient(t.client_id, 'on');
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-trip-share]');
@@ -135,7 +128,7 @@ export function editTrip(id, clientId) {
     field('flight_out_at', 'Вылет (время Парижа)', deadlinePicker(t.flight_out_at, 'flight_out_at', { empty: 'Не указано', quick: false })) + '</div>' +
     field('companions', 'С кем', inp('companions', t.companions, 'type="text" placeholder="муж, двое детей, няня"')) +
     field('notes', 'Заметки', `<textarea id="f-notes" name="notes" rows="2">${esc(t.notes)}</textarea>`) +
-    (id ? `<h3 class="form-sec">Путеводитель гостя</h3><div class="trip-delays"><button type="button" class="btn small" id="tripShare">🔗 Ссылка для гостя</button>${t.share_token ? '<button type="button" class="trip-delay" id="tripRevoke">Отозвать ссылку</button>' : ''}</div><small class="hint">Гость увидит только отмеченные «для гостя» запросы, рейсы и отель.</small>` : '');
+    (id ? `<h3 class="form-sec">Путеводитель гостя</h3><div class="trip-delays"><button type="button" class="btn small" id="tripShare">🔗 Ссылка для гостя</button>${byId('clients', t.client_id)?.portal_token ? '<button type="button" class="trip-delay" id="tripRotate">Заменить ссылку на новую</button><button type="button" class="trip-delay" id="tripRevoke">Закрыть доступ</button>' : ''}</div><small class="hint">Гость увидит только отмеченные «для гостя» запросы, рейсы и отель.</small>` : '');
   const m = openModal({
     title: id ? 'Поездка' : 'Новая поездка',
     body,
@@ -157,15 +150,19 @@ export function editTrip(id, clientId) {
     onDelete: id ? async () => { await remove('trips', id); toast('Поездка удалена'); } : null,
   });
   bindDeadlinePicker(m.form);
+  const cid = state.trips.find((x) => x.id === id)?.client_id || clientId;
+  const bar = m.form.querySelector('#tripShare')?.parentElement;
+  const mkBtns = () => {
+    if (!bar || bar.querySelector('#tripRevoke')) return;
+    const mk = (idn, txt, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'trip-delay'; b.id = idn; b.textContent = txt; b.addEventListener('click', fn); bar.append(b); };
+    mk('tripRotate', 'Заменить ссылку на новую', async () => { if (confirm('Старая ссылка перестанет открываться. Выдать новую?')) await shareClient(cid, 'rotate'); });
+    mk('tripRevoke', 'Закрыть доступ', async () => { if (confirm('Гость больше не сможет открыть путеводитель по этой ссылке. Закрыть доступ?')) { await shareClient(cid, 'off'); bar.querySelector('#tripRotate')?.remove(); bar.querySelector('#tripRevoke')?.remove(); } });
+  };
   m.form.querySelector('#tripShare')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; await shareTrip(id); e.target.disabled = false;
-    if (state.trips.find((x) => x.id === id)?.share_token && !m.form.querySelector('#tripRevoke')) {
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'trip-delay'; r.id = 'tripRevoke'; r.textContent = 'Отозвать ссылку';
-      e.target.after(r); r.addEventListener('click', revoke);
-    }
+    e.target.disabled = true; await shareClient(cid, 'on'); e.target.disabled = false;
+    if (byId('clients', cid)?.portal_token) mkBtns();
   });
-  const revoke = async () => { await revokeTrip(id); m.form.querySelector('#tripRevoke')?.remove(); };
-  m.form.querySelector('#tripRevoke')?.addEventListener('click', revoke);
+  if (byId('clients', cid)?.portal_token) { bar?.querySelector('#tripRotate')?.remove(); bar?.querySelector('#tripRevoke')?.remove(); mkBtns(); }
 }
 
 // ---------- окружение ----------

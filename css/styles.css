@@ -3052,3 +3052,5 @@ select.flash { animation: flash-ring 1s var(--ease); }
 /* Блок «Для гостя» в запросе */
 .rq-forguest { margin: 10px 0; border-top: 1px solid var(--line); padding-top: 8px; }
 .rq-forguest > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+
+@media (max-width: 767px) { .trip-delay { min-height: 44px; } }
