@@ -12,7 +12,7 @@ const COPY = {
   copyPnr: 'Копировать PNR', copyRef: 'Скопировать номер брони', copied: 'Скопировано',
   copiedLive: 'Номер брони скопирован', copyFail: 'Не удалось скопировать. Номер можно выделить вручную',
   addCal: '+ В календарь', calLive: 'Файл календаря сохранён',
-  clockAria: 'Местное время',
+  clockAria: 'Местное время', clockLocal: 'местное время · {city}', clockLocalBare: 'местное время',
   liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
   updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
   noteLabel: '✦ Заметка консьержа',
@@ -201,7 +201,7 @@ function render() {
         ${country ? `<span class="muted small">${country}</span>` : ''}
       </div>
       <p class="care" id="care" hidden></p>
-      <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>местное время${trip.hotel ? ' · ' + esc(trip.hotel) : ''}</small></div>
+      <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>${esc(String(trip.city || '').trim() ? fill(COPY.clockLocal, { city: String(trip.city).trim() }) : COPY.clockLocalBare)}</small></div>
       <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
     ${hotelCard(trip)}
@@ -275,6 +275,22 @@ function routeHtml(tr) {
   return `<ol class="route">${stop('from', COPY.routeFrom, tr.pickup)}${stop('to', COPY.routeTo, tr.dropoff)}</ol>${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}`;
 }
 
+const timeMin = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : Infinity; };
+function normDays(j) {
+  (j.days || []).forEach((d) => { if (Array.isArray(d.items)) d.items = d.items.filter(Boolean).sort((a, b) => { const x = timeMin(a.time), y = timeMin(b.time); return x === y ? 0 : x < y ? -1 : 1; }); });
+  return j;
+}
+const shortPlace = (t) => { const v = String(t || '').split(',')[0].trim(); return v.length > 28 ? v.slice(0, 27).trimEnd() + '…' : v; };
+function displayTitle(it) {
+  const title = String(it.title || ''), ref = String(it.bookingReference || '').trim();
+  if (it.kind === 'flight' && ref) {
+    const m = /^(.*?)[\s·•—–-]+([^\s·•—–-]+)\s*$/.exec(title);
+    if (m && m[2].toLowerCase() === ref.toLowerCase() && m[1].trim()) return m[1].trim();
+  }
+  const tr = transferOf(it);
+  if (tr && tr.pickup && tr.dropoff && /^\s*(трансфер|transfer)\s*[.!:…]*\s*$/i.test(title)) return `${shortPlace(tr.pickup)} → ${shortPlace(tr.dropoff)}`;
+  return title;
+}
 function card(it, idx, date) {
   const sig = sigOf(date, it);
   const cat = CAT_ICON[it.category] || 'Other';
@@ -282,6 +298,7 @@ function card(it, idx, date) {
   const isHotel = it.kind === 'hotel';
   const addr = it.address || (isHotel && data.trip.hotelAddress) || '';
   const vName = it.venueName || (isHotel && data.trip.hotel) || '';
+  const showVenue = !isHotel;
   const place = [vName, addr].filter(Boolean).join(', ');
   const rows = [];
   if (it.dressCode) rows.push(['Дресс-код', esc(it.dressCode)]);
@@ -301,8 +318,8 @@ function card(it, idx, date) {
       <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'В течение дня'}</div>
       <div class="cat">${esc(CAT_RU[it.category] || CAT_RU.Other)}</div>
       ${upd ? `<span class="upd">✦ ${esc(COPY.updated)}</span>` : ''}
-      <h2 class="title">${esc(it.title)}</h2>
-      ${tr ? `<div class="routewrap">${routeHtml(tr)}</div>` : place ? `<p class="venue">${vName ? `<b>${esc(vName)}</b>` : ''}${vName && addr ? ' · ' : ''}${esc(addr)}</p>` : ''}
+      <h2 class="title">${esc(displayTitle(it))}</h2>
+      ${tr ? `<div class="routewrap">${routeHtml(tr)}</div>` : place && showVenue ? `<p class="venue">${vName ? `<b>${esc(vName)}</b>` : ''}${vName && addr ? ' · ' : ''}${esc(addr)}</p>` : ''}
     </div>
     <div class="perf"></div><div class="bot">${noteHtml(it)}${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
   </article>`;
@@ -348,7 +365,7 @@ function buildIcs(it, date, tz) {
   }
   const tr = transferOf(it);
   const desc = [tr && fill(COPY.routeDesc, { a: tr.pickup || '—', b: tr.dropoff || '—' }), tr && tr.driver && fill(COPY.driver, { name: tr.driver }), it.bookingReference && `Бронь: ${it.bookingReference}`, it.dressCode && `Дресс-код: ${it.dressCode}`, it.guestNotes && `${COPY.noteLabel.replace('✦ ', '')}: ${it.guestNotes}`].filter(Boolean).join('\n');
-  lines.push(`SUMMARY:${icsEsc(it.title)}`);
+  lines.push(`SUMMARY:${icsEsc(displayTitle(it))}`);
   const loc = tr ? (tr.pickup || tr.dropoff) : (it.address || (it.kind === 'hotel' && data.trip.hotelAddress) || it.venueName);
   if (loc) lines.push(`LOCATION:${icsEsc(loc)}`);
   if (desc) lines.push(`DESCRIPTION:${icsEsc(desc)}`);
@@ -485,13 +502,13 @@ function demoData() {
       { date: d(2), kind: 'rain', text: 'Дождь', tMax: 5, tMin: 2 }, { date: d(3), kind: 'cloud', text: 'Облачно', tMax: 6, tMin: 1 }, { date: d(6), kind: 'clear', text: 'Ясно', tMax: 8, tMin: 0 } ] },
     days: [
       { date: d(2), items: [
-        { ...e, time: '09:30', title: 'Рейс SU 2310 Москва — Берлин', category: 'Flight', kind: 'flight', venueName: 'Шереметьево, терминал B', bookingReference: 'B43CSZ', guestNotes: 'Приоритетная регистрация' },
-        { ...e, time: null, title: 'Заселение, отель', category: 'Hotel', kind: 'hotel', venueName: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, Berlin', bookingReference: 'AD-448120', guestNotes: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.' },
-        { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' } ] },
+        { ...e, time: '09:15', title: 'Прилёт · B43CSZ', category: 'Flight', kind: 'flight', venueName: 'Шереметьево, терминал B', bookingReference: 'B43CSZ', guestNotes: 'Приоритетная регистрация' },
+        { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' },
+        { ...e, time: null, title: 'Заселение, отель', category: 'Hotel', kind: 'hotel', venueName: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, Berlin', bookingReference: 'AD-448120', guestNotes: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.' } ] },
       { date: d(3), items: [
         { ...e, time: '11:00', title: 'Спа-программа «Восстановление»', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
       { date: d(6), items: [
-        { ...e, time: '14:15', title: 'Трансфер в аэропорт', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent, bookingReference: 'TR-1042',
+        { ...e, time: '14:15', title: 'Трансфер', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent, bookingReference: 'TR-1042',
           transfer: { pickup: 'Hotel Adlon Kempinski, Unter den Linden 77, 10117 Berlin', dropoff: 'Аэропорт Берлин Бранденбург (BER), Terminal 1, Melli-Beese-Ring 1, 12529 Schönefeld', passengers: 2, luggage: 5, driver: 'Markus' } } ] },
     ],
     concierge: { whatsapp: '+49 30 1234 5678' },
@@ -503,7 +520,7 @@ function mutateDemo() {
   const now = new Date().toISOString();
   demoData();
   demoState.days[1].items.push({ time: '16:30', title: 'Прогулка по Музейному острову', category: 'Activities', kind: 'request', venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: 'Гид встретит у входа.\nВозьмите паспорт.', updatedAt: now });
-  const din = demoState.days[0].items[2];
+  const din = demoState.days[0].items[1];
   din.guestNotes = 'Столик у окна, без морепродуктов. Шеф подготовит безглютеновое меню.'; din.updatedAt = now;
   demoState.updatedAt = now;
 }
@@ -533,7 +550,7 @@ function applyData(j, sig) {
   }
   prevMap = cur; tripKey = key; lastSig = sig;
   app.classList.toggle('norise', !first);
-  data = j; render();
+  data = normDays(j); render();
   entering = new Set();
   if (!first) {
     scrollTo(0, y);
