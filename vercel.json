@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/t/:token", "destination": "/trip-portal.html" }
+    { "source": "/t/:token", "destination": "/trip-portal" }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [
