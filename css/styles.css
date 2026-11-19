@@ -3261,3 +3261,23 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 ::view-transition-group(app) { animation-duration: .5s; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
 ::view-transition-old(app), ::view-transition-new(app) { animation-duration: .5s; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
 @media (prefers-reduced-motion: reduce) { ::view-transition-group(app), ::view-transition-old(app), ::view-transition-new(app) { animation: none; } }
+
+/* ── «Идеи для гостя»: штрих консьержа, чипы-фильтры, уход карточки ── */
+.idea-dlg .idea-reasons { gap: 8px; }
+.idea-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 13px; border: 0; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: background .3s cubic-bezier(.22,1,.36,1), color .2s; }
+.idea-chip.static { cursor: default; }
+.idea-chip b { color: var(--accent); font-weight: 600; }
+.idea-chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); } .idea-chip[aria-pressed="true"] b { color: inherit; }
+.idea-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.idea-card[hidden] { display: none; }
+.idea-touch { margin: 0; display: grid; gap: 4px; padding: 10px 14px; border-left: 2px solid #B89356; border-radius: 0 12px 12px 0; background: rgba(184,147,86,.10); font-size: 14px; line-height: 1.4; }
+.idea-touch b { font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: #8A6A32; }
+.idea-card footer { gap: 8px; }
+.idea-hide { margin-left: auto; min-height: 36px; padding: 0 10px; color: var(--muted); font-size: 12.5px; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .2s, text-decoration-color .2s; }
+.idea-hide:hover { background: none; color: var(--ink); text-decoration-color: currentColor; }
+.idea-card.leaving { overflow: hidden; height: 0 !important; opacity: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -12px; border-width: 0; transform: translateX(18px); transition: height .34s cubic-bezier(.22,1,.36,1), opacity .22s, padding .34s cubic-bezier(.22,1,.36,1), margin .34s cubic-bezier(.22,1,.36,1), transform .3s cubic-bezier(.22,1,.36,1); }
+.idea-card.slot { min-height: 96px; opacity: 0; } .idea-card.slot-in { opacity: 1; transition: opacity .3s; }
+.idea-card.fresh { animation: tpFade .45s cubic-bezier(.22,1,.36,1) both; }
+@media (max-width: 767px) { .idea-chip { min-height: 44px; } .idea-card footer .idea-go, .idea-card footer .vo-btn, .idea-hide { min-height: 44px; } .idea-card footer { gap: 6px; } }
+@media (prefers-reduced-motion: reduce) { .idea-card.leaving, .idea-chip { transition: none; } .idea-card.fresh { animation: none; } }
+.foot[hidden] { display: none; }
