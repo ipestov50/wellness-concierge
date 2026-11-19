@@ -3090,3 +3090,17 @@ select.flash { animation: flash-ring 1s var(--ease); }
 @media (prefers-reduced-motion: reduce) { #ac-fold { transition: none; } }
 
 .ov.rq .hint[hidden] { display: none; }
+
+/* Поездка: блок «Проживание» */
+.form-sec + .hint { display: block; margin: -4px 0 10px; color: #786F68; }
+
+/* Привязка запроса к поездке */
+.rq-trip{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:-4px 0 12px;min-width:0}
+.rq-trip[hidden]{display:none}
+.rq-trip-pill{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;background:#EFEAE1;color:#786F68;font-size:12.5px;font-variant-numeric:tabular-nums;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rq-trip-sel{display:inline-flex;align-items:center;gap:6px;min-height:44px;color:#786F68;font-size:12px;margin:0}
+.rq-trip-sel select{min-height:44px;max-width:210px;border:1px solid rgba(44,37,32,.1);border-radius:10px;background:#fff;color:#2C2520;font:inherit;font-size:13px;padding:0 8px}
+.rq-trip-sel select:focus-visible{outline:2px solid #265D56;outline-offset:2px}
+.ac-sync{display:block;margin:6px 0 2px;color:#786F68}
+
+@media (max-width: 420px) { .tr-steps.ac-pair { display: grid; grid-template-columns: 1fr; gap: 10px; } }

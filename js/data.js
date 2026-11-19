@@ -50,7 +50,7 @@ export function loadAll() {
 }
 // Тяжёлое поле trips.brief (брифинг Jarvis) не грузим при старте — его дочитывает ensureField при открытии брифинга.
 // ВАЖНО: новая колонка в trips должна быть добавлена и сюда.
-const COLS = { trips: 'id,owner_id,client_id,city,country,hotel,hotel_address,start_date,end_date,flight_in,flight_in_at,flight_out,flight_out_at,companions,notes,created_at,updated_at,tz,country_code,lat,lon,flight_in_delay,flight_out_delay,flight_in_delay_done,flight_out_delay_done,share_token' };
+const COLS = { trips: 'id,owner_id,client_id,city,country,hotel,hotel_address,accommodation,start_date,end_date,flight_in,flight_in_at,flight_out,flight_out_at,companions,notes,created_at,updated_at,tz,country_code,lat,lon,flight_in_delay,flight_out_delay,flight_in_delay_done,flight_out_delay_done,share_token' };
 const cols = (t) => COLS[t] || '*';
 // таблицы с updated_at: при повторной загрузке сверяем только id+время и дочитываем лишь изменённые строки
 const STAMPED = new Set(['clients', 'requests', 'partners', 'trips', 'people', 'client_dates', 'day_items', 'shift_logs']);

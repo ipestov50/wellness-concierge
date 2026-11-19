@@ -95,7 +95,24 @@ const TR = {
 const AC = {
   title: 'Проживание', hotel: 'Отель / Резиденция', addr: 'Адрес отеля', guests: 'Гости в номере', checkin: 'Время заезда', room: 'Тип номера',
   hotelPh: 'Название отеля', addrPh: 'Улица, город', roomPh: 'Например, люкс', needHotel: 'Чтобы сохранить проживание, укажите отель и адрес', legacy: 'Отель и адрес можно добавить позже. Когда они появятся, гость увидит их в путеводителе',
+  sync: 'Когда запрос отмечен «Выполнено» или «Подтверждено», данные обновят блок «Проживание» в поездке гостя',
 };
+// Тексты привязки к поездке
+const TP = { pill: 'Поездка', change: 'изменить', auto: 'Автоматически', none: 'Без поездки', label: 'Поездка гостя' };
+const tpDates = (t) => { const f = (d) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '') : ''); const a = f(t.start_date), b = f(t.end_date); return a && b && a !== b ? a + '–' + b : a || b; };
+const tpLabel = (t) => [t.city, tpDates(t)].filter(Boolean).join(' · ');
+const tpToday = () => new Date().toISOString().slice(0, 10);
+const tpMine = (cid) => { const today = tpToday(); return (state.trips || []).filter((t) => t.client_id === cid && (t.end_date || t.start_date || '9') >= today).sort((a, b) => (a.start_date || '').localeCompare(b.start_date || '')); };
+const tpNearest = (list) => { const today = tpToday(); return list.find((x) => (x.start_date || '') <= today) || list[0] || null; };
+// выбранная поездка: явный выбор, иначе по дате срока, иначе активная/ближайшая
+function tpResolve(form) {
+  const choice = form.trip_id ? form.trip_id.value : '', cid = form.client_id.value;
+  if (choice === '__none' || !cid || cid === '__new') return null;
+  const mine = tpMine(cid);
+  if (choice) return (state.trips || []).find((t) => t.id === choice) || null;
+  const d = ((form.deadline && form.deadline.value) || '').slice(0, 10);
+  return (d && mine.find((t) => (t.start_date || '') <= d && d <= (t.end_date || t.start_date || ''))) || tpNearest(mine);
+}
 const stepper = (name, label, val, min, none) => `<div class="tr-step" data-step="${name}" data-min="${min}"${none ? ` data-none="${esc(none)}"` : ''}><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(TR.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(TR.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="tr_${name}" value="${esc(val)}"></div>`;
 const transferBlock = (t, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}" id="tr-fold"${open ? '' : ' inert'}><div><div class="tr-box"><div class="tr-head">${esc(TR.title)}</div>
   <div class="f tr-route"><label for="f-tr_pickup">${esc(TR.route)}</label><div class="tr-line"><span class="tr-rail" aria-hidden="true"><i class="tr-dot"></i><i class="tr-wire"></i><i class="tr-pin"></i></span><div class="tr-ins">${input('tr_pickup', t.pickup, `type="text" autocomplete="off" enterkeyhint="next" aria-label="${esc(TR.from)}" placeholder="${esc(TR.from)}: ${esc(TR.fromPh)}"`)}${input('tr_dropoff', t.dropoff, `type="text" autocomplete="off" aria-label="${esc(TR.to)}" placeholder="${esc(TR.to)}: ${esc(TR.toPh)}"`)}</div></div><small class="hint" id="tr-hint" hidden>${esc(TR.legacy)}</small></div>
@@ -104,7 +121,7 @@ const transferBlock = (t, open) => `<div class="rq-fold tr-fold${open ? ' open' 
 
 const accBlock = (a, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}" id="ac-fold"${open ? '' : ' inert'}><div><div class="tr-box"><div class="tr-head">${esc(AC.title)}</div>
   ${field('ac_hotel', AC.hotel, input('ac_hotel', a.hotelName, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.hotelPh)}"`))}
-  ${field('ac_addr', AC.addr, input('ac_addr', a.hotelAddress, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.addrPh)}"`))}<small class="hint" id="ac-hint" hidden>${esc(AC.legacy)}</small>
+  ${field('ac_addr', AC.addr, input('ac_addr', a.hotelAddress, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.addrPh)}"`))}<small class="hint" id="ac-hint" hidden>${esc(AC.legacy)}</small><small class="hint ac-sync">${esc(AC.sync)}</small>
   <div class="tr-steps">${stepper('ac_guests', AC.guests, a.guestsCount || 1, 1)}</div>
   <div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, input('ac_checkin', a.checkInTime, 'type="time" autocomplete="off"'))}${field('ac_room', AC.room, input('ac_room', a.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div></div></div></div>`;
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
@@ -216,6 +233,27 @@ function bindRequestForm(form) {
       paint();
     });
   }
+  // привязка к поездке: плашка и выбор
+  const tpBox = form.querySelector('#rq-trip');
+  if (tpBox && form.trip_id) {
+    const sel = form.trip_id, pill = form.querySelector('#rq-trip-pill');
+    let keep = sel.dataset.saved || '';
+    const paint = () => {
+      const mine = tpMine(form.client_id.value);
+      tpBox.hidden = !mine.length;
+      if (!mine.length) { sel.innerHTML = ''; pill.textContent = ''; return; }
+      const cur = keep || sel.value;
+      sel.innerHTML = `<option value="">${esc(TP.auto)}</option>` + mine.map((t) => `<option value="${esc(t.id)}">${esc(tpLabel(t))}</option>`).join('') + `<option value="__none">${esc(TP.none)}</option>`;
+      sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+      keep = '';
+      const t = tpResolve(form);
+      pill.textContent = t ? `${TP.pill} · ${tpLabel(t)}` : TP.none;
+    };
+    form.client_id.addEventListener('change', () => { keep = ''; sel.value = ''; paint(); });
+    sel.addEventListener('change', paint);
+    form.deadline && form.deadline.addEventListener('change', paint);
+    paint();
+  }
   // блок «Проживание»: раскрывается для Accommodation, подставляет отель из ближайшей поездки гостя
   const acFold = form.querySelector('#ac-fold');
   if (acFold) {
@@ -307,6 +345,7 @@ export function editRequest(id, presetClient, preset = {}) {
     `<div class="f rq-guest"><label for="f-client_pick">Гость</label>${select('client_id', options([['__new', '+ Новый гость…'], ...clients], r.client_id, '— выберите —'), 'class="gp-native" tabindex="-1" aria-hidden="true"')}
       <div class="gp" id="gp"><button type="button" class="gp-btn" id="f-client_pick" aria-haspopup="listbox" aria-expanded="false">${gpFace(r.client_id)}</button>
         <div class="gp-pop" hidden><input type="search" class="gp-q" placeholder="Найти гостя…" autocomplete="off" aria-label="Найти гостя"><div class="gp-list" role="listbox"></div></div></div></div>` +
+    `<div class="rq-trip" id="rq-trip" hidden><span class="rq-trip-pill tnum" id="rq-trip-pill"></span><label class="rq-trip-sel"><span>${esc(TP.change)}</span><select name="trip_id" id="f-trip_id" aria-label="${esc(TP.label)}" data-saved="${esc(r.trip_id || '')}"></select></label></div>` +
     `<div class="newguest" id="newguest" hidden><div class="f2">${field('new_name', 'Имя нового гостя', input('new_name', '', 'type="text" autocomplete="off" placeholder="Как записать гостя"'))}` +
     field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
     field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
@@ -368,8 +407,9 @@ export function editRequest(id, presetClient, preset = {}) {
         if ((!id || hadAc) && (!hn || !ha)) { (hn ? m.form.ac_addr : m.form.ac_hotel).focus(); throw new Error(AC.needHotel); }
         accommodation = { hotelName: hn, hotelAddress: ha, guestsCount: Math.max(1, parseInt(v.tr_ac_guests, 10) || 1), checkInTime: /^\d{1,2}:\d{2}$/.test(ct) ? ct : null, roomType: rt || null };
       }
+      const tripPick = (() => { const f = m.form; if (!f.trip_id || f.trip_id.value === '__none') return null; try { const t = clientId === f.client_id.value ? tpResolve(f) : null; return t ? t.id : (f.trip_id.value || null); } catch { return null; } })();
       await save('requests', id, {
-        transfer, accommodation, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
+        trip_id: tripPick, transfer, accommodation, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
         venue: (() => { try { return v.venue_json ? JSON.parse(v.venue_json) : null; } catch { return r.venue || null; } })(),

@@ -100,8 +100,8 @@ export function tripCard(t, { showGuest = false } = {}) {
     <span class="trip-main">
       ${showGuest && c ? `<span class="trip-guest">${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</span>` : ''}
       <b class="trip-city">${t.country_code ? flagOf(t.country_code) + ' ' : ''}${esc(t.city)}${t.country ? `<span>, ${esc(t.country)}</span>` : ''}</b>
-      ${t.hotel ? `<span class="trip-line">🏨 ${esc(t.hotel)}</span>` : ''}
-      ${t.hotel_address ? `<span class="trip-line trip-addr">${esc(t.hotel_address)}</span>` : ''}
+      ${(t.accommodation?.hotelName || t.hotel) ? `<span class="trip-line">🏨 ${esc(t.accommodation?.hotelName || t.hotel)}</span>` : ''}
+      ${(t.accommodation?.hotelAddress || t.hotel_address) ? `<span class="trip-line trip-addr">${esc(t.accommodation?.hotelAddress || t.hotel_address)}</span>` : ''}
       ${t.flight_in || t.flight_in_at ? `<span class="trip-line">🛬 ${esc(t.flight_in || '')}${t.flight_in_at ? ' · ' + esc(fmtFlight(t.flight_in_at)) : ''}${t.flight_in_delay ? ` <b class="delay">+${t.flight_in_delay} мин</b>` : ''}</span>` : ''}
       ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}${t.flight_out_delay ? ` <b class="delay">+${t.flight_out_delay} мин</b>` : ''}</span>` : ''}
       ${t.companions ? `<span class="trip-line">👥 ${esc(t.companions)}</span>` : ''}
@@ -112,15 +112,24 @@ export function tripCard(t, { showGuest = false } = {}) {
 const guestOptions = () => [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
 const nul = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
 const inp = (n, v, a = '') => `<input id="f-${n}" name="${n}" value="${esc(v)}" ${a}>`;
+// Тексты блока «Проживание» (для правки голосом)
+const AC = { sec: 'Проживание', hint: 'Гость увидит эти данные в блоке «Ваше проживание»', name: 'Название отеля', namePh: 'Cheval Blanc', addr: 'Адрес отеля', addrPh: 'Unter den Linden 77, Berlin', guests: 'Гости в номере', room: 'Тип номера', roomPh: 'Сьют с видом на сад', checkin: 'Время заезда', ref: 'Код брони', refPh: 'Необязательно', note: 'Заметка для гостя', notePh: 'Например: номер подготовлен к вашему приезду, ранний заезд согласован', minus: 'Меньше', plus: 'Больше' };
+const acStepper = (name, label, val) => `<div class="tr-step" data-step="${name}" data-min="1"><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(AC.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(AC.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="${name}" value="${esc(val)}"></div>`;
 
 export function editTrip(id, clientId) {
   const t = id ? state.trips.find((x) => x.id === id) : { client_id: clientId || '' };
   if (!t) return;
+  const ac = t.accommodation || {};
   const body =
     field('client_id', 'Гость', `<select id="f-client_id" name="client_id" required>${options(guestOptions(), t.client_id, '— выберите —')}</select>`) +
     `<div class="f2">${field('city', 'Город', inp('city', t.city, 'type="text" required placeholder="Куршевель"'))}${field('country', 'Страна', inp('country', t.country, 'type="text" placeholder="Франция"'))}</div>` +
-    field('hotel', 'Отель или вилла', inp('hotel', t.hotel, 'type="text" placeholder="Cheval Blanc"')) +
-    field('hotel_address', 'Адрес проживания',inp('hotel_address', t.hotel_address, 'type="text" autocomplete="street-address" placeholder="Unter den Linden 77, Berlin"')) +
+    `<h3 class="form-sec">${AC.sec}</h3><small class="hint">${AC.hint}</small>` +
+    field('ac_name', AC.name, inp('ac_name', ac.hotelName || t.hotel, `type="text" autocomplete="off" placeholder="${esc(AC.namePh)}"`)) +
+    field('ac_addr', AC.addr, inp('ac_addr', ac.hotelAddress || t.hotel_address, `type="text" autocomplete="street-address" placeholder="${esc(AC.addrPh)}"`)) +
+    `<div class="tr-steps">${acStepper('ac_guests', AC.guests, Math.max(1, parseInt(ac.guestsCount, 10) || 1))}</div>` +
+    `<div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, inp('ac_checkin', ac.checkInTime, 'type="time" autocomplete="off"'))}${field('ac_room', AC.room, inp('ac_room', ac.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div>` +
+    field('ac_ref', AC.ref, inp('ac_ref', ac.bookingReference, `type="text" autocomplete="off" autocapitalize="characters" placeholder="${esc(AC.refPh)}"`)) +
+    field('ac_note', AC.note, `<textarea id="f-ac_note" name="ac_note" rows="2" placeholder="${esc(AC.notePh)}">${esc(ac.conciergeGuestNote)}</textarea>`) +
     `<div class="f2">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
     field('end', 'Выезд', deadlinePicker(t.end_date ? t.end_date + 'T12:00:00Z' : null, 'end', { dateOnly: true, empty: 'Не указан', quick: false })) + '</div>' +
     '<h3 class="form-sec">Перелёты</h3>' +
@@ -140,9 +149,11 @@ export function editTrip(id, clientId) {
       if (start && end && end < start) end = start;
       const place = (v.city.trim() !== (t.city || '') || v.country.trim() !== (t.country || '') || !t.tz) ? await lookupPlace(`${v.city.trim()}${v.country.trim() ? ' ' + v.country.trim() : ''}`) || await lookupPlace(v.city.trim()) : null;
       const geo = place ? { tz: place.tz, country_code: place.cc, lat: place.lat, lon: place.lon, country: nul(v.country) || place.country } : {};
+      const A = { hotelName: nul(v.ac_name), hotelAddress: nul(v.ac_addr), guestsCount: Math.max(1, parseInt(v.ac_guests, 10) || 1), roomType: nul(v.ac_room), checkInTime: /^\d{2}:\d{2}/.test(v.ac_checkin || '') ? v.ac_checkin.slice(0, 5) : null, bookingReference: nul(v.ac_ref), conciergeGuestNote: nul(v.ac_note) };
+      const accom = A.hotelName || A.hotelAddress || A.roomType || A.checkInTime || A.bookingReference || A.conciergeGuestNote || A.guestsCount > 1 ? A : null;
       await save('trips', id, {
         ...geo,
-        client_id: v.client_id, city: v.city.trim(), country: nul(v.country), hotel: nul(v.hotel), hotel_address: nul((v.hotel_address || '').trim()), start_date: start, end_date: end,
+        client_id: v.client_id, city: v.city.trim(), country: nul(v.country), hotel: accom?.hotelName || null, hotel_address: accom?.hotelAddress || null, accommodation: accom, start_date: start, end_date: end,
         flight_in: nul(v.flight_in), flight_in_at: v.flight_in_at ? fromParisInput(v.flight_in_at) : null,
         flight_out: nul(v.flight_out), flight_out_at: v.flight_out_at ? fromParisInput(v.flight_out_at) : null,
         companions: nul(v.companions), notes: nul(v.notes), ...(geo.country ? { country: geo.country } : {}),
@@ -152,6 +163,12 @@ export function editTrip(id, clientId) {
     onDelete: id ? async () => { await remove('trips', id); toast('Поездка удалена'); } : null,
   });
   bindDeadlinePicker(m.form);
+  m.form.querySelectorAll('.tr-step').forEach((st) => {
+    const out = st.querySelector('output'), hid = st.querySelector('input'), min = +st.dataset.min;
+    const paint = () => { out.textContent = hid.value; st.querySelector('[data-d="-1"]').disabled = +hid.value <= min; };
+    st.addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; hid.value = Math.min(99, Math.max(min, +hid.value + +b.dataset.d)); paint(); });
+    paint();
+  });
   const cid = state.trips.find((x) => x.id === id)?.client_id || clientId;
   const bar = m.form.querySelector('#tripShare')?.parentElement;
   const mkBtns = () => {
