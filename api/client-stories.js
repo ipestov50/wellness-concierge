@@ -3,6 +3,7 @@
 // гости из одного города делят один запрос к API. Наружу уходят только город и страна;
 // интересы гостя («Любит», предпочтения) используются лишь здесь, для сортировки, и в NewsAPI.ai не передаются.
 import { getCache, setCache, cacheKey } from './_cache.js';
+import { isOwner } from './_owner.js';
 
 const TTL = 60 * 60e3;
 const ER = 'https://eventregistry.org/api/v1/article/getArticles';
@@ -113,8 +114,7 @@ export default async function handler(req, res) {
   const auth = req.headers.authorization || '';
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
-  const who = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (who && ((await u.json()).email || '').toLowerCase() !== who) return res.status(401).json({ error: 'unauthorized' });
+  if (!isOwner(await u.json())) return res.status(403).json({ error: 'forbidden' });
   // без ключа — тихо пусто: кольца на аватарах просто не появятся
   if (!process.env.NEWSAPI_AI_KEY) return res.json({ stories: [], reason: 'no_key' });
 

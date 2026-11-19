@@ -137,8 +137,8 @@ function gpFace(id) {
   const clock = w ? `<span class="gp-clock${isQuiet(w.tz) ? ' quiet' : ''}"><i aria-hidden="true"></i><b data-tz-clock="${esc(w.tz)}">${timeIn(w.tz)}</b> ${esc(w.place)}${d ? ` · ${fmtDiff(d)} к Парижу` : ''}${isQuiet(w.tz) ? ' · ночь' : ''}</span>` : '';
   const risk = ['allergies', 'diet', 'health'].flatMap((k) => c[k] || []);
   const avoid = c.dislikes || [];
-  const pills = risk.slice(0, 4).map((x) => `<span class="gp-pill">⚠ ${esc(x)}</span>`).join('') + (risk.length > 4 ? `<span class="gp-pill">+${risk.length - 4}</span>` : '')
-    + avoid.slice(0, 2).map((x) => `<span class="gp-pill soft">✕ ${esc(x)}</span>`).join('');
+  const pills = risk.slice(0, 4).map((x) => `<span class="gp-pill">⚠ ${esc(x)}</span>`).join('') + (risk.length > 4 ? `<span class="gp-pill" title="${esc(risk.slice(4).join(', '))}">+${risk.length - 4}</span>` : '')
+    + avoid.slice(0, 2).map((x) => `<span class="gp-pill soft">✕ ${esc(x)}</span>`).join('') + (avoid.length > 2 ? `<span class="gp-pill soft" title="${esc(avoid.slice(2).join(', '))}">+${avoid.length - 2}</span>` : '');
   return `<span class="gp-row">${avatar(c, 'gp-av')}<span class="gp-txt"><b>${esc(c.name)}${c.vip ? ' <span class="gp-star">★</span>' : ''}</b><small>${esc([c.city, c.language].filter(Boolean).join(' · ') || 'город не указан')}</small></span>${chev}</span>
     ${clock || pills ? `<span class="gp-extra">${clock}${pills}</span>` : ''}`;
 }

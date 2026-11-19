@@ -4,6 +4,7 @@
 // Ключи — только на сервере (Vercel): TAVILY_API_KEYS, TICKETMASTER_API_KEYS (через запятую — пул с ротацией).
 // Только для владельца, данные — с его токеном (RLS). Имена гостя в поиск не уходят.
 import { cacheKey, getCache, setCache, bump } from './_cache.js';
+import { isOwner } from './_owner.js';
 let curAuth = ''; // токен текущего запроса — для счётчика обращений (сервис на одного владельца)
 import { EXCLUDE_DOMAINS, GUIDES, domainOf, isOfficial, mentions, isBlocked, isResale, isPrimaryTicket, trustOf } from './_trust.js';
 import { verify } from './options.js';
@@ -167,8 +168,7 @@ export default async function handler(req, res) {
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
   const user = await u.json();
-  const owner = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (owner && (user.email || '').toLowerCase() !== owner) return res.status(401).json({ error: 'unauthorized' });
+  if (!isOwner(user)) return res.status(403).json({ error: 'forbidden' });
   const b = req.body || {};
   const isId = (x) => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x);
   const q = str(b.query, 300);

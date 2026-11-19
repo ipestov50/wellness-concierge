@@ -1,4 +1,5 @@
 import { gfetch, FLASH, LITE } from './_cache.js';
+import { isOwner } from './_owner.js';
 // «Перед вылетом» для поездки. Только для владельца; данные — с его токеном (RLS).
 // mode=facts  — погода (Open-Meteo), праздники (Nager.Date), курсы (open.er-api) — без ИИ, бесплатно
 // mode=jarvis — въезд, платежи, связь, этикет, фразы, что предусмотреть: Gemini + живой поиск Google, с источниками.
@@ -172,8 +173,7 @@ export default async function handler(req, res) {
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
   const user = await u.json();
-  const owner = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (owner && (user.email || '').toLowerCase() !== owner) return res.status(401).json({ error: 'unauthorized' });
+  if (!isOwner(user)) return res.status(403).json({ error: 'forbidden' });
   const id = String(req.body?.id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) return res.status(400).json({ error: 'bad_id' });
   try {

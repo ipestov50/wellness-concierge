@@ -1,4 +1,6 @@
 import { gfetch, FLASH, LITE } from './_cache.js';
+import { isOwner } from './_owner.js';
+import { stopList } from '../js/stoplist.js';
 // Черновик плана для предложения Jarvis (Gemini). Только для владельца.
 // Данные читаются с токеном владельца — база сама проверяет доступ (RLS).
 // Имена гостя и близких в ИИ не отправляются: только роли, вкусы, ограничения и детали поездки.
@@ -58,8 +60,7 @@ export default async function handler(req, res) {
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
   const user = await u.json();
-  const owner = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (owner && (user.email || '').toLowerCase() !== owner) return res.status(401).json({ error: 'unauthorized' });
+  if (!isOwner(user)) return res.status(403).json({ error: 'forbidden' });
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'no_key' });
 
   const id = String(req.body?.id || '');
@@ -93,10 +94,11 @@ export default async function handler(req, res) {
       && [person.role, (person.name || '').split(/\s+/)[0]].filter(Boolean).some((w) => low(x.companions).includes(low(w)))));
     // близкий не найден в people (удалён) — клиента рядом не считаем, его вкусы не переносим
     const forOther = rkind === 'person' && !together;
+    const sl = stopList(c, people, person);
     const stop = {
-      гость: [...(c?.allergies || []), ...(c?.diet || []), ...(c?.health || [])],
-      ...(person ? { получатель: person.allergies || [] } : {}),
-      близкие: people.filter((p) => p.id !== person?.id && (p.allergies || []).length).map((p) => ({ роль: p.role, аллергии: p.allergies })),
+      гость: sl.guest,
+      ...(person ? { получатель: sl.recipient } : {}),
+      близкие: sl.family.map((f) => ({ роль: f.role, аллергии: f.allergies })),
     };
     // имена в ИИ не уходят: в тексте повода заменяем их на «[имя]»
     const names = [c?.name, person?.name].flatMap((n) => String(n || '').replace(/\(.*?\)/g, ' ').split(/\s+/)).filter((n) => n.length >= 3);

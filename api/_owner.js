@@ -1,3 +1,6 @@
+// Владелец: строго «запрещено по умолчанию» — без OWNER_EMAIL или при другом адресе доступа нет.
+export const isOwner = (user) => { const who = String(process.env.OWNER_EMAIL || '').trim().toLowerCase(); return !!who && String(user?.email || '').trim().toLowerCase() === who; };
+
 // Общая проверка владельца и чтение данных его токеном (RLS). Файл с «_» — не адрес /api.
 export async function owner(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
@@ -8,8 +11,7 @@ export async function owner(req, res) {
   catch { res.status(504).json({ error: 'auth_timeout' }); return null; }
   if (!u.ok) { res.status(401).json({ error: 'unauthorized' }); return null; }
   const user = await u.json();
-  const who = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (who && (user.email || '').toLowerCase() !== who) { res.status(401).json({ error: 'unauthorized' }); return null; }
+  if (!isOwner(user)) { res.status(403).json({ error: 'forbidden' }); return null; }
   if (!process.env.GEMINI_API_KEY) { res.status(503).json({ error: 'no_key' }); return null; }
   return auth;
 }

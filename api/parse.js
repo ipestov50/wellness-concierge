@@ -3,6 +3,7 @@
 // Отвечает только залогиненному владельцу. Один вызов модели на запрос, без повторов.
 
 import { cacheKey, getCache, setCache, gfetch, FLASH, LITE } from './_cache.js';
+import { isOwner } from './_owner.js';
 
 const TZ = 'Europe/Paris';
 const CATEGORIES = ['Spa & Wellness', 'Dining', 'Transport', 'Accommodation', 'Activities', 'Health & Fitness', 'Gifts & Events', 'Other'];
@@ -17,8 +18,7 @@ async function getUser(req) {
   });
   if (!r.ok) return null;
   const user = await r.json();
-  const owner = (process.env.OWNER_EMAIL || '').trim().toLowerCase();
-  if (owner && (user.email || '').toLowerCase() !== owner) return null;
+  if (!isOwner(user)) return null;
   return user;
 }
 

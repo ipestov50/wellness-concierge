@@ -1,4 +1,5 @@
 import { gfetch, FLASH, LITE } from './_cache.js';
+import { isOwner } from './_owner.js';
 // «✦ Jarvis дополнит»: 2–4 неочевидных пункта чек-листа под конкретного гостя и запрос.
 // Только для владельца; данные читаются с его токеном (RLS). Имя гостя в ИИ не отправляется.
 
@@ -37,8 +38,7 @@ export default async function handler(req, res) {
   const u = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth } });
   if (!u.ok) return res.status(401).json({ error: 'unauthorized' });
   const user = await u.json();
-  const owner = (process.env.OWNER_EMAIL || '').toLowerCase();
-  if (owner && (user.email || '').toLowerCase() !== owner) return res.status(401).json({ error: 'unauthorized' });
+  if (!isOwner(user)) return res.status(403).json({ error: 'forbidden' });
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'no_key' });
   const id = String(req.body?.id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) return res.status(400).json({ error: 'bad_id' });

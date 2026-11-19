@@ -162,3 +162,8 @@ html { font-variant-numeric: lining-nums tabular-nums; }
 /* прилёт / вылет — якорь дня */
 .card.anchor{border-color:rgba(184,147,86,.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 2px 0 rgba(184,147,86,.35),0 8px 24px -14px rgba(44,37,32,.25)}
 .card.anchor .cat{color:var(--gold);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+
+/* 375px: длинные строки переносятся, а не раздвигают карточку */
+.time{min-width:0;overflow-wrap:anywhere}
+.pill,.chip{max-width:100%;overflow-wrap:anywhere}
+@media (max-width:360px){.stay .acts .btn{white-space:normal}}

@@ -9,6 +9,13 @@ import { editRequest } from '../lazy.js';
 import { editTrip, editPerson, editDate } from '../dossier.js';
 import { currentConflicts, conflictsBlock } from '../conflict-actions.js';
 
+// краткая сводка стоп-листа для календаря: что именно, а не просто точка
+const warnLabel = (c) => {
+  const risk = ['allergies', 'diet', 'health'].flatMap((k) => c[k] || []);
+  const list = risk.length ? risk : c.dislikes || [];
+  return list.slice(0, 3).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
+};
+
 const H0 = 6, H1 = 24; // сетка с 06:00 до 24:00
 // масштаб: высота одного часа в пикселях
 const ZOOMS = [36, 48, 64, 84, 112, 144];
@@ -57,6 +64,7 @@ function collect(fromDay, toDay, list, compactTrips = false, hit = new Set()) {
       id: 'r:' + r.id, kind: 'req', ref: r.id, day: d, start: allDay ? null : m, dur: DUR[r.category] || 60,
       color: COLOR[r.category] || 'other', icon: kind === 'done' ? '✓' : CATEGORIES[r.category] || '📌', title: r.summary, who: c?.name || '',
       client: c, vip: c?.vip, warn: c && (c.allergies?.length || c.diet?.length || c.health?.length || c.dislikes?.length),
+      warnText: c ? warnLabel(c) : '',
       urgent: r.urgency === 'critical' || r.urgency === 'high', critical: r.urgency === 'critical',
       late: !isClosed(r.status) && new Date(r.deadline) < new Date(), done: kind === 'done', cancelled: kind === 'archive',
       sub: statusLabel(effectiveStatus(r.status)), urgency: r.urgency, conflict: hit.has(r.id),
@@ -117,7 +125,7 @@ function timedEvent(e) {
   return `<button type="button" class="${evClass(e)}${compact ? ' compact' : ''}" ${evAttrs(e)}
     style="top:${top}px;height:${h}px;left:calc(${w * (e.lane || 0)}% + 2px);width:calc(${w}% - 4px)">
     <span class="ev-t">${e.conflict ? '<span class="cf-badge" title="Конфликт: задержка рейса или пробки">⏱</span> ' : ''}${e.icon} ${esc(e.title)}</span>
-    ${e.who ? `<span class="ev-who">${e.client ? avatar(e.client, 'av-xs') : ''}${esc(e.who)}${e.vip ? ' <span class="vip">★</span>' : ''}${e.warn ? ' <span class="warn-dot">⚠</span>' : ''}</span>` : ''}
+    ${e.who ? `<span class="ev-who">${e.client ? avatar(e.client, 'av-xs') : ''}${esc(e.who)}${e.vip ? ' <span class="vip">★</span>' : ''}${e.warn ? ` <span class="warn-dot" title="${esc(e.warnText)}" aria-label="${esc(e.warnText)}">⚠</span>` : ''}</span>` : ''}
     ${!compact ? `<span class="ev-time">🕗 ${hhmm(e.start)}${e.kind === 'req' ? ` · ${esc(e.sub)}` : ''}</span>` : ''}
   </button>`;
 }
@@ -180,7 +188,7 @@ function agenda(days, ev) {
     return `<section class="ag-day${d === today ? ' today' : ''}"><button type="button" class="ag-head" data-goday="${d}"><b>${+d.slice(8)}</b><span>${WD_LONG[wdIdx(d)]}</span></button>
       <div class="ag-list">${list.length ? list.map((e) => `<button type="button" class="${evClass(e)} ag-ev" ${evAttrs(e)}>
         <span class="ag-time">${e.start == null ? 'весь день' : hhmm(e.start)}</span>
-        <span class="ag-main"><b>${e.icon} ${esc(e.title)}</b>${e.who ? `<small>${esc(e.who)}${e.vip ? ' ★' : ''}${e.warn ? ' · ⚠' : ''}</small>` : ''}</span></button>`).join('')
+        <span class="ag-main"><b>${e.icon} ${esc(e.title)}</b>${e.who ? `<small>${esc(e.who)}${e.vip ? ' ★' : ''}${e.warn ? ` · ⚠ ${esc(e.warnText)}` : ''}</small>` : ''}</span></button>`).join('')
         : `<button type="button" class="ag-empty" data-newat="${d}T10:00">Свободно · ＋ запрос</button>`}</div></section>`;
   }).join('')}</div>`;
 }

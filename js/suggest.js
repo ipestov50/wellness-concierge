@@ -9,6 +9,7 @@ import { preview } from './smart.js';
 import { render } from './router.js';
 import { quietNote } from './tz.js';
 import { upcomingDates } from './dossier.js';
+import { stopList } from './stoplist.js';
 
 const KIND_ICON = { pre_arrival: '✈️', transfer: '🛬', close_date: '🎂', reconnect: '💬' };
 const drafting = new Set();   // какие планы сейчас составляются
@@ -65,15 +66,15 @@ const msgOf = (p) => p.client_message_draft || p.message || '';
 
 // детерминированное «Учесть»: данные гостя и (если повод про близкого) его аллергии, без ИИ
 function guardText(s, c) {
-  const uniq = (a) => [...new Set((a || []).map((x) => String(x).trim()).filter(Boolean))];
-  const g = uniq([...(c?.allergies || []), ...(c?.diet || []), ...(c?.health || [])]);
   const [, kind, rid] = String(s.key || '').match(/^date:(self|person|date):([0-9a-f-]{36})/) || [];
-  const person = kind === 'person' ? (state.people || []).find((x) => x.id === rid) : null;
-  const pa = uniq(person?.allergies);
+  const family = (state.people || []).filter((x) => x.client_id === c?.id);
+  const person = kind === 'person' ? family.find((x) => x.id === rid) : null;
+  const sl = stopList(c, family, person);
   const who = person ? (person.role || firstName(person) || 'близкий') : '';
   const parts = [];
-  if (g.length) parts.push(`${g.join(' · ')} (гость)`);
-  if (pa.length) parts.push(`аллергия: ${pa.join(' · ')} (${who})`);
+  if (sl.guest.length) parts.push(`${sl.guest.join(' · ')} (гость)`);
+  if (sl.recipient?.length) parts.push(`аллергия: ${sl.recipient.join(' · ')} (${who})`);
+  sl.family.forEach((f) => parts.push(`аллергия: ${f.allergies.join(' · ')} (${f.role})`));
   return parts.length ? 'Важно учесть: ' + parts.join('; ') : '';
 }
 function alertBlock(s, c, alerts) {
