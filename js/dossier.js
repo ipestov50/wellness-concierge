@@ -6,6 +6,7 @@ import { getSupabase } from './supabase.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue, birthdayInfo } from './birthday.js';
 import { render } from './router.js';
+import { timeField, bindTimeFields } from './timefield.js';
 import { lookupPlace, flag as flagOf } from './tz.js';
 
 // ---------- поездки ----------
@@ -127,7 +128,7 @@ export function editTrip(id, clientId) {
     field('ac_name', AC.name, inp('ac_name', ac.hotelName || t.hotel, `type="text" autocomplete="off" placeholder="${esc(AC.namePh)}"`)) +
     field('ac_addr', AC.addr, inp('ac_addr', ac.hotelAddress || t.hotel_address, `type="text" autocomplete="street-address" placeholder="${esc(AC.addrPh)}"`)) +
     `<div class="tr-steps">${acStepper('ac_guests', AC.guests, Math.max(1, parseInt(ac.guestsCount, 10) || 1))}</div>` +
-    `<div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, inp('ac_checkin', ac.checkInTime, 'type="time" autocomplete="off"'))}${field('ac_room', AC.room, inp('ac_room', ac.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div>` +
+    `<div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, timeField('ac_checkin', ac.checkInTime))}${field('ac_room', AC.room, inp('ac_room', ac.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div>` +
     field('ac_ref', AC.ref, inp('ac_ref', ac.bookingReference, `type="text" autocomplete="off" autocapitalize="characters" placeholder="${esc(AC.refPh)}"`)) +
     field('ac_note', AC.note, `<textarea id="f-ac_note" name="ac_note" rows="2" placeholder="${esc(AC.notePh)}">${esc(ac.conciergeGuestNote)}</textarea>`) +
     `<div class="f2">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
@@ -163,6 +164,7 @@ export function editTrip(id, clientId) {
     onDelete: id ? async () => { await remove('trips', id); toast('Поездка удалена'); } : null,
   });
   bindDeadlinePicker(m.form);
+  bindTimeFields(m.form);
   m.form.querySelectorAll('.tr-step').forEach((st) => {
     const out = st.querySelector('output'), hid = st.querySelector('input'), min = +st.dataset.min;
     const paint = () => { out.textContent = hid.value; st.querySelector('[data-d="-1"]').disabled = +hid.value <= min; };

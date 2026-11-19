@@ -1,6 +1,7 @@
 import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE_LABEL } from './const.js';
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast, avatar } from './ui.js';
 import { state, byId, save, remove } from './data.js';
+import { timeField, bindTimeFields } from './timefield.js';
 import { requestOptionsBar } from './options.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
@@ -123,7 +124,7 @@ const accBlock = (a, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}
   ${field('ac_hotel', AC.hotel, input('ac_hotel', a.hotelName, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.hotelPh)}"`))}
   ${field('ac_addr', AC.addr, input('ac_addr', a.hotelAddress, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.addrPh)}"`))}<small class="hint" id="ac-hint" hidden>${esc(AC.legacy)}</small><small class="hint ac-sync">${esc(AC.sync)}</small>
   <div class="tr-steps">${stepper('ac_guests', AC.guests, a.guestsCount || 1, 1)}</div>
-  <div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, input('ac_checkin', a.checkInTime, 'type="time" autocomplete="off"'))}${field('ac_room', AC.room, input('ac_room', a.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div></div></div></div>`;
+  <div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, timeField('ac_checkin', a.checkInTime))}${field('ac_room', AC.room, input('ac_room', a.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div></div></div></div>`;
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
 
 // капсула гостя: имя, живое время, стоп-лист — раскрывается при выборе
@@ -224,6 +225,7 @@ function bindRequestForm(form) {
   if (trFold) {
     const syncTr = () => { const on = form.category.value === 'Transport'; trFold.classList.toggle('open', on); trFold.inert = !on; const h = form.querySelector('#tr-hint'); if (h) h.hidden = !(on && form.dataset.legacyTr === '1'); };
     form.category.addEventListener('change', syncTr);
+    bindTimeFields(form);
     form.querySelectorAll('.tr-step').forEach((st) => {
       const out = st.querySelector('output'), hid = st.querySelector('input'), min = +st.dataset.min;
       const paint = () => { const n = +hid.value; out.textContent = n === 0 && st.dataset.none ? st.dataset.none : n; st.classList.toggle('is-none', n === 0 && !!st.dataset.none);

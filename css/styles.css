@@ -3104,3 +3104,19 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .ac-sync{display:block;margin:6px 0 2px;color:#786F68}
 
 @media (max-width: 420px) { .tr-steps.ac-pair { display: grid; grid-template-columns: 1fr; gap: 10px; } }
+
+/* Время заезда: печатное поле + шаг + быстрые значения */
+.tf { display: grid; gap: 8px; min-width: 0; }
+.tf-pill { display: flex; align-items: center; background: #fff; border: 1px solid rgba(44,37,32,.1); border-radius: 999px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); transition: border-color .2s, box-shadow .2s; }
+.tf-pill:focus-within { border-color: #265D56; box-shadow: 0 0 0 3px rgba(38,93,86,.14); }
+.tf-pill > button { flex: none; min-width: 44px; min-height: 44px; border: 0; background: transparent; font-size: 20px; color: #265D56; border-radius: 999px; cursor: pointer; transition: transform .2s cubic-bezier(.3,1.4,.5,1); }
+.tf-pill > button:active { transform: scale(.88); }
+.tf-in { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #786F68; }
+.tf-in input, .ac-pair .tf-in input { flex: none; width: 5.5ch; min-height: 44px; padding: 0; border: 0; background: transparent; box-shadow: none; text-align: center; font: 600 17px/1 'Plus Jakarta Sans', Inter, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: .02em; color: #2C2520; outline: none; }
+.tf-in input::placeholder { color: #A59B91; font-weight: 400; }
+.tf-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.tf-quick button { min-height: 32px; padding: 0 12px; border: 1px solid rgba(44,37,32,.1); border-radius: 999px; background: transparent; color: #6B625B; font: 500 12.5px/1 inherit; font-variant-numeric: tabular-nums; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.tf-quick button[aria-pressed="true"] { background: #265D56; border-color: #265D56; color: #fff; }
+.tf-pill > button:focus-visible, .tf-quick button:focus-visible { outline: 2px solid #265D56; outline-offset: 2px; }
+@media (max-width: 767px) { .tf-quick button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .tf-pill, .tf-pill > button, .tf-quick button { transition: none; } }
