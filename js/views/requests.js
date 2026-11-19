@@ -221,7 +221,7 @@ function dayNotes() {
   const backup = backupDue();
   if (!backup && !bdays.length) return '';
   return `<section class="day-notes">
-    ${backup ? `<div class="hero-note">💾 ${daysSinceBackup() == null ? 'Резервной копии ещё не было' : `Резервной копии не было ${daysSinceBackup()} дн.`} · <button type="button" data-backup>Сохранить копию</button></div>` : ''}
+    ${backup ? `<div class="hero-note">💾 ${daysSinceBackup() == null ? 'Копию ещё не делали' : `Последняя копия ${daysSinceBackup()} дн. назад`} · <button type="button" data-backup>Сохранить копию</button></div>` : ''}
     ${bdays.length ? `<div class="hero-bdays">🎂 ${bdays.map(({ c, b }) =>
       `<button type="button" data-cl-open="${c.id}">${esc(c.name.replace(/\s*\(.*?\)/g, ''))} — ${b.days === 0 ? 'сегодня' : b.days === 1 ? 'завтра' : esc(b.day + ' ' + b.text.split(' ')[1])}</button>`).join(', ')}</div>` : ''}
   </section>`;

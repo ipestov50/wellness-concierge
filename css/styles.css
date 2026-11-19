@@ -3008,7 +3008,7 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .sg-bubble-h { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--sg-stone); margin-bottom: 6px; }
 .sg-bubble-h .quiet-note, .sg-bubble-h small { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .sg-bubble-t { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--sg-ink); white-space: pre-wrap; }
-.sg-bubble-a { display: flex; gap: 8px; }
+.sg-bubble-a { display: flex; flex-wrap: wrap; gap: 8px; }
 .sg-copy, .sg-wa { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 99px; font-size: 13px; font-weight: 600; text-decoration: none; transition: transform .2s, background .2s, color .2s; }
 .sg-copy { border: 1px solid var(--sg-line); background: var(--sg-card); color: var(--sg-ink); }
 .sg-copy i { font-style: normal; }
@@ -3020,7 +3020,7 @@ select.flash { animation: flash-ring 1s var(--ease); }
 /* панель действий */
 .jarvis-sg .sg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 12px; border-top: 1px solid var(--sg-line); }
 .sg-gap { flex: 1; }
-.jarvis-sg .sg-actions .btn { min-height: 38px; border-radius: 99px; padding: 0 14px; }
+.jarvis-sg .sg-actions .btn { min-width: 44px; min-height: 38px; border-radius: 99px; padding: 0 14px; }
 .jarvis-sg .sg-actions .btn.primary { background: var(--sg-accent); border-color: var(--sg-accent); color: #fff; box-shadow: 0 10px 20px -12px color-mix(in srgb, var(--sg-accent) 85%, transparent); }
 .jarvis-sg .sg-accept.done { background: #3f8a5f; border-color: #3f8a5f; }
 .jarvis-sg .sg-actions .btn:active { transform: scale(.97); }
@@ -3044,3 +3044,7 @@ select.flash { animation: flash-ring 1s var(--ease); }
   .jarvis-sg .sg-task label { min-height: 44px; }
   .jarvis-sg .sg-actions { max-width: 100%; }
 }
+@media (max-width: 768px) {
+  .jarvis-sg .sg-empty .btn, .hero-note button { min-height: 44px; }
+}
+.sg-alert { overflow-wrap: anywhere; }

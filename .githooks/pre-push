@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-push gate: проверка синтаксиса и тестов, чтобы сломанная версия не попала в Vercel.
+# Включение: git config core.hooksPath .githooks
+cd "$(git rev-parse --show-toplevel)" || exit 1
+for f in api/*.js js/*.js js/views/*.js; do
+  node --check "$f" || { echo "Push отменён: синтаксическая ошибка в $f"; exit 1; }
+done
+npm test --silent >/dev/null 2>&1 || { echo "Push отменён: тесты не прошли (npm test)"; exit 1; }
+exit 0

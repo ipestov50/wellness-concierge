@@ -4,7 +4,7 @@ import { getSupabase } from './supabase.js';
 import { CATEGORIES, URGENCY, PARTNER_TYPES, TZ } from './const.js';
 import { esc, openModal, toast } from './ui.js';
 
-const TABLES = ['clients', 'requests', 'partners', 'statuses'];
+const TABLES = ['clients', 'requests', 'partners', 'statuses', 'trips', 'people', 'client_dates'];
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 let lastBackupAt = null;
 
@@ -85,6 +85,19 @@ export async function exportExcel() {
       'Еда': c.pref_food || '', 'Спа': c.pref_spa || '', 'Транспорт': c.pref_transport || '', 'Отели': c.pref_hotels || '',
       'Поездки': (c.travel_history || []).join('\n'), 'Заметки': c.concierge_notes || '', 'Последний контакт': d(c.last_contact),
     })),
+    'Поездки': (data.trips || []).map((t) => ({
+      'Гость': clients[t.client_id]?.name || '', 'Город': t.city, 'Страна': t.country || '', 'Отель': t.hotel || '',
+      'Заезд': d(t.start_date), 'Выезд': d(t.end_date), 'Рейс туда': t.flight_in || '', 'Прилёт': dt(t.flight_in_at),
+      'Рейс обратно': t.flight_out || '', 'Вылет': dt(t.flight_out_at), 'Спутники': t.companions || '', 'Заметки': t.notes || '',
+      'Бриф': t.brief ? JSON.stringify(t.brief) : '',
+    })),
+    'Близкие': (data.people || []).map((p) => ({
+      'Гость': clients[p.client_id]?.name || '', 'Имя': p.name, 'Роль': p.role || '', 'Телефон': p.phone || '',
+      'День рождения': bd(p.birthday), 'Аллергии': list(p.allergies), 'Заметки': p.notes || '',
+    })),
+    'Важные даты': (data.client_dates || []).map((x) => ({
+      'Гость': clients[x.client_id]?.name || '', 'Событие': x.title, 'Дата': d(x.date), 'Заметки': x.notes || '',
+    })),
     'Партнёры': data.partners.map((p) => ({
       'Название': p.name, 'Тип': ptype[p.type] || p.type, 'Город': p.city || '', 'Контакт': p.contact || '', 'Условия': p.terms || '',
       'Комиссия': p.commission || '', 'Оценка': p.rating ? '★'.repeat(p.rating) : '', 'Заметки': p.notes || '',
@@ -100,7 +113,7 @@ export async function exportExcel() {
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   download(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `wellness-concierge-${stamp()}.xlsx`);
   await markDone();
-  return { clients: data.clients.length, requests: data.requests.length, partners: data.partners.length };
+  return { clients: data.clients.length, requests: data.requests.length, partners: data.partners.length, trips: (data.trips || []).length, people: (data.people || []).length, client_dates: (data.client_dates || []).length };
 }
 
 // окно «Резервная копия»
@@ -125,10 +138,10 @@ export function openBackup(onDone) {
     b.classList.add('loading');
     try {
       const n = b.dataset.bk === 'json' ? await exportJSON() : await exportExcel();
-      toast(`Копия скачана: клиентов ${n.clients}, запросов ${n.requests}, партнёров ${n.partners}`);
+      toast(`Копия готова: клиенты ${n.clients}, запросы ${n.requests}, партнёры ${n.partners}, поездки ${n.trips}, близкие ${n.people}, важные даты ${n.client_dates}`);
       m.close(); onDone?.();
     } catch (err) {
-      toast('Не удалось сделать копию: ' + (err.message || err), 'err');
+      toast('Не получилось сделать копию. Попробуйте ещё раз.', 'err');
       all.forEach((x) => (x.disabled = false)); b.classList.remove('loading');
     }
   }));

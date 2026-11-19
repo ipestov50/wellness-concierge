@@ -63,16 +63,38 @@ const alertsOf = (p) => p.alerts || (p.warnings || []).filter((w) => w.level !==
 const tipOf = (p) => p.concierge_tip ?? p.insight ?? '';
 const msgOf = (p) => p.client_message_draft || p.message || '';
 
+// детерминированное «Учесть»: данные гостя и (если повод про близкого) его аллергии, без ИИ
+function guardText(s, c) {
+  const uniq = (a) => [...new Set((a || []).map((x) => String(x).trim()).filter(Boolean))];
+  const g = uniq([...(c?.allergies || []), ...(c?.diet || []), ...(c?.health || [])]);
+  const [, kind, rid] = String(s.key || '').match(/^date:(self|person|date):([0-9a-f-]{36})/) || [];
+  const person = kind === 'person' ? (state.people || []).find((x) => x.id === rid) : null;
+  const pa = uniq(person?.allergies);
+  const who = person ? (person.role || firstName(person) || 'близкий') : '';
+  const parts = [];
+  if (g.length) parts.push(`${g.join(' · ')} (гость)`);
+  if (pa.length) parts.push(`аллергия: ${pa.join(' · ')} (${who})`);
+  return parts.length ? 'Важно учесть: ' + parts.join('; ') : '';
+}
+function alertBlock(s, c, alerts) {
+  const own = guardText(s, c), low = (x) => String(x || '').trim().toLowerCase();
+  const rest = alerts.filter((a) => low(a.text) !== low(own));
+  const all = [...(own ? [{ text: own, level: 'stop' }] : []), ...rest];
+  return all.length ? `<div class="sg-alerts" role="note">${all.map((a) => `<p class="sg-alert ${a.level === 'stop' ? 'stop' : 'missing'}"><span aria-hidden="true">${a.level === 'stop' ? '⚠' : '?'}</span>${esc(a.text)}</p>`).join('')}</div>` : '';
+}
+
 function card(s) {
   const c = byId('clients', s.client_id);
   const p = s.payload || {};
   const tasks = p.tasks || [];
   const busy = drafting.has(s.id);
-  const alerts = alertsOf(p), tip = tipOf(p), msg = personal(msgOf(p), c);
+  const alertsHtml = alertBlock(s, c, alertsOf(p));
+  const tip = tipOf(p), msg = personal(msgOf(p), c);
   const phone = (c?.phone || '').replace(/[^\d]/g, '');
   return `<article class="sg" data-sg="${s.id}">
     <header class="sg-head"><span class="sg-ico" aria-hidden="true">${KIND_ICON[s.kind] || '✨'}</span>
       <div class="sg-txt"><h3 class="sg-h">${esc(s.title.replace(/^\S+\s/, ''))}</h3><small>${esc(s.reason || '')}</small></div></header>
+    ${alertsHtml}
     ${busy ? `<div class="sg-drafting"><span class="spin"></span> Jarvis составляет план с учётом вкусов и стоп-листа…</div>` : ''}
     ${!busy && !tasks.length ? `<div class="sg-empty">${failed.has(s.id) ? 'Не получилось составить план. ' : ''}<button type="button" class="btn small" data-sg-draft="${s.id}">✦ Составить план</button></div>` : ''}
     ${tasks.length ? `<ul class="sg-tasks">${tasks.map((t, i) => {
@@ -82,7 +104,6 @@ function card(s) {
           <span class="sg-tmain"><b><span class="sg-cat" aria-hidden="true">${CATEGORIES[t.category] || '📌'}</span> ${esc(t.summary)}</b>
             <small class="sg-meta"><span class="sg-when">${esc(fmtWhen(t.when_local))}</span>${partner ? `<span class="sg-partner">★ ${esc(partner.name)}</span>` : ''}${t.note ? `<span class="sg-note">${esc(t.note)}</span>` : ''}</small></span></label></li>`;
       }).join('')}</ul>
-      ${alerts.length ? `<div class="sg-alerts">${alerts.map((a) => `<p class="sg-alert ${a.level === 'stop' ? 'stop' : 'missing'}"><span aria-hidden="true">${a.level === 'stop' ? '⚠' : '?'}</span>${esc(a.text)}</p>`).join('')}</div>` : ''}
       ${tip ? `<p class="sg-tip"><span aria-hidden="true">✦</span>${esc(tip)}</p>` : ''}
       ${msg ? `<div class="sg-bubble"><div class="sg-bubble-h"><span>Сообщение клиенту${firstName(c) ? ' · ' + esc(firstName(c)) : ''}</span>${quietNote(c)}</div>
         <p class="sg-bubble-t">${esc(msg)}</p>
