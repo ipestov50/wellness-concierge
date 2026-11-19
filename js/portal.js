@@ -11,7 +11,7 @@ const COPY = {
   events: '{n} {word}',
   copyPnr: 'Копировать PNR', copyRef: 'Скопировать номер брони', copied: 'Скопировано',
   copiedLive: 'Номер брони скопирован', copyFail: 'Не удалось скопировать. Номер можно выделить вручную',
-  addCal: '+ В календарь', calLive: 'Файл календаря сохранён',
+  anchorTag: 'Перелёт',
   clockAria: 'Местное время', clockLocal: 'местное время · {city}', clockLocalBare: 'местное время',
   liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
   updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
@@ -286,8 +286,11 @@ function routeHtml(tr) {
 }
 
 const timeMin = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : Infinity; };
+// прилёт и вылет — якорь дня: всегда первыми, дальше по времени
+const isAnchor = (it) => it && it.kind === 'flight' && /^\s*(прил[её]т|вылет|arriv|depart)/i.test(String(it.title || ''));
+const anchorRank = (it) => (isAnchor(it) ? 0 : 1);
 function normDays(j) {
-  (j.days || []).forEach((d) => { if (Array.isArray(d.items)) d.items = d.items.filter(Boolean).sort((a, b) => { const x = timeMin(a.time), y = timeMin(b.time); return x === y ? 0 : x < y ? -1 : 1; }); });
+  (j.days || []).forEach((d) => { if (Array.isArray(d.items)) d.items = d.items.filter(Boolean).sort((a, b) => { const r = anchorRank(a) - anchorRank(b); if (r) return r; const x = timeMin(a.time), y = timeMin(b.time); return x === y ? 0 : x < y ? -1 : 1; }); });
   return j;
 }
 const shortPlace = (t) => { const v = String(t || '').split(',')[0].trim(); return v.length > 28 ? v.slice(0, 27).trimEnd() + '…' : v; };
@@ -323,77 +326,20 @@ function card(it, idx, date) {
     const label = it.kind === 'flight' ? COPY.copyPnr : COPY.copyRef;
     acts.push(`<button class="btn" type="button" data-copy="${esc(it.bookingReference)}" data-label="${esc(label)}">${svg('copy')}<span>${esc(label)}</span></button>`);
   }
-  acts.push(`<button class="btn" type="button" data-ics="${idx}">${svg('cal')}<span>${esc(COPY.addCal)}</span></button>`);
   if (tr && tr.pickup && tr.dropoff) acts.push(`<a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(tr.pickup)}&destination=${encodeURIComponent(tr.dropoff)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.routeMap)}</span></a>`);
   else if (tr || place) { const q = tr ? (tr.pickup || tr.dropoff) : place; acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${tr ? esc(COPY.openMap) : 'Показать на карте ↗'}</span></a>`); }
   const upd = badgeSet.has(sig) && !dismissed.has(dkey(sig, it));
-  return `<article class="card kind-${esc(it.kind || 'request')}${tr ? ' transfer' : ''}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
+  return `<article class="card kind-${esc(it.kind || 'request')}${isAnchor(it) ? ' anchor' : ''}${tr ? ' transfer' : ''}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
     <div class="top">
       <div class="ico">${svg(cat)}</div>
       <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'В течение дня'}</div>
-      <div class="cat">${esc(CAT_RU[it.category] || CAT_RU.Other)}</div>
+      <div class="cat">${esc(isAnchor(it) ? COPY.anchorTag : (CAT_RU[it.category] || CAT_RU.Other))}</div>
       ${upd ? `<span class="upd">✦ ${esc(COPY.updated)}</span>` : ''}
       <h2 class="title">${esc(displayTitle(it))}</h2>
       ${tr ? `<div class="routewrap">${routeHtml(tr)}</div>` : place && showVenue ? `<p class="venue">${vName ? `<b>${esc(vName)}</b>` : ''}${vName && addr ? ' · ' : ''}${esc(addr)}</p>` : ''}
     </div>
     <div class="perf"></div><div class="bot">${noteHtml(it)}${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
   </article>`;
-}
-
-/* ---------- calendar (.ics) ---------- */
-function tzOffsetMs(utcMs, tz) {
-  const p = {};
-  new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    .formatToParts(new Date(utcMs)).forEach((x) => { p[x.type] = x.value; });
-  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(utcMs / 1000) * 1000;
-}
-function localToUtc(date, time, tz) {
-  const [y, m, d] = parts(date), [hh, mm] = String(time).split(':').map(Number);
-  const naive = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
-  let off = 0;
-  try { off = tzOffsetMs(naive, tz); off = tzOffsetMs(naive - off, tz); } catch { off = 0; }
-  return new Date(naive - off);
-}
-const icsStamp = (dt) => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-const icsEsc = (t) => String(t ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-function icsFold(line) {
-  const enc = new TextEncoder(); let out = '', cur = '', bytes = 0;
-  for (const ch of line) {
-    const n = enc.encode(ch).length;
-    if (bytes + n > 73) { out += cur + '\r\n '; cur = ''; bytes = 0; }
-    cur += ch; bytes += n;
-  }
-  return out + cur;
-}
-const TR = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
-const asciiName = (t) => (String(t).toLowerCase().replace(/[а-яё]/g, (c) => TR[c] ?? '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'event');
-function buildIcs(it, date, tz) {
-  const now = icsStamp(new Date());
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Les Clefs d Or//Trip Portal//RU', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${date}-${asciiName(it.title)}-${Math.abs([...(it.title + (it.time || '') + date)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7))}@concierge-portal`,
-    `DTSTAMP:${now}`];
-  if (/^\d{1,2}:\d{2}/.test(it.time || '')) {
-    const s = localToUtc(date, it.time, tz);
-    lines.push(`DTSTART:${icsStamp(s)}`, `DTEND:${icsStamp(new Date(s.getTime() + 36e5))}`);
-  } else {
-    lines.push(`DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(date, 1).replace(/-/g, '')}`);
-  }
-  const tr = transferOf(it);
-  const desc = [tr && fill(COPY.routeDesc, { a: tr.pickup || '—', b: tr.dropoff || '—' }), tr && tr.driver && fill(COPY.driver, { name: tr.driver }), it.bookingReference && `Бронь: ${it.bookingReference}`, it.dressCode && `Дресс-код: ${it.dressCode}`, it.guestNotes && `${COPY.noteLabel.replace('✦ ', '')}: ${it.guestNotes}`].filter(Boolean).join('\n');
-  lines.push(`SUMMARY:${icsEsc(displayTitle(it))}`);
-  const loc = tr ? (tr.pickup || tr.dropoff) : (it.address || it.venueName);
-  if (loc) lines.push(`LOCATION:${icsEsc(loc)}`);
-  if (desc) lines.push(`DESCRIPTION:${icsEsc(desc)}`);
-  lines.push('END:VEVENT', 'END:VCALENDAR');
-  return lines.map(icsFold).join('\r\n') + '\r\n';
-}
-function downloadIcs(it) {
-  const blob = new Blob([buildIcs(it, activeDate, data.trip.tz)], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = `${activeDate}-${asciiName(it.title)}.ics`; a.style.display = 'none';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  live.textContent = COPY.calLive; setTimeout(() => { live.textContent = ''; }, 3000);
 }
 
 function renderDay() {
@@ -404,7 +350,6 @@ function renderDay() {
   panel.innerHTML = items.length ? items.map((it, i) => card(it, i, activeDate)).join('') : `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
   panel.onclick = (e) => { const c = e.target.closest('.card'); if (c && c.dataset.sig && badgeSet.has(c.dataset.sig)) { const it = items.find((x) => sigOf(activeDate, x) === c.dataset.sig); dropBadge(c.dataset.sig, it && dkey(c.dataset.sig, it)); } };
   panel.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
-  panel.querySelectorAll('[data-ics]').forEach((b) => (b.onclick = () => downloadIcs(items[+b.dataset.ics])));
 }
 
 /* ---------- tabs ---------- */
@@ -545,7 +490,6 @@ function focusDesc() {
   const a = document.activeElement;
   if (!a || a === document.body) return null;
   if (a.classList && a.classList.contains('tab')) return '#' + CSS.escape(a.id);
-  if (a.dataset && a.dataset.ics !== undefined) return `[data-ics="${a.dataset.ics}"]`;
   if (a.dataset && a.dataset.copy !== undefined) return `[data-copy="${CSS.escape(a.dataset.copy)}"]`;
   return null;
 }
