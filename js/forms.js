@@ -84,6 +84,19 @@ function bindVenue(form) {
 const SPRING = typeof CSS !== 'undefined' && CSS.supports?.('animation-timing-function', 'linear(0, 1)')
   ? 'linear(0, .06 2%, .23 5%, .5 9.5%, .77 15%, .93 21%, 1.01 28%, 1.03 34%, 1.015 44%, 1 60%, 1)' : 'cubic-bezier(.22, 1, .36, 1)';
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Тексты блока «Трансфер» и заметки консьержа: всё в одном месте для правки редактором
+const TR = {
+  title: 'Трансфер', route: 'Маршрут', from: 'Откуда', to: 'Куда', pax: 'Пассажиры', bags: 'Багаж', bagsNone: 'Уточним позже',
+  driver: 'Водитель, если уже известен', needRoute: 'Подскажите, откуда и куда едем', legacy: 'Маршрут можно уточнить позже, гость увидит его в путеводителе',
+  minus: 'Уменьшить', plus: 'Увеличить', fromPh: 'Аэропорт, отель…', toPh: 'Адрес или место',
+  noteLabel: 'Заметка консьержа (увидит гость)', notePh: 'Вечером у воды прохладно, возьмите тёплый слой. Столик на террасе уже ждёт',
+};
+const stepper = (name, label, val, min, none) => `<div class="tr-step" data-step="${name}" data-min="${min}"${none ? ` data-none="${esc(none)}"` : ''}><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(TR.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(TR.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="tr_${name}" value="${esc(val)}"></div>`;
+const transferBlock = (t, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}" id="tr-fold"${open ? '' : ' inert'}><div><div class="tr-box"><div class="tr-head">${esc(TR.title)}</div>
+  <div class="f tr-route"><label for="f-tr_pickup">${esc(TR.route)}</label><div class="tr-line"><span class="tr-rail" aria-hidden="true"><i class="tr-dot"></i><i class="tr-wire"></i><i class="tr-pin"></i></span><div class="tr-ins">${input('tr_pickup', t.pickup, `type="text" autocomplete="off" enterkeyhint="next" aria-label="${esc(TR.from)}" placeholder="${esc(TR.from)}: ${esc(TR.fromPh)}"`)}${input('tr_dropoff', t.dropoff, `type="text" autocomplete="off" aria-label="${esc(TR.to)}" placeholder="${esc(TR.to)}: ${esc(TR.toPh)}"`)}</div></div><small class="hint" id="tr-hint" hidden>${esc(TR.legacy)}</small></div>
+  <div class="tr-steps">${stepper('pax', TR.pax, t.passengers || 1, 1)}${stepper('bags', TR.bags, t.luggage ?? 0, 0, TR.bagsNone)}</div>
+  ${field('tr_driver', TR.driver, input('tr_driver', t.driver, 'type="text" autocomplete="off"'))}</div></div></div>`;
+
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
 
 // капсула гостя: имя, живое время, стоп-лист — раскрывается при выборе
@@ -175,9 +188,24 @@ function bindRequestForm(form) {
   sum.addEventListener('input', syncChips);
   chips?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-qf]'); if (!b) return;
-    sum.value = b.dataset.qf + ' '; form.category.value = b.dataset.cat; syncChips();
+    sum.value = b.dataset.qf + ' '; form.category.value = b.dataset.cat; form.category.dispatchEvent(new Event('change')); syncChips();
     sum.focus(); sum.setSelectionRange(sum.value.length, sum.value.length);
   });
+
+  // блок «Трансфер»: плавно раскрывается для категории Transport
+  const trFold = form.querySelector('#tr-fold');
+  if (trFold) {
+    const syncTr = () => { const on = form.category.value === 'Transport'; trFold.classList.toggle('open', on); trFold.inert = !on; const h = form.querySelector('#tr-hint'); if (h) h.hidden = !(on && form.dataset.legacyTr === '1'); };
+    form.category.addEventListener('change', syncTr);
+    trFold.querySelectorAll('.tr-step').forEach((st) => {
+      const out = st.querySelector('output'), hid = st.querySelector('input'), min = +st.dataset.min;
+      const paint = () => { const n = +hid.value; out.textContent = n === 0 && st.dataset.none ? st.dataset.none : n; st.classList.toggle('is-none', n === 0 && !!st.dataset.none);
+        st.querySelector('[data-d="-1"]').disabled = n <= min; };
+      st.addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; hid.value = Math.min(99, Math.max(min, +hid.value + +b.dataset.d)); paint();
+        if (!calm()) out.animate([{ transform: 'translateY(' + (b.dataset.d > 0 ? 6 : -6) + 'px)', opacity: 0.2 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: 'cubic-bezier(.3,1.4,.5,1)' }); });
+      paint();
+    });
+  }
   // бюджет > 500 → «Нужна проверка» (то же правило есть в базе)
   const amt = form.budget_amount, auto = form.querySelector('#rq-auto');
   let over = Number(amt.value) > 500;
@@ -258,6 +286,7 @@ export function editRequest(id, presetClient, preset = {}) {
       <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
+    transferBlock(r.transfer || {}, r.category === 'Transport') +
     field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f rq-budget"><label for="f-budget_amount">Бюджет</label>
@@ -272,13 +301,14 @@ export function editRequest(id, presetClient, preset = {}) {
       <button type="button" class="rq-pill${r.original_message ? ' gone' : ''}" data-unfold="original_message">＋ Исходное сообщение</button></div>` +
     `<div class="rq-fold${r.clarifying_questions ? ' open' : ''}" data-fold="clarifying_questions"><div>${field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions, 'rows="2"'))}</div></div>` +
     `<div class="rq-fold${r.original_message ? ' open' : ''}" data-fold="original_message"><div>${field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message, 'rows="2"'))}</div></div>` +
-    `<details class="rq-forguest"${r.guest_visible === false || r.booking_ref || r.dress_code || r.guest_note ? ' open' : ''}><summary>Для гостя</summary>` +
+    `<details class="rq-forguest"${r.guest_visible === false || r.booking_ref || r.dress_code ? ' open' : ''}><summary>Для гостя</summary>` +
     `<div class="checks">${check('guest_hidden', 'Не показывать гостю в путеводителе', r.guest_visible === false)}</div>` +
     `<div class="trip-delays"><span class="hint" id="rq-live" aria-live="polite"></span><button type="button" class="trip-delay" id="rq-livecopy">🔗 Скопировать live-ссылку</button></div>` +
     `<div class="f2">${field('booking_ref', 'Номер брони', input('booking_ref', r.booking_ref, 'type="text" autocomplete="off"'))}${field('dress_code', 'Дресс-код', input('dress_code', r.dress_code, 'type="text" placeholder="Smart casual"'))}</div>` +
-    field('guest_note', 'Заметка для гостя', area('guest_note', r.guest_note, 'rows="2" placeholder="Видит гость: дресс-код, контакт водителя, детали столика"')) + `</details>` +
+    `</details>` +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
-    `${check('needs_review', 'Нужна проверка', r.needs_review)}</div><small class="hint">«Нужна проверка» ставится сама, если бюджет больше 500.</small>`;
+    `${check('needs_review', 'Нужна проверка', r.needs_review)}</div><small class="hint">«Нужна проверка» ставится сама, если бюджет больше 500.</small>` +
+    field('guest_note', TR.noteLabel, area('guest_note', r.guest_note, `rows="2" placeholder="${esc(TR.notePh)}"`));
   const m = openModal({
     title: id ? 'Запрос' : 'Новый запрос',
     body,
@@ -295,8 +325,16 @@ export function editRequest(id, presetClient, preset = {}) {
           toast(`Гость «${name}» добавлен в клиенты`);
         }
       }
+      const hadTr = !!(r.transfer && (r.transfer.pickup || r.transfer.dropoff));
+      let transfer = null;
+      if (v.category === 'Transport') {
+        const pu = (v.tr_pickup || '').trim(), dr = (v.tr_dropoff || '').trim(), dv = (v.tr_driver || '').trim();
+        const pax = Math.max(1, parseInt(v.tr_pax, 10) || 1), bag = parseInt(v.tr_bags, 10);
+        if ((!id || hadTr) && (!pu || !dr)) { (pu ? m.form.tr_dropoff : m.form.tr_pickup).focus(); throw new Error(TR.needRoute); }
+        if (pu || dr || dv || pax !== 1) transfer = { pickup: pu, dropoff: dr, passengers: pax, luggage: bag > 0 ? bag : null, driver: dv || null };
+      }
       await save('requests', id, {
-        client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
+        transfer, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
         venue: (() => { try { return v.venue_json ? JSON.parse(v.venue_json) : null; } catch { return r.venue || null; } })(),
@@ -308,6 +346,7 @@ export function editRequest(id, presetClient, preset = {}) {
     },
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
+  if (id && !(r.transfer && (r.transfer.pickup || r.transfer.dropoff))) { m.form.dataset.legacyTr = '1'; m.form.category.dispatchEvent(new Event('change')); }
   if (id) m.form.dataset.reqId = id; // окна, открытые отсюда, по «Закрыть» вернутся в карточку
   bindVenue(m.form);
   bindGuest(m.form);

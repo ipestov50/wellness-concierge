@@ -15,8 +15,13 @@ const COPY = {
   clockAria: 'Местное время',
   liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
   updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
-  noteLabel: 'Заметка консьержа',
+  noteLabel: '✦ Заметка консьержа',
+  hotelLabel: 'Ваше проживание', copyAddr: 'Скопировать адрес', copiedAddr: 'Адрес скопирован',
+  copyAddrFail: 'Не удалось скопировать. Адрес можно выделить вручную', openMap: 'Открыть на карте ↗',
+  routeMap: 'Маршрут на карте ↗', routeFrom: 'Откуда', routeTo: 'Куда', driver: 'Ваш водитель: {name}',
+  guestsN: '{n} {w}', luggageN: '{n} {w} багажа', routeDesc: 'Маршрут: {a} → {b}',
 };
+const GUEST_W = ['гость', 'гостя', 'гостей'], BAG_W = ['место', 'места', 'мест'];
 const REFRESH_MS = 15000, BADGE_MS = 30000, FRESH_MS = 24 * 36e5;
 const plural = (n, [a, b, c]) => { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; };
 const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? '');
@@ -199,11 +204,13 @@ function render() {
       <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>местное время${trip.hotel ? ' · ' + esc(trip.hotel) : ''}</small></div>
       <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
+    ${hotelCard(trip)}
     <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Дни путешествия" id="tabs"><span class="ind" id="ind"></span>
       ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}${dayDots.has(d.date) && d.date !== activeDate ? ' upd' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}${dayDots.has(d.date) && d.date !== activeDate ? ` <span class="sr">· ${COPY.dayUpdated}</span>` : ''}</button>`).join('')}
     </div></div>
     <section id="panel" role="tabpanel" class="list" aria-live="polite"></section>`;
   bindTabs();
+  document.querySelectorAll('.stay [data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
   renderDay();
   setCare();
   startClock(trip.tz);
@@ -239,10 +246,43 @@ function setDock() {
   dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Написать консьержу</a>`;
 }
 
+function hotelCard(trip) {
+  const name = trip.hotel ? String(trip.hotel).trim() : '';
+  if (!name) return '';
+  const addr = trip.hotelAddress ? String(trip.hotelAddress).trim() : '';
+  const acts = [];
+  if (addr) acts.push(`<button class="btn" type="button" data-copy="${esc(addr)}" data-label="${esc(COPY.copyAddr)}" data-live="${esc(COPY.copiedAddr)}" data-fail="${esc(COPY.copyAddrFail)}">${svg('copy')}<span>${esc(COPY.copyAddr)}</span></button>`);
+  acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(name + ' ' + addr)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.openMap)}</span></a>`);
+  return `<section class="card stay" aria-label="${esc(COPY.hotelLabel)}">
+    <div class="top"><div class="ico">${svg('Hotel')}</div><div class="cat stay-l">${esc(COPY.hotelLabel)}</div>
+    <h2 class="title">${esc(name)}</h2>${addr ? `<p class="venue">${esc(addr)}</p>` : ''}</div>
+    <div class="perf"></div><div class="bot"><div class="acts">${acts.join('')}</div></div></section>`;
+}
+const noteHtml = (it) => it.guestNotes ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(it.guestNotes)}</p></div>` : '';
+function transferOf(it) {
+  const t = it && it.transfer;
+  if (!t || typeof t !== 'object') return null;
+  const pickup = String(t.pickup || '').trim(), dropoff = String(t.dropoff || '').trim();
+  if (!pickup && !dropoff) return null;
+  return { pickup, dropoff, pax: Math.max(0, parseInt(t.passengers, 10) || 0), bags: Math.max(0, parseInt(t.luggage, 10) || 0), driver: t.driver ? String(t.driver).trim() : '' };
+}
+function routeHtml(tr) {
+  const stop = (cls, label, v) => v ? `<li class="stop ${cls}"><span class="sl">${esc(label)}</span><span class="sv">${esc(v)}</span></li>` : '';
+  const badges = [];
+  if (tr.pax) badges.push(fill(COPY.guestsN, { n: tr.pax, w: plural(tr.pax, GUEST_W) }));
+  if (tr.bags) badges.push(fill(COPY.luggageN, { n: tr.bags, w: plural(tr.bags, BAG_W) }));
+  const chips = badges.map((b) => `<span class="chip tnum">${esc(b)}</span>`).concat(tr.driver ? [`<span class="chip drv">${esc(fill(COPY.driver, { name: tr.driver }))}</span>`] : []);
+  return `<ol class="route">${stop('from', COPY.routeFrom, tr.pickup)}${stop('to', COPY.routeTo, tr.dropoff)}</ol>${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}`;
+}
+
 function card(it, idx, date) {
   const sig = sigOf(date, it);
   const cat = CAT_ICON[it.category] || 'Other';
-  const place = [it.venueName, it.address].filter(Boolean).join(', ');
+  const tr = transferOf(it);
+  const isHotel = it.kind === 'hotel';
+  const addr = it.address || (isHotel && data.trip.hotelAddress) || '';
+  const vName = it.venueName || (isHotel && data.trip.hotel) || '';
+  const place = [vName, addr].filter(Boolean).join(', ');
   const rows = [];
   if (it.dressCode) rows.push(['Дресс-код', esc(it.dressCode)]);
   if (it.bookingReference) rows.push(['Бронь', `<span class="ref">${esc(it.bookingReference)}</span>`]);
@@ -252,18 +292,19 @@ function card(it, idx, date) {
     acts.push(`<button class="btn" type="button" data-copy="${esc(it.bookingReference)}" data-label="${esc(label)}">${svg('copy')}<span>${esc(label)}</span></button>`);
   }
   acts.push(`<button class="btn" type="button" data-ics="${idx}">${svg('cal')}<span>${esc(COPY.addCal)}</span></button>`);
-  if (place) acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>Показать на карте ↗</span></a>`);
+  if (tr && tr.pickup && tr.dropoff) acts.push(`<a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(tr.pickup)}&destination=${encodeURIComponent(tr.dropoff)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.routeMap)}</span></a>`);
+  else if (tr || place) { const q = tr ? (tr.pickup || tr.dropoff) : place; acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${tr ? esc(COPY.openMap) : 'Показать на карте ↗'}</span></a>`); }
   const upd = badgeSet.has(sig) && !dismissed.has(dkey(sig, it));
-  return `<article class="card kind-${esc(it.kind || 'request')}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
+  return `<article class="card kind-${esc(it.kind || 'request')}${tr ? ' transfer' : ''}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
     <div class="top">
       <div class="ico">${svg(cat)}</div>
       <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'В течение дня'}</div>
       <div class="cat">${esc(CAT_RU[it.category] || CAT_RU.Other)}</div>
       ${upd ? `<span class="upd">✦ ${esc(COPY.updated)}</span>` : ''}
       <h2 class="title">${esc(it.title)}</h2>
-      ${place ? `<p class="venue">${it.venueName ? `<b>${esc(it.venueName)}</b>` : ''}${it.venueName && it.address ? ' · ' : ''}${esc(it.address || '')}</p>` : ''}
+      ${tr ? `<div class="routewrap">${routeHtml(tr)}</div>` : place ? `<p class="venue">${vName ? `<b>${esc(vName)}</b>` : ''}${vName && addr ? ' · ' : ''}${esc(addr)}</p>` : ''}
     </div>
-    <div class="perf"></div><div class="bot">${it.guestNotes ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(it.guestNotes)}</p></div>` : ''}${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
+    <div class="perf"></div><div class="bot">${noteHtml(it)}${rows.length ? `<dl style="margin:0;display:grid;gap:8px">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}<div class="acts">${acts.join('')}</div></div>
   </article>`;
 }
 
@@ -305,9 +346,10 @@ function buildIcs(it, date, tz) {
   } else {
     lines.push(`DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(date, 1).replace(/-/g, '')}`);
   }
-  const desc = [it.bookingReference && `Бронь: ${it.bookingReference}`, it.dressCode && `Дресс-код: ${it.dressCode}`, it.guestNotes && `Заметка: ${it.guestNotes}`].filter(Boolean).join('\n');
+  const tr = transferOf(it);
+  const desc = [tr && fill(COPY.routeDesc, { a: tr.pickup || '—', b: tr.dropoff || '—' }), tr && tr.driver && fill(COPY.driver, { name: tr.driver }), it.bookingReference && `Бронь: ${it.bookingReference}`, it.dressCode && `Дресс-код: ${it.dressCode}`, it.guestNotes && `${COPY.noteLabel.replace('✦ ', '')}: ${it.guestNotes}`].filter(Boolean).join('\n');
   lines.push(`SUMMARY:${icsEsc(it.title)}`);
-  const loc = it.address || it.venueName;
+  const loc = tr ? (tr.pickup || tr.dropoff) : (it.address || (it.kind === 'hotel' && data.trip.hotelAddress) || it.venueName);
   if (loc) lines.push(`LOCATION:${icsEsc(loc)}`);
   if (desc) lines.push(`DESCRIPTION:${icsEsc(desc)}`);
   lines.push('END:VEVENT', 'END:VCALENDAR');
@@ -410,7 +452,7 @@ async function copyRef(btn) {
   }
   if (!ok) {
     clearTimeout(copyTimer);
-    live.textContent = COPY.copyFail;
+    live.textContent = btn.dataset.fail || COPY.copyFail;
     copyTimer = setTimeout(() => { live.textContent = ''; }, 4000);
     return;
   }
@@ -420,7 +462,7 @@ async function copyRef(btn) {
   btn.classList.add('copied');
   btn.firstElementChild.outerHTML = svg('check');
   btn.lastElementChild.textContent = COPY.copied;
-  live.textContent = COPY.copiedLive;
+  live.textContent = btn.dataset.live || COPY.copiedLive;
   copyTimer = setTimeout(() => { resetCopy(btn); live.textContent = ''; }, 1500);
 }
 function resetCopy(btn) {
@@ -438,7 +480,7 @@ function demoData() {
   const e = { venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: '', updatedAt: old };
   demoState = {
     guest: { firstName: 'Анна' },
-    trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', hotel: 'Hotel Adlon Kempinski', lat: 52.52, lon: 13.4 },
+    trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', hotel: 'Hotel Adlon Kempinski', hotelAddress: 'Unter den Linden 77, 10117 Berlin, Германия', lat: 52.52, lon: 13.4 },
     weather: { tempC: 4, code: 61, text: 'Дождь', kind: 'rain', windKmh: 18, daily: [
       { date: d(2), kind: 'rain', text: 'Дождь', tMax: 5, tMin: 2 }, { date: d(3), kind: 'cloud', text: 'Облачно', tMax: 6, tMin: 1 }, { date: d(6), kind: 'clear', text: 'Ясно', tMax: 8, tMin: 0 } ] },
     days: [
@@ -449,7 +491,8 @@ function demoData() {
       { date: d(3), items: [
         { ...e, time: '11:00', title: 'Спа-программа «Восстановление»', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
       { date: d(6), items: [
-        { ...e, time: '14:15', title: 'Трансфер в аэропорт', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent } ] },
+        { ...e, time: '14:15', title: 'Трансфер в аэропорт', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent, bookingReference: 'TR-1042',
+          transfer: { pickup: 'Hotel Adlon Kempinski, Unter den Linden 77, 10117 Berlin', dropoff: 'Аэропорт Берлин Бранденбург (BER), Terminal 1, Melli-Beese-Ring 1, 12529 Schönefeld', passengers: 2, luggage: 5, driver: 'Markus' } } ] },
     ],
     concierge: { whatsapp: '+49 30 1234 5678' },
     updatedAt: new Date().toISOString(),

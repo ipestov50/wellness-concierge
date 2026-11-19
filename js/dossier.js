@@ -101,6 +101,7 @@ export function tripCard(t, { showGuest = false } = {}) {
       ${showGuest && c ? `<span class="trip-guest">${esc(c.name)}${c.vip ? ' <span class="vip">★</span>' : ''}</span>` : ''}
       <b class="trip-city">${t.country_code ? flagOf(t.country_code) + ' ' : ''}${esc(t.city)}${t.country ? `<span>, ${esc(t.country)}</span>` : ''}</b>
       ${t.hotel ? `<span class="trip-line">🏨 ${esc(t.hotel)}</span>` : ''}
+      ${t.hotel_address ? `<span class="trip-line trip-addr">${esc(t.hotel_address)}</span>` : ''}
       ${t.flight_in || t.flight_in_at ? `<span class="trip-line">🛬 ${esc(t.flight_in || '')}${t.flight_in_at ? ' · ' + esc(fmtFlight(t.flight_in_at)) : ''}${t.flight_in_delay ? ` <b class="delay">+${t.flight_in_delay} мин</b>` : ''}</span>` : ''}
       ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}${t.flight_out_delay ? ` <b class="delay">+${t.flight_out_delay} мин</b>` : ''}</span>` : ''}
       ${t.companions ? `<span class="trip-line">👥 ${esc(t.companions)}</span>` : ''}
@@ -119,6 +120,7 @@ export function editTrip(id, clientId) {
     field('client_id', 'Гость', `<select id="f-client_id" name="client_id" required>${options(guestOptions(), t.client_id, '— выберите —')}</select>`) +
     `<div class="f2">${field('city', 'Город', inp('city', t.city, 'type="text" required placeholder="Куршевель"'))}${field('country', 'Страна', inp('country', t.country, 'type="text" placeholder="Франция"'))}</div>` +
     field('hotel', 'Отель или вилла', inp('hotel', t.hotel, 'type="text" placeholder="Cheval Blanc"')) +
+    field('hotel_address', 'Адрес проживания',inp('hotel_address', t.hotel_address, 'type="text" autocomplete="street-address" placeholder="Unter den Linden 77, Berlin"')) +
     `<div class="f2">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
     field('end', 'Выезд', deadlinePicker(t.end_date ? t.end_date + 'T12:00:00Z' : null, 'end', { dateOnly: true, empty: 'Не указан', quick: false })) + '</div>' +
     '<h3 class="form-sec">Перелёты</h3>' +
@@ -140,7 +142,7 @@ export function editTrip(id, clientId) {
       const geo = place ? { tz: place.tz, country_code: place.cc, lat: place.lat, lon: place.lon, country: nul(v.country) || place.country } : {};
       await save('trips', id, {
         ...geo,
-        client_id: v.client_id, city: v.city.trim(), country: nul(v.country), hotel: nul(v.hotel), start_date: start, end_date: end,
+        client_id: v.client_id, city: v.city.trim(), country: nul(v.country), hotel: nul(v.hotel), hotel_address: nul((v.hotel_address || '').trim()), start_date: start, end_date: end,
         flight_in: nul(v.flight_in), flight_in_at: v.flight_in_at ? fromParisInput(v.flight_in_at) : null,
         flight_out: nul(v.flight_out), flight_out_at: v.flight_out_at ? fromParisInput(v.flight_out_at) : null,
         companions: nul(v.companions), notes: nul(v.notes), ...(geo.country ? { country: geo.country } : {}),

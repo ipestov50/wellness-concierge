@@ -39,6 +39,13 @@ async function weather(lat, lon) {
   } catch { return null; }
 }
 
+const intIn = (v, lo, hi) => { const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{1,3}$/.test(v.trim()) ? Number(v) : NaN); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+function transfer(x) {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+  const o = { pickup: str(x.pickup, 200), dropoff: str(x.dropoff, 200), passengers: intIn(x.passengers, 1, 99), luggage: intIn(x.luggage, 0, 99), driver: str(x.driver, 80) };
+  return Object.values(o).some((v) => v !== null && v !== '') ? o : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.setHeader('Cache-Control', 'no-store'); return res.status(405).json({ error: 'method_not_allowed' }); }
   const token = String(req.query?.token || '');
@@ -61,14 +68,14 @@ export default async function handler(req, res) {
   const wx = await weather(t.lat, t.lon);
   const out = {
     guest: { firstName: str(d.guest?.firstName, 80) },
-    trip: { title: str(t.title, 120), city: str(t.city, 120), country: str(t.country, 120), start: str(t.start, 10), end: str(t.end, 10), tz: str(t.tz, 64), hotel: str(t.hotel, 160), lat: num(t.lat), lon: num(t.lon) },
+    trip: { title: str(t.title, 120), city: str(t.city, 120), country: str(t.country, 120), start: str(t.start, 10), end: str(t.end, 10), tz: str(t.tz, 64), hotel: str(t.hotel, 160), hotelAddress: str(t.hotelAddress, 240), lat: num(t.lat), lon: num(t.lon) },
     days: (Array.isArray(d.days) ? d.days : []).slice(0, 60).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(String(day?.date))).map((day) => ({
       date: str(day?.date, 10),
       items: (Array.isArray(day?.items) ? day.items : []).slice(0, 40).map((i) => ({
         time: /^\d{2}:\d{2}$/.test(String(i?.time)) ? i.time : null, title: str(i?.title, 200), category: str(i?.category, 40),
         kind: ['request', 'flight', 'hotel'].includes(i?.kind) ? i.kind : 'request',
         venueName: str(i?.venueName, 160), address: str(i?.address, 240), bookingReference: str(i?.bookingReference, 80),
-        dressCode: str(i?.dressCode, 120), guestNotes: str(i?.guestNotes, 600), updatedAt: iso(i?.updatedAt),
+        dressCode: str(i?.dressCode, 120), guestNotes: str(i?.guestNotes, 600), transfer: transfer(i?.transfer), updatedAt: iso(i?.updatedAt),
       })),
     })),
     concierge: { whatsapp: /^\d{8,15}$/.test(String(d.concierge?.whatsapp || '')) ? d.concierge.whatsapp : null },
