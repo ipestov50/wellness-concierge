@@ -157,3 +157,4 @@ html { font-variant-numeric: lining-nums tabular-nums; }
 .stay .note{margin-bottom:10px}
 
 .stay .stay-l{white-space:nowrap;flex:0 0 auto}
+.stay .stay-meta{flex:1 1 100%;width:100%;max-width:100%}
