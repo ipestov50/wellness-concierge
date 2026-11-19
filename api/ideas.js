@@ -66,7 +66,7 @@ export default async function handler(req, res) {
     }
     const ctx = {
       сегодня: today,
-      гость: { язык: c.language, vip: c.vip, основной_город: c.city, аллергии: c.allergies, диета: c.diet, здоровье: c.health, любит: c.likes, избегает: c.dislikes, еда: c.pref_food, спа: c.pref_spa, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits, заметки: c.concierge_notes },
+      гость: { язык: c.language, vip: c.vip, основной_город: c.city, аллергии: c.allergies, диета: c.diet, здоровье: c.health, любит: c.likes, избегает: c.dislikes, еда: c.pref_food, спа: c.pref_spa, музыка_атмосфера: c.pref_music, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits, заметки: c.concierge_notes },
       стоп_лист_всех: sl.all, близкие_с_аллергиями: sl.family,
       ближайшие_поводы: upcoming.map(({ id: i, что, через_дней, заметка }) => ({ id: i, что, через_дней, заметка })),
       ближайшая_поездка: trip ? { id: 'trip', город: trip.city, страна: trip.country, отель: trip.hotel, с: trip.start_date, по: trip.end_date, с_кем: trip.companions } : null,

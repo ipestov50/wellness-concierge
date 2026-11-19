@@ -115,7 +115,7 @@ export default async function handler(req, res) {
         : {
           язык: c.language, vip: c.vip, город: c.city,
           любит: c.likes, избегает: c.dislikes,
-          еда: c.pref_food, спа: c.pref_spa, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits,
+          еда: c.pref_food, спа: c.pref_spa, музыка_атмосфера: c.pref_music, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits,
         }),
       поездка: !forOther && t && {
         город: t.city, страна: t.country, отель: t.hotel, заезд: t.start_date, выезд: t.end_date, с_кем: scrub(t.companions),

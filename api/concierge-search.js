@@ -176,7 +176,7 @@ export default async function handler(req, res) {
   const ymd = (x) => (/^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '');
   try {
     // ---------- контекст гостя (без имён) ----------
-    const [c] = isId(b.client_id) ? await rest(`clients?id=eq.${b.client_id}&select=id,name,city,allergies,diet,dislikes,likes,pref_food,pref_spa,vip`, auth) : [null];
+    const [c] = isId(b.client_id) ? await rest(`clients?id=eq.${b.client_id}&select=id,name,city,allergies,diet,dislikes,likes,pref_food,pref_spa,pref_music,vip`, auth) : [null];
     let city = str(b.city, 80), from = ymd(b.date_from), to = ymd(b.date_to) || from;
     if (c && (!city || !from)) {
       const day = from || new Date().toISOString().slice(0, 10);

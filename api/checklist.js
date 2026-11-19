@@ -56,7 +56,7 @@ export default async function handler(req, res) {
       запрос: { суть: r.summary, категория: r.category, когда: when, бюджет: r.budget_amount ? `${r.budget_amount} ${r.currency || ''}` : null, детали: r.clarifying_questions, исходное: r.original_message },
       партнёр: p && { тип: p.type, город: p.city, условия: p.terms, заметки: p.notes },
       гость: c && { язык: c.language, vip: c.vip, аллергии: c.allergies, диета: c.diet, здоровье: c.health, любит: c.likes, избегает: c.dislikes,
-        еда: c.pref_food, спа: c.pref_spa, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits, заметки: c.concierge_notes },
+        еда: c.pref_food, спа: c.pref_spa, музыка_атмосфера: c.pref_music, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits, заметки: c.concierge_notes },
       окружение: people.map((x) => ({ роль: x.role, день_рождения: x.birthday?.slice(5), аллергии: x.allergies, заметки: x.notes })),
       поездки: trips,
       уже_в_чек_листе: (r.checklist?.items || []).map((i) => i.t),

@@ -186,7 +186,7 @@ function boardingPass(t) {
 function tabOverview(c) {
   const t = nextTrip(c);
   const date = upcomingDates(c).find((d) => d.info.days <= 30);
-  const prefs = [['🍽', 'Еда', c.pref_food], ['🚗', 'Транспорт', c.pref_transport], ['🏨', 'Отели', c.pref_hotels], ['💆', 'Спа', c.pref_spa]].filter(([, , v]) => v);
+  const prefs = [['🍽', 'Еда', c.pref_food], ['🚗', 'Транспорт', c.pref_transport], ['🏨', 'Отели', c.pref_hotels], ['💆', 'Спа', c.pref_spa], ['🎵', 'Музыка', c.pref_music]].filter(([, , v]) => v);
   const r = risks(c);
   return `<div class="ov-grid">
     <div class="ov-main">

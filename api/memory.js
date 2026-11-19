@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   try {
     const [r] = await rest(`requests?id=eq.${id}&select=*`, auth);
     if (!r) return res.status(404).json({ error: 'not_found' });
-    const [c] = r.client_id ? await rest(`clients?id=eq.${r.client_id}&select=likes,dislikes,allergies,diet,health,travel_habits,concierge_notes,pref_food,pref_spa,pref_transport,pref_hotels`, auth) : [null];
+    const [c] = r.client_id ? await rest(`clients?id=eq.${r.client_id}&select=likes,dislikes,allergies,diet,health,travel_habits,concierge_notes,pref_food,pref_spa,pref_music,pref_transport,pref_hotels`, auth) : [null];
     const [p] = r.partner_id ? await rest(`partners?id=eq.${r.partner_id}&select=name,type`, auth) : [null];
     const ck = cacheKey('mem', id, r.updated_at, c?.likes, c?.dislikes);
     if (!req.body?.force) { const hit = await getCache(auth, ck, 7 * 864e5); if (hit) return res.status(200).json({ ...hit, cached: true }); }

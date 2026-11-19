@@ -82,7 +82,7 @@ export async function exportExcel() {
     'Клиенты': data.clients.map((c) => ({
       'Имя': c.name, 'VIP': c.vip ? '★' : '', 'Язык': c.language, 'Город': c.city || '', 'Телефон': c.phone || '', 'Почта': c.email || '',
       'Telegram': c.telegram || '', 'День рождения': bd(c.birthday), 'Аллергии': list(c.allergies), 'Диета': list(c.diet), 'Здоровье': list(c.health),
-      'Еда': c.pref_food || '', 'Спа': c.pref_spa || '', 'Транспорт': c.pref_transport || '', 'Отели': c.pref_hotels || '',
+      'Еда': c.pref_food || '', 'Спа': c.pref_spa || '', 'Музыка': c.pref_music || '', 'Транспорт': c.pref_transport || '', 'Отели': c.pref_hotels || '',
       'Поездки': (c.travel_history || []).join('\n'), 'Заметки': c.concierge_notes || '', 'Последний контакт': d(c.last_contact),
     })),
     'Поездки': (data.trips || []).map((t) => ({

@@ -106,7 +106,7 @@ export default async function handler(req, res) {
     const ctx = {
       запрос: scrub(r.summary), исходное_сообщение: scrub(r.original_message), категория: r.category, когда: when,
       бюджет: r.budget_amount ? `${r.budget_amount} ${r.currency || ''}` : null, город: city, страна: trip?.country || null, отель_гостя: trip?.hotel || null,
-      гость: c && { vip: !!c.vip, аллергии: c.allergies, диета: c.diet, не_любит: c.dislikes, любит: c.likes, кухня: c.pref_food, спа: c.pref_spa },
+      гость: c && { vip: !!c.vip, аллергии: c.allergies, диета: c.diet, не_любит: c.dislikes, любит: c.likes, кухня: c.pref_food, спа: c.pref_spa, музыка_атмосфера: c.pref_music },
       аллергии_близких: people.flatMap((p) => p.allergies || []),
       раньше_выбирал: past,
       наши_партнёры: partners.map((p) => ({ название: p.name, тип: p.type, адрес: p.address, заметки: scrub(p.notes), условия: p.terms, оценка: p.rating })),

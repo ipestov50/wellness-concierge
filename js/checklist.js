@@ -39,6 +39,7 @@ function personal(key, r, c) {
   if ((c.dislikes || []).length && ['dining', 'gift', 'flowers', 'hotel', 'activity'].includes(key)) { add(`Стоп-лист: ${c.dislikes.join(', ')}`, 'проверить меню, букет, комплименты', 'details', 'high'); factors.push('стоп-лист'); }
   if ((c.likes || []).length && ['gift', 'flowers', 'hotel'].includes(key)) { add(`Добавить любимое: ${c.likes.slice(0, 3).join(', ')}`, null, 'details', 'med'); factors.push('любит ' + c.likes.slice(0, 2).join(', ')); }
   if (c.pref_transport && (key.startsWith('airport') || key === 'transfer')) { add(`Машина: ${c.pref_transport}`, null, 'prep', 'med'); factors.push(c.pref_transport); }
+  if (c.pref_music && (key.startsWith('airport') || key === 'transfer')) add(`Музыка и атмосфера в салоне: ${c.pref_music}`, null, 'details', 'med');
   if (c.pref_food && key === 'dining') add(`Кухня по вкусу: ${c.pref_food}`, null, 'prep', 'normal');
   if (c.pref_spa && key === 'spa') add(`Как любит: ${c.pref_spa}`, null, 'details', 'med');
   if (c.pref_hotels && key === 'hotel') add(`Предпочтения: ${c.pref_hotels}`, null, 'prep', 'normal');

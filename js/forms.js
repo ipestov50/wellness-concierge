@@ -2,6 +2,7 @@ import { CATEGORIES, URGENCY, CURRENCIES, LANGUAGES, PARTNER_TYPES, PARTNER_TYPE
 import { esc, options, field, openModal, toParisInput, fromParisInput, toList, toast, avatar } from './ui.js';
 import { state, byId, save, remove } from './data.js';
 import { timeField, bindTimeFields } from './timefield.js';
+import { clientBody, bindClientForm } from './clientform.js';
 import { requestOptionsBar } from './options.js';
 import { ui, render } from './router.js';
 import { statusOptions, firstKey, statusOf } from './statuses.js';
@@ -475,44 +476,16 @@ export function editRequest(id, presetClient, preset = {}) {
 export function editClient(id) {
   const c = id ? byId('clients', id) : { language: 'RU', vip: false };
   if (!c) return;
-  const lines = (l) => (l || []).join('\n');
-  const body =
-    field('name', 'Имя', input('name', c.name, 'type="text" required autocomplete="off"')) +
-    `<div class="f2">${field('language', 'Язык общения', select('language', options(LANGUAGES, c.language)))}` +
-    field('city', 'Город', input('city', c.city, 'type="text"')) + '</div>' +
-    `<div class="f2">${field('citizenship', 'Гражданство', select('citizenship', options(CITIZENSHIPS, c.citizenship, '— не указано —')), 'Нужно для брифинга «Перед вылетом»: визы, платежи')}` +
-    field('home_tz', 'Часовой пояс дома', select('home_tz', options(ZONES.some(([z]) => z === c.home_tz) || !c.home_tz ? ZONES : [[c.home_tz, c.home_tz], ...ZONES], c.home_tz, '— определить по городу —')), 'Jarvis покажет время гостя и не даст написать ночью') + '</div>' +
-    `<div class="f2">${field('phone', 'Телефон', input('phone', c.phone, 'type="tel" placeholder="+33 6 00 00 00 00" autocomplete="off"'))}` +
-    field('email', 'Почта', input('email', c.email, 'type="email" placeholder="name@mail.com" autocapitalize="off" autocomplete="off"')) + '</div>' +
-    `<div class="f2">${field('telegram', 'Telegram', input('telegram', c.telegram, 'type="text" placeholder="@username" autocapitalize="off"'))}` +
-    field('last_contact', 'Последний контакт', input('last_contact', c.last_contact, 'type="date"')) + '</div>' +
-    field('bd_day', 'День рождения', birthdayField(c.birthday), 'Год можно не указывать') +
-    `<div class="checks">${check('vip', '★ VIP-клиент', c.vip)}</div>` +
-    '<h3 class="form-sec warn">Аллергии и ограничения</h3>' +
-    field('allergies', 'Аллергии', area('allergies', lines(c.allergies), 'rows="2"'), 'По одной на строку или через запятую') +
-    `<div class="f2">${field('diet', 'Диета', area('diet', lines(c.diet), 'rows="2"'))}` +
-    field('health', 'Здоровье', area('health', lines(c.health), 'rows="2"')) + '</div>' +
-    '<h3 class="form-sec">Предпочтения</h3>' +
-    `<div class="f2">${field('pref_food', 'Еда', area('pref_food', c.pref_food, 'rows="2"'))}` +
-    field('pref_spa', 'Спа', area('pref_spa', c.pref_spa, 'rows="2"')) + '</div>' +
-    `<div class="f2">${field('pref_transport', 'Транспорт', area('pref_transport', c.pref_transport, 'rows="2"'))}` +
-    field('pref_hotels', 'Отели', area('pref_hotels', c.pref_hotels, 'rows="2"')) + '</div>' +
-    '<h3 class="form-sec">Любит и избегает</h3>' +
-    `<div class="f2">${field('likes', '❤️ Любит', area('likes', lines(c.likes), 'rows="2" placeholder="пионы, столик у окна"'))}` +
-    field('dislikes', '🚫 Избегает', area('dislikes', lines(c.dislikes), 'rows="2" placeholder="лилии, шумные места"')) + '</div>' +
-    '<h3 class="form-sec">В пути</h3>' +
-    field('travel_habits', 'Привычки', area('travel_habits', c.travel_habits, 'rows="2" placeholder="Место у окна, 20° в номере, перьевые подушки"')) +
-    field('loyalty', 'Программы лояльности', area('loyalty', lines(c.loyalty), 'rows="2" placeholder="Air France · Platinum"'), 'По одной на строку') +
-    field('travel_history', 'Заметки о прошлых поездках', area('travel_history', lines(c.travel_history)), 'Новые поездки лучше добавлять во вкладке «Поездки»') +
-    field('concierge_notes', 'Заметки консьержа', area('concierge_notes', c.concierge_notes));
+  const body = clientBody(c);
   const mc = openModal({
     title: id ? 'Клиент' : 'Новый клиент',
+    cls: 'tp cl',
     body,
     onSave: async (v) => {
       const row = await save('clients', id, {
         name: v.name.trim(), language: v.language, city: nul(v.city.trim()), citizenship: nul(v.citizenship), home_tz: nul(v.home_tz) || (await lookupPlace(v.city))?.tz || null, telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
-        pref_food: nul(v.pref_food.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
+        pref_food: nul(v.pref_food.trim()), pref_music: nul(v.pref_music.trim()), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
         travel_history: v.travel_history.split('\n').map((s) => s.trim()).filter(Boolean),
         likes: toList(v.likes), dislikes: toList(v.dislikes), travel_habits: nul(v.travel_habits.trim()),
         loyalty: v.loyalty.split('\n').map((s) => s.trim()).filter(Boolean),
@@ -535,7 +508,9 @@ export function editClient(id) {
     if (![...mc.form.home_tz.options].some((o) => o.value === p.tz)) mc.form.home_tz.add(new Option(p.tz, p.tz));
     mc.form.home_tz.value = p.tz;
     mc.form.home_tz.classList.add('flash');
+    mc.form.home_tz.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  bindClientForm(mc.form);
 }
 
 export function editPartner(id) {
