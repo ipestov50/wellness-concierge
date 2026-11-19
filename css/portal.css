@@ -152,3 +152,8 @@ html { font-variant-numeric: lining-nums tabular-nums; }
 .tabs.fade-r{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
 .tabs.fade-l{-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 28px),transparent)}
 .tabs.fade-l.fade-r{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+.stay-meta{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.stay-meta .pill{max-width:100%;overflow-wrap:anywhere}
+.stay .note{margin-bottom:10px}
+
+.stay .stay-l{white-space:nowrap;flex:0 0 auto}

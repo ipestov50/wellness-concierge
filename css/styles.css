@@ -3081,3 +3081,12 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .trip-addr { color: #786F68; padding-left: 1.6em; }
 @media (prefers-reduced-motion: reduce) { .tr-fold, .tr-pill button { transition: none; } }
 @media (max-width: 767px) { .rq-pill, .rq-vtabs button { min-height: 44px; } .ov.rq .u-opt span { min-height: 44px; } }
+
+/* Блок «Проживание» (повторно использует .tr-box / .tr-fold) */
+.ac-pair { align-items: start; }
+.ac-pair .f { min-width: 0; margin-bottom: 0; }
+.ac-pair input { min-height: 44px; width: 100%; box-sizing: border-box; }
+#ac-fold input[type="text"] { min-height: 44px; box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) { #ac-fold { transition: none; } }
+
+.ov.rq .hint[hidden] { display: none; }

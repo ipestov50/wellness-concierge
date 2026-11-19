@@ -40,6 +40,20 @@ async function weather(lat, lon) {
 }
 
 const intIn = (v, lo, hi) => { const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{1,3}$/.test(v.trim()) ? Number(v) : NaN); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+function stay(x) {
+  if (!x || typeof x !== 'object') return null;
+  const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const g = Number(x.guests);
+  const name = str(x.name, 160);
+  if (!name) return null;
+  return {
+    name, address: str(x.address, 240),
+    guests: Number.isInteger(g) && g >= 1 && g <= 99 ? g : null,
+    checkInTime: /^[0-2]\d:[0-5]\d$/.test(String(x.checkInTime)) ? x.checkInTime : null,
+    roomType: str(x.roomType, 80), bookingReference: str(x.bookingReference, 80), note: str(x.note, 600),
+    checkIn: day(x.checkIn), checkOut: day(x.checkOut),
+  };
+}
 function transfer(x) {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
   const o = { pickup: str(x.pickup, 200), dropoff: str(x.dropoff, 200), passengers: intIn(x.passengers, 1, 99), luggage: intIn(x.luggage, 0, 99), driver: str(x.driver, 80) };
@@ -69,6 +83,7 @@ export default async function handler(req, res) {
   const out = {
     guest: { firstName: str(d.guest?.firstName, 80) },
     trip: { title: str(t.title, 120), city: str(t.city, 120), country: str(t.country, 120), start: str(t.start, 10), end: str(t.end, 10), tz: str(t.tz, 64), hotel: str(t.hotel, 160), hotelAddress: str(t.hotelAddress, 240), lat: num(t.lat), lon: num(t.lon) },
+    stay: stay(d.stay),
     days: (Array.isArray(d.days) ? d.days : []).slice(0, 60).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(String(day?.date))).map((day) => ({
       date: str(day?.date, 10),
       items: (Array.isArray(day?.items) ? day.items : []).slice(0, 40).map((i) => ({

@@ -91,12 +91,22 @@ const TR = {
   minus: 'Уменьшить', plus: 'Увеличить', fromPh: 'Аэропорт, отель…', toPh: 'Адрес или место',
   noteLabel: 'Заметка консьержа (увидит гость)', notePh: 'Вечером у воды прохладно, возьмите тёплый слой. Столик на террасе уже ждёт',
 };
+// Тексты блока «Проживание»
+const AC = {
+  title: 'Проживание', hotel: 'Отель / Резиденция', addr: 'Адрес отеля', guests: 'Гости в номере', checkin: 'Время заезда', room: 'Тип номера',
+  hotelPh: 'Название отеля', addrPh: 'Улица, город', roomPh: 'Например, люкс', needHotel: 'Чтобы сохранить проживание, укажите отель и адрес', legacy: 'Отель и адрес можно добавить позже. Когда они появятся, гость увидит их в путеводителе',
+};
 const stepper = (name, label, val, min, none) => `<div class="tr-step" data-step="${name}" data-min="${min}"${none ? ` data-none="${esc(none)}"` : ''}><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(TR.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(TR.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="tr_${name}" value="${esc(val)}"></div>`;
 const transferBlock = (t, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}" id="tr-fold"${open ? '' : ' inert'}><div><div class="tr-box"><div class="tr-head">${esc(TR.title)}</div>
   <div class="f tr-route"><label for="f-tr_pickup">${esc(TR.route)}</label><div class="tr-line"><span class="tr-rail" aria-hidden="true"><i class="tr-dot"></i><i class="tr-wire"></i><i class="tr-pin"></i></span><div class="tr-ins">${input('tr_pickup', t.pickup, `type="text" autocomplete="off" enterkeyhint="next" aria-label="${esc(TR.from)}" placeholder="${esc(TR.from)}: ${esc(TR.fromPh)}"`)}${input('tr_dropoff', t.dropoff, `type="text" autocomplete="off" aria-label="${esc(TR.to)}" placeholder="${esc(TR.to)}: ${esc(TR.toPh)}"`)}</div></div><small class="hint" id="tr-hint" hidden>${esc(TR.legacy)}</small></div>
   <div class="tr-steps">${stepper('pax', TR.pax, t.passengers || 1, 1)}${stepper('bags', TR.bags, t.luggage ?? 0, 0, TR.bagsNone)}</div>
   ${field('tr_driver', TR.driver, input('tr_driver', t.driver, 'type="text" autocomplete="off"'))}</div></div></div>`;
 
+const accBlock = (a, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}" id="ac-fold"${open ? '' : ' inert'}><div><div class="tr-box"><div class="tr-head">${esc(AC.title)}</div>
+  ${field('ac_hotel', AC.hotel, input('ac_hotel', a.hotelName, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.hotelPh)}"`))}
+  ${field('ac_addr', AC.addr, input('ac_addr', a.hotelAddress, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.addrPh)}"`))}<small class="hint" id="ac-hint" hidden>${esc(AC.legacy)}</small>
+  <div class="tr-steps">${stepper('ac_guests', AC.guests, a.guestsCount || 1, 1)}</div>
+  <div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, input('ac_checkin', a.checkInTime, 'type="time" autocomplete="off"'))}${field('ac_room', AC.room, input('ac_room', a.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div></div></div></div>`;
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
 
 // капсула гостя: имя, живое время, стоп-лист — раскрывается при выборе
@@ -197,7 +207,7 @@ function bindRequestForm(form) {
   if (trFold) {
     const syncTr = () => { const on = form.category.value === 'Transport'; trFold.classList.toggle('open', on); trFold.inert = !on; const h = form.querySelector('#tr-hint'); if (h) h.hidden = !(on && form.dataset.legacyTr === '1'); };
     form.category.addEventListener('change', syncTr);
-    trFold.querySelectorAll('.tr-step').forEach((st) => {
+    form.querySelectorAll('.tr-step').forEach((st) => {
       const out = st.querySelector('output'), hid = st.querySelector('input'), min = +st.dataset.min;
       const paint = () => { const n = +hid.value; out.textContent = n === 0 && st.dataset.none ? st.dataset.none : n; st.classList.toggle('is-none', n === 0 && !!st.dataset.none);
         st.querySelector('[data-d="-1"]').disabled = n <= min; };
@@ -205,6 +215,24 @@ function bindRequestForm(form) {
         if (!calm()) out.animate([{ transform: 'translateY(' + (b.dataset.d > 0 ? 6 : -6) + 'px)', opacity: 0.2 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: 'cubic-bezier(.3,1.4,.5,1)' }); });
       paint();
     });
+  }
+  // блок «Проживание»: раскрывается для Accommodation, подставляет отель из ближайшей поездки гостя
+  const acFold = form.querySelector('#ac-fold');
+  if (acFold) {
+    const syncAc = () => { const on = form.category.value === 'Accommodation'; acFold.classList.toggle('open', on); acFold.inert = !on; const h = form.querySelector('#ac-hint'); if (h) h.hidden = !(on && form.dataset.legacyAc === '1'); };
+    const prefill = () => {
+      if (form.dataset.reqId) return;
+      const today = new Date().toISOString().slice(0, 10), mine = (state.trips || []).filter((t) => t.client_id === form.client_id.value && (t.hotel || t.hotel_address) && (t.end_date || t.start_date || '9') >= today);
+      const key = (t) => t.start_date || '';
+      const t = mine.find((x) => key(x) <= today) || mine.sort((a, b) => key(a).localeCompare(key(b)))[0];
+      if (!t) return;
+      if (!form.ac_hotel.value.trim() && !form.ac_hotel.dataset.touched && t.hotel) form.ac_hotel.value = t.hotel;
+      if (!form.ac_addr.value.trim() && !form.ac_addr.dataset.touched && t.hotel_address) form.ac_addr.value = t.hotel_address;
+    };
+    [form.ac_hotel, form.ac_addr].forEach((i) => i.addEventListener('input', () => { i.dataset.touched = '1'; }));
+    form.category.addEventListener('change', syncAc);
+    form.client_id.addEventListener('change', prefill);
+    prefill();
   }
   // бюджет > 500 → «Нужна проверка» (то же правило есть в базе)
   const amt = form.budget_amount, auto = form.querySelector('#rq-auto');
@@ -286,7 +314,7 @@ export function editRequest(id, presetClient, preset = {}) {
       <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
-    transferBlock(r.transfer || {}, r.category === 'Transport') +
+    transferBlock(r.transfer || {}, r.category === 'Transport') + accBlock(r.accommodation || {}, r.category === 'Accommodation') +
     field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f rq-budget"><label for="f-budget_amount">Бюджет</label>
@@ -333,8 +361,15 @@ export function editRequest(id, presetClient, preset = {}) {
         if ((!id || hadTr) && (!pu || !dr)) { (pu ? m.form.tr_dropoff : m.form.tr_pickup).focus(); throw new Error(TR.needRoute); }
         if (pu || dr || dv || pax !== 1) transfer = { pickup: pu, dropoff: dr, passengers: pax, luggage: bag > 0 ? bag : null, driver: dv || null };
       }
+      const hadAc = !!(r.accommodation && (r.accommodation.hotelName || r.accommodation.hotelAddress));
+      let accommodation = null;
+      if (v.category === 'Accommodation') {
+        const hn = (v.ac_hotel || '').trim(), ha = (v.ac_addr || '').trim(), ct = (v.ac_checkin || '').trim(), rt = (v.ac_room || '').trim();
+        if ((!id || hadAc) && (!hn || !ha)) { (hn ? m.form.ac_addr : m.form.ac_hotel).focus(); throw new Error(AC.needHotel); }
+        accommodation = { hotelName: hn, hotelAddress: ha, guestsCount: Math.max(1, parseInt(v.tr_ac_guests, 10) || 1), checkInTime: /^\d{1,2}:\d{2}$/.test(ct) ? ct : null, roomType: rt || null };
+      }
       await save('requests', id, {
-        transfer, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
+        transfer, accommodation, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
         venue: (() => { try { return v.venue_json ? JSON.parse(v.venue_json) : null; } catch { return r.venue || null; } })(),
@@ -347,9 +382,11 @@ export function editRequest(id, presetClient, preset = {}) {
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
   });
   if (id && !(r.transfer && (r.transfer.pickup || r.transfer.dropoff))) { m.form.dataset.legacyTr = '1'; m.form.category.dispatchEvent(new Event('change')); }
+  if (id && !(r.accommodation && (r.accommodation.hotelName || r.accommodation.hotelAddress))) { m.form.dataset.legacyAc = '1'; m.form.category.dispatchEvent(new Event('change')); }
   if (id) m.form.dataset.reqId = id; // окна, открытые отсюда, по «Закрыть» вернутся в карточку
   bindVenue(m.form);
   bindGuest(m.form);
+  if (id) m.form.dataset.reqId = id;
   bindRequestForm(m.form);
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);

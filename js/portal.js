@@ -16,6 +16,7 @@ const COPY = {
   liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
   updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
   noteLabel: '✦ Заметка консьержа',
+  arrive: 'Прилёт · {city}', depart: 'Вылет · {city}', checkInFrom: 'Заезд с {t}', bookingN: 'Бронь {ref}',
   hotelLabel: 'Ваше проживание', copyAddr: 'Скопировать адрес', copiedAddr: 'Адрес скопирован',
   copyAddrFail: 'Не удалось скопировать. Адрес можно выделить вручную', openMap: 'Открыть на карте ↗',
   routeMap: 'Маршрут на карте ↗', routeFrom: 'Откуда', routeTo: 'Куда', driver: 'Ваш водитель: {name}',
@@ -204,7 +205,7 @@ function render() {
       <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>${esc(String(trip.city || '').trim() ? fill(COPY.clockLocal, { city: String(trip.city).trim() }) : COPY.clockLocalBare)}</small></div>
       <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
-    ${hotelCard(trip)}
+    ${hotelCard()}
     <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Дни путешествия" id="tabs"><span class="ind" id="ind"></span>
       ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}${dayDots.has(d.date) && d.date !== activeDate ? ' upd' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}${dayDots.has(d.date) && d.date !== activeDate ? ` <span class="sr">· ${COPY.dayUpdated}</span>` : ''}</button>`).join('')}
     </div></div>
@@ -246,17 +247,26 @@ function setDock() {
   dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Написать консьержу</a>`;
 }
 
-function hotelCard(trip) {
-  const name = trip.hotel ? String(trip.hotel).trim() : '';
-  if (!name) return '';
-  const addr = trip.hotelAddress ? String(trip.hotelAddress).trim() : '';
+function hotelCard() {
+  const st = data.stay;
+  if (!st) return '';
+  const { name, address: addr } = st;
   const acts = [];
   if (addr) acts.push(`<button class="btn" type="button" data-copy="${esc(addr)}" data-label="${esc(COPY.copyAddr)}" data-live="${esc(COPY.copiedAddr)}" data-fail="${esc(COPY.copyAddrFail)}">${svg('copy')}<span>${esc(COPY.copyAddr)}</span></button>`);
-  acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(name + ' ' + addr)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.openMap)}</span></a>`);
+  acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent((name + ' ' + addr).trim())}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.openMap)}</span></a>`);
+  const pills = [];
+  if (st.guests > 0) pills.push(fill(COPY.guestsN, { n: st.guests, w: plural(st.guests, GUEST_W) }));
+  if (st.checkInTime) pills.push(fill(COPY.checkInFrom, { t: st.checkInTime }));
+  if (st.bookingReference) pills.push(fill(COPY.bookingN, { ref: st.bookingReference }));
+  if (st.roomType) pills.push(st.roomType);
+  if (st.checkIn && st.checkOut) pills.push(`${shortDate(st.checkIn)} – ${shortDate(st.checkOut)}`);
+  else if (st.checkIn || st.checkOut) pills.push(shortDate(st.checkIn || st.checkOut));
+  const note = st.note ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(st.note)}</p></div>` : '';
   return `<section class="card stay" aria-label="${esc(COPY.hotelLabel)}">
     <div class="top"><div class="ico">${svg('Hotel')}</div><div class="cat stay-l">${esc(COPY.hotelLabel)}</div>
-    <h2 class="title">${esc(name)}</h2>${addr ? `<p class="venue">${esc(addr)}</p>` : ''}</div>
-    <div class="perf"></div><div class="bot"><div class="acts">${acts.join('')}</div></div></section>`;
+    <h2 class="title">${esc(name)}</h2>${addr ? `<p class="venue">${esc(addr)}</p>` : ''}
+    ${pills.length ? `<div class="meta stay-meta">${pills.map((x) => `<span class="pill tnum">${esc(x)}</span>`).join('')}</div>` : ''}</div>
+    <div class="perf"></div><div class="bot">${note}<div class="acts">${acts.join('')}</div></div></section>`;
 }
 const noteHtml = (it) => it.guestNotes ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(it.guestNotes)}</p></div>` : '';
 function transferOf(it) {
@@ -281,12 +291,18 @@ function normDays(j) {
   return j;
 }
 const shortPlace = (t) => { const v = String(t || '').split(',')[0].trim(); return v.length > 28 ? v.slice(0, 27).trimEnd() + '…' : v; };
+function flightTitle(t) {
+  const city = String((data && data.trip && data.trip.city) || '').trim(), k = t.toLowerCase();
+  if (!city) return t;
+  return k === 'прилёт' || k === 'прилет' ? fill(COPY.arrive, { city }) : k === 'вылет' ? fill(COPY.depart, { city }) : t;
+}
 function displayTitle(it) {
   const title = String(it.title || ''), ref = String(it.bookingReference || '').trim();
   if (it.kind === 'flight' && ref) {
     const m = /^(.*?)[\s·•—–-]+([^\s·•—–-]+)\s*$/.exec(title);
-    if (m && m[2].toLowerCase() === ref.toLowerCase() && m[1].trim()) return m[1].trim();
+    if (m && m[2].toLowerCase() === ref.toLowerCase() && m[1].trim()) return flightTitle(m[1].trim());
   }
+  if (it.kind === 'flight') return flightTitle(title.trim());
   const tr = transferOf(it);
   if (tr && tr.pickup && tr.dropoff && /^\s*(трансфер|transfer)\s*[.!:…]*\s*$/i.test(title)) return `${shortPlace(tr.pickup)} → ${shortPlace(tr.dropoff)}`;
   return title;
@@ -295,10 +311,9 @@ function card(it, idx, date) {
   const sig = sigOf(date, it);
   const cat = CAT_ICON[it.category] || 'Other';
   const tr = transferOf(it);
-  const isHotel = it.kind === 'hotel';
-  const addr = it.address || (isHotel && data.trip.hotelAddress) || '';
-  const vName = it.venueName || (isHotel && data.trip.hotel) || '';
-  const showVenue = !isHotel;
+  const addr = it.address || '';
+  const vName = it.venueName || '';
+  const showVenue = true;
   const place = [vName, addr].filter(Boolean).join(', ');
   const rows = [];
   if (it.dressCode) rows.push(['Дресс-код', esc(it.dressCode)]);
@@ -366,7 +381,7 @@ function buildIcs(it, date, tz) {
   const tr = transferOf(it);
   const desc = [tr && fill(COPY.routeDesc, { a: tr.pickup || '—', b: tr.dropoff || '—' }), tr && tr.driver && fill(COPY.driver, { name: tr.driver }), it.bookingReference && `Бронь: ${it.bookingReference}`, it.dressCode && `Дресс-код: ${it.dressCode}`, it.guestNotes && `${COPY.noteLabel.replace('✦ ', '')}: ${it.guestNotes}`].filter(Boolean).join('\n');
   lines.push(`SUMMARY:${icsEsc(displayTitle(it))}`);
-  const loc = tr ? (tr.pickup || tr.dropoff) : (it.address || (it.kind === 'hotel' && data.trip.hotelAddress) || it.venueName);
+  const loc = tr ? (tr.pickup || tr.dropoff) : (it.address || it.venueName);
   if (loc) lines.push(`LOCATION:${icsEsc(loc)}`);
   if (desc) lines.push(`DESCRIPTION:${icsEsc(desc)}`);
   lines.push('END:VEVENT', 'END:VCALENDAR');
@@ -497,17 +512,18 @@ function demoData() {
   const e = { venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: '', updatedAt: old };
   demoState = {
     guest: { firstName: 'Анна' },
-    trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', hotel: 'Hotel Adlon Kempinski', hotelAddress: 'Unter den Linden 77, 10117 Berlin, Германия', lat: 52.52, lon: 13.4 },
+    trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', lat: 52.52, lon: 13.4 },
+    stay: { name: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, 10117 Berlin, Германия', guests: 2, checkInTime: '15:00', roomType: 'Deluxe Suite', bookingReference: 'AD-448120', note: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.', checkIn: d(2), checkOut: d(8) },
     weather: { tempC: 4, code: 61, text: 'Дождь', kind: 'rain', windKmh: 18, daily: [
       { date: d(2), kind: 'rain', text: 'Дождь', tMax: 5, tMin: 2 }, { date: d(3), kind: 'cloud', text: 'Облачно', tMax: 6, tMin: 1 }, { date: d(6), kind: 'clear', text: 'Ясно', tMax: 8, tMin: 0 } ] },
     days: [
       { date: d(2), items: [
         { ...e, time: '09:15', title: 'Прилёт · B43CSZ', category: 'Flight', kind: 'flight', venueName: 'Шереметьево, терминал B', bookingReference: 'B43CSZ', guestNotes: 'Приоритетная регистрация' },
-        { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' },
-        { ...e, time: null, title: 'Заселение, отель', category: 'Hotel', kind: 'hotel', venueName: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, Berlin', bookingReference: 'AD-448120', guestNotes: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.' } ] },
+        { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' } ] },
       { date: d(3), items: [
         { ...e, time: '11:00', title: 'Спа-программа «Восстановление»', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
       { date: d(6), items: [
+        { ...e, time: '18:40', title: 'Вылет · K7QD2P', category: 'Flight', kind: 'flight', venueName: 'BER, терминал 1', bookingReference: 'K7QD2P' },
         { ...e, time: '14:15', title: 'Трансфер', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent, bookingReference: 'TR-1042',
           transfer: { pickup: 'Hotel Adlon Kempinski, Unter den Linden 77, 10117 Berlin', dropoff: 'Аэропорт Берлин Бранденбург (BER), Terminal 1, Melli-Beese-Ring 1, 12529 Schönefeld', passengers: 2, luggage: 5, driver: 'Markus' } } ] },
     ],
@@ -533,7 +549,18 @@ function focusDesc() {
   if (a.dataset && a.dataset.copy !== undefined) return `[data-copy="${CSS.escape(a.dataset.copy)}"]`;
   return null;
 }
+function normStay(j) {
+  const t = j.trip || {};
+  let st = j.stay && typeof j.stay === 'object' ? j.stay : null;
+  const hasHotelKind = (j.days || []).some((d) => (d.items || []).some((i) => i && i.kind === 'hotel'));
+  if (!st && (t.hotel || t.hotelAddress)) st = { name: t.hotel, address: t.hotelAddress };
+  if (st || hasHotelKind) (j.days || []).forEach((d) => { if (Array.isArray(d.items)) d.items = d.items.filter((i) => i && i.kind !== 'hotel'); });
+  const name = st ? String(st.name || '').trim() : '';
+  j.stay = st && name ? { name, address: String(st.address || '').trim(), guests: parseInt(st.guests, 10) || 0, checkInTime: /^\d{1,2}:\d{2}/.test(st.checkInTime || '') ? String(st.checkInTime).slice(0, 5) : '', roomType: String(st.roomType || '').trim(), bookingReference: String(st.bookingReference || '').trim(), note: String(st.note || '').trim(), checkIn: st.checkIn || '', checkOut: st.checkOut || '' } : null;
+  return j;
+}
 function applyData(j, sig) {
+  normStay(j);
   const key = [j.trip.start, j.trip.end, j.trip.title].join('|');
   const first = !data, changedWindow = !first && key !== tripKey;
   const cur = collect(j), y = scrollY, fd = first ? null : focusDesc();
