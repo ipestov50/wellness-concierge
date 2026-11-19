@@ -482,7 +482,7 @@ export function editClient(id) {
     cls: 'tp cl',
     body,
     onSave: async (v) => {
-      const row = await save('clients', id, {
+      const payload = {
         name: v.name.trim(), language: v.language, city: nul(v.city.trim()), citizenship: nul(v.citizenship), home_tz: nul(v.home_tz) || (await lookupPlace(v.city))?.tz || null, telegram: nul(v.telegram.trim()), phone: nul(v.phone.trim()), email: nul(v.email.trim()), birthday: birthdayValue(v), vip: v.vip,
         last_contact: nul(v.last_contact), allergies: toList(v.allergies), diet: toList(v.diet), health: toList(v.health),
         pref_food: nul(v.pref_food.trim()), ...(v.pref_music.trim() || 'pref_music' in c ? { pref_music: nul(v.pref_music.trim()) } : {}), pref_spa: nul(v.pref_spa.trim()), pref_transport: nul(v.pref_transport.trim()), pref_hotels: nul(v.pref_hotels.trim()),
@@ -490,10 +490,17 @@ export function editClient(id) {
         likes: toList(v.likes), dislikes: toList(v.dislikes), travel_habits: nul(v.travel_habits.trim()),
         loyalty: v.loyalty.split('\n').map((s) => s.trim()).filter(Boolean),
         concierge_notes: nul(v.concierge_notes.trim()),
-      });
+      };
+      let row, noMusic = false;
+      try { row = await save('clients', id, payload); }
+      catch (e) {
+        // столбец «Музыка» ещё не создан в базе — остальное всё равно сохраняем
+        if (!/pref_music/.test(String(e.message || e)) || !('pref_music' in payload)) throw e;
+        delete payload.pref_music; row = await save('clients', id, payload); noMusic = true;
+      }
       ui.client = row.id;
       render();
-      toast(id ? 'Клиент сохранён' : 'Клиент добавлен');
+      toast(noMusic ? 'Клиент сохранён, но «Музыка» пока не сохраняется: нужно обновить базу' : id ? 'Клиент сохранён' : 'Клиент добавлен');
     },
     onDelete: id ? async () => {
       await remove('clients', id);
