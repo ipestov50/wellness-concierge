@@ -3120,7 +3120,7 @@ select.flash { animation: flash-ring 1s var(--ease); }
 
 /* ── Окно «Поездка»: шапка, сетка, вкладки ── */
 .dlg-head .trip-hd { margin-left: auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
-.tr-link { min-height: 44px; padding: 0 14px; border: 1px solid rgba(38,93,86,.28); border-radius: 999px; background: #fff; color: #265D56; font: 600 13px/1 inherit; cursor: pointer; white-space: nowrap; transition: background .2s, color .2s, border-color .2s; }
+.tr-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; min-height: 44px; padding: 0 14px; border: 1px solid rgba(38,93,86,.28); border-radius: 999px; background: #fff; color: #265D56; font: 600 13px/1 inherit; cursor: pointer; white-space: nowrap; transition: background .2s, color .2s, border-color .2s; }
 .tr-link:hover { background: #F5F1EB; }
 .tr-link.done { background: #265D56; border-color: #265D56; color: #fff; }
 .tr-link:disabled { opacity: .6; cursor: default; }
@@ -3152,3 +3152,105 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .seg-linked b { color: #2C2520; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .seg button, .tr-link { transition: none; } }
 .dlg-head .icon-btn { min-width: 44px; min-height: 44px; }
+
+/* ════════ Окно «Поездка»: Warm Editorial, тональные слои вместо рамок ════════ */
+.ov.tp {
+  --tp-sheet: #F5F1EB; --tp-well: #EFEAE1; --tp-card: #FFFFFF; --tp-ink: #2C2520; --tp-mut: #6B625B; --tp-hair: rgba(44,37,32,.08);
+  --tp-acc: #265D56; --tp-acc-ink: #fff; --tp-risk: #C85A48; --tp-gold: #B89356; --tp-out: cubic-bezier(.22, 1, .36, 1);
+  --tp-serif: 'Cormorant Garamond', 'Newsreader', Georgia, serif;
+  background: rgba(44,37,32,.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: var(--tp-ink);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ov.tp {
+  --tp-sheet: #1c1915; --tp-well: #2a251f; --tp-card: #332d26; --tp-ink: #efe8dd; --tp-mut: #a89d8f; --tp-hair: rgba(239,232,221,.1);
+  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.5); } }
+:root[data-theme="dark"] .ov.tp {
+  --tp-sheet: #1c1915; --tp-well: #2a251f; --tp-card: #332d26; --tp-ink: #efe8dd; --tp-mut: #a89d8f; --tp-hair: rgba(239,232,221,.1);
+  --tp-acc: #6fb5aa; --tp-acc-ink: #0d201d; --tp-risk: #e8806d; --tp-gold: #d0ad6c; background: rgba(0,0,0,.5); }
+
+.ov.tp .dlg { max-width: 660px; padding: 24px 32px 20px; border-radius: 26px; background: var(--tp-sheet); box-shadow: 0 30px 70px -24px rgba(44,37,32,.45); animation: tpIn .5s var(--tp-out) both; }
+@keyframes tpIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes tpFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* шапка */
+.ov.tp .dlg-head { gap: 12px; margin-bottom: 18px; }
+.ov.tp .dlg-head h2 { font-family: var(--tp-serif); font-size: 36px; font-weight: 500; letter-spacing: -.02em; line-height: 1; color: var(--tp-ink); margin-right: auto; }
+.ov.tp #x { width: auto; min-width: 44px; height: 44px; padding: 0 10px; gap: 8px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: transparent; color: var(--tp-mut); font-size: 15px; transition: background .25s var(--tp-out), color .25s; }
+.ov.tp #x:hover { background: var(--tp-well); color: var(--tp-ink); }
+.ov.tp #x kbd { font: 600 10px var(--f-body); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border-radius: 6px; background: var(--tp-well); color: var(--tp-mut); }
+.ov.tp .dlg-head .trip-hd { margin-left: 0; }
+.ov.tp .tr-link { min-height: 44px; padding: 0 16px; border: 1px solid var(--tp-hair); background: transparent; color: var(--tp-acc); font-size: 13px; font-weight: 600; letter-spacing: .01em; transition: background .3s var(--tp-out), color .3s, border-color .3s; }
+.ov.tp .tr-link:hover { background: var(--tp-well); }
+.ov.tp .tr-link.done { background: var(--tp-acc); border-color: var(--tp-acc); color: var(--tp-acc-ink); }
+.ov.tp .tr-dots { color: var(--tp-mut); }
+.ov.tp .tr-dots:hover, .ov.tp .tr-dots[aria-expanded="true"] { background: var(--tp-well); }
+.ov.tp .tr-menu { background: var(--tp-card); border: 0; box-shadow: 0 18px 40px -10px rgba(44,37,32,.3); }
+.ov.tp .tr-menu button { color: var(--tp-ink); }
+.ov.tp .tr-menu button:hover:not(:disabled) { background: var(--tp-well); }
+.ov.tp .tr-menu button.danger { color: var(--tp-risk); }
+
+/* подписи и поля: углублённые «колодцы» без рамок */
+.ov.tp .f { margin-bottom: 14px; }
+.ov.tp .f > label, .ov.tp .tr-lbl { display: block; margin-bottom: 6px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
+.ov.tp input[type=text], .ov.tp select, .ov.tp textarea { background: var(--tp-well); border: 1px solid transparent; border-radius: 14px; color: var(--tp-ink); padding: 11px 16px; box-shadow: none; transition: background .3s var(--tp-out), border-color .3s var(--tp-out); }
+.ov.tp input::placeholder, .ov.tp textarea::placeholder { color: var(--tp-mut); opacity: .65; }
+.ov.tp input[type=text]:focus, .ov.tp select:focus, .ov.tp textarea:focus { background: var(--tp-card); border-color: var(--tp-acc); outline: none; box-shadow: none; }
+.ov.tp select { background-image: linear-gradient(45deg, transparent 50%, var(--tp-mut) 50%), linear-gradient(135deg, var(--tp-mut) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
+.ov.tp .tm-grid, .ov.tp .tm-dates, .ov.tp .tm-fl, .ov.tp .ac-pair { gap: 14px; }
+.ov.tp .tm-dates { padding-bottom: 6px; border-bottom: 1px solid var(--tp-hair); margin-bottom: 20px; }
+.ov.tp .tm-dates .f { margin-bottom: 12px; }
+
+/* даты */
+.ov.tp .dp { background: var(--tp-well); border: 1px solid transparent; border-radius: 14px; transition: background .3s var(--tp-out), border-color .3s; font-variant-numeric: tabular-nums; }
+.ov.tp .dp:hover { border-color: var(--tp-hair); }
+.ov.tp .dp.open { background: var(--tp-card); border-color: var(--tp-acc); }
+.ov.tp .dp-display { min-height: 46px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--tp-ink); }
+.ov.tp .dp.empty .dp-display { color: var(--tp-mut); font-weight: 500; }
+.ov.tp .dp-ico { font-size: 16px; opacity: .75; }
+.ov.tp .dp-panel { border-top: 1px solid var(--tp-hair); }
+.ov.tp .day.on, .ov.tp .chip-btn.on { background: var(--tp-acc); border-color: var(--tp-acc); color: var(--tp-acc-ink); }
+.ov.tp .day.today { box-shadow: inset 0 0 0 1.5px var(--tp-acc); color: var(--tp-acc); }
+.ov.tp .chip-btn { background: var(--tp-well); border-color: transparent; }
+
+/* сегменты: рельс-«колодец» и белая таблетка */
+.ov.tp .seg { gap: 2px; padding: 4px; margin: 0 0 18px; background: var(--tp-well); border-radius: 999px; }
+.ov.tp .seg button { min-height: 44px; border-radius: 999px; color: var(--tp-mut); font-size: 13.5px; font-weight: 600; letter-spacing: .01em; transition: background .35s var(--tp-out), color .25s, box-shadow .35s var(--tp-out); }
+.ov.tp .seg button[aria-selected="true"] { background: var(--tp-card); color: var(--tp-ink); box-shadow: 0 1px 1px rgba(44,37,32,.06), 0 4px 12px -4px rgba(44,37,32,.18); }
+.ov.tp .seg-dot { background: var(--tp-gold); }
+.ov.tp .seg-panel:not([hidden]) { animation: tpFade .4s var(--tp-out) both; }
+.ov.tp .seg-sub { margin: 4px 0 10px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
+.ov.tp .seg-panel .hint { margin: -4px 0 16px; font-size: 13px; color: var(--tp-mut); }
+.ov.tp .seg-linked { background: transparent; border-top: 1px solid var(--tp-hair); border-radius: 0; padding: 16px 2px 0; margin-top: 4px; color: var(--tp-mut); }
+.ov.tp .seg-linked b { color: var(--tp-ink); font-variant-numeric: tabular-nums; }
+
+/* степпер и время заезда — те же колодцы */
+.ov.tp .tr-pill { background: var(--tp-well); border: 1px solid transparent; box-shadow: none; }
+.ov.tp .tr-pill button { color: var(--tp-acc); }
+.ov.tp .tr-val { color: var(--tp-ink); }
+.ov.tp .tf-pill { background: var(--tp-well); border: 1px solid transparent; box-shadow: none; color: var(--tp-mut); transition: background .3s var(--tp-out), border-color .3s var(--tp-out); }
+.ov.tp .tf-pill:focus-within { background: var(--tp-card); border-color: var(--tp-acc); box-shadow: none; }
+.ov.tp .tf-pill input { color: var(--tp-ink); background: transparent; border: 0; padding: 0; }
+.ov.tp .tf-quick button { border: 0; background: var(--tp-well); color: var(--tp-mut); transition: background .3s var(--tp-out), color .25s; }
+.ov.tp .tf-quick button:hover { color: var(--tp-ink); }
+.ov.tp .tf-quick button[aria-pressed="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.ov.tp textarea.autogrow { min-height: 56px; }
+
+/* низ: «Удалить» — тихий терракотовый текст; справа «Отмена» и главная таблетка */
+.ov.tp .foot { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--tp-hair); gap: 6px; align-items: center; }
+.ov.tp .foot .btn { min-height: 46px; padding: 0 18px; border-radius: 999px; font-weight: 600; box-shadow: none; }
+.ov.tp .foot #del { padding: 0 8px; border: 0; background: transparent; color: var(--tp-risk); font-weight: 500; }
+.ov.tp .foot #del:hover, .ov.tp .foot #del.armed { background: color-mix(in srgb, var(--tp-risk) 12%, transparent); }
+.ov.tp .foot #cancel { border: 0; background: transparent; color: var(--tp-mut); font-weight: 500; }
+.ov.tp .foot #cancel:hover { color: var(--tp-ink); }
+.ov.tp #ok { min-width: 150px; background: var(--tp-acc); border: 0; color: var(--tp-acc-ink); transition: transform .3s var(--tp-out), box-shadow .3s; }
+.ov.tp #ok:hover { transform: translateY(-1px); box-shadow: 0 12px 24px -12px var(--tp-acc); }
+.ov.tp .err-box { border-radius: 12px; margin-bottom: 16px; }
+.ov.tp :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+
+@media (max-width: 479px) {
+  .ov.tp .dlg { padding: 22px 18px 20px; border-radius: 22px; }
+  .ov.tp .dlg-head h2 { font-size: 30px; }
+  .ov.tp #x kbd { display: none; }
+  .ov.tp .tr-link-t { font-size: 12.5px; }
+  .ov.tp .foot #ok { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .ov.tp .dlg, .ov.tp .seg-panel:not([hidden]) { animation: none; } .ov.tp * { transition: none !important; } }

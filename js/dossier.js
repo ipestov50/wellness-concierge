@@ -117,7 +117,7 @@ const inp = (n, v, a = '') => `<input id="f-${n}" name="${n}" value="${esc(v)}" 
 const AC = { sec: 'Проживание', hint: 'Гость увидит эти данные в блоке «Ваше проживание»', name: 'Название отеля', namePh: 'Cheval Blanc', addr: 'Адрес отеля', addrPh: 'Unter den Linden 77, Berlin', guests: 'Гости в номере', room: 'Тип номера', roomPh: 'Сьют с видом на сад', checkin: 'Время заезда', ref: 'Код брони', refPh: 'Необязательно', note: 'Заметка для гостя', notePh: 'Например: номер подготовлен к вашему приезду, ранний заезд согласован', minus: 'Меньше', plus: 'Больше' };
 const acStepper = (name, label, val) => `<div class="tr-step" data-step="${name}" data-min="1"><span class="tr-lbl" id="trl-${name}">${esc(label)}</span><div class="tr-pill" role="group" aria-labelledby="trl-${name}"><button type="button" data-d="-1" aria-label="${esc(AC.minus)}: ${esc(label)}">−</button><output class="tr-val" aria-live="polite">${esc(val)}</output><button type="button" data-d="1" aria-label="${esc(AC.plus)}: ${esc(label)}">+</button></div><input type="hidden" name="${name}" value="${esc(val)}"></div>`;
 
-const TT = { tabs: 'Разделы поездки', stay: 'Проживание', fl: 'Перелёты', nt: 'Заметки', ntTitle: 'Заметки консьержа', ntHint: 'Только для вас: гость этого не увидит.', linked: 'Связанные запросы', linkedNone: 'Пока нет', who: 'С кем', whoPh: 'муж, двое детей, няня', outb: 'Туда', back: 'Обратно', fn: 'Рейс / PNR', arr: 'Прилёт · время Парижа', dep: 'Вылет · время Парижа', link: 'Ссылка для гостя', copied: 'Скопировано', more: 'Ещё действия', rot: 'Заменить ссылку на новую', off: 'Закрыть доступ' };
+const TT = { tabs: 'Разделы поездки', stay: 'Проживание', fl: 'Перелёты', nt: 'Заметки', ntTitle: 'Заметки консьержа', ntHint: 'Только для вас: гость этого не увидит.', linked: 'Связанные запросы', linkedNone: 'Пока нет', who: 'С кем', whoPh: 'муж, двое детей, няня', outb: 'Туда', back: 'Обратно', fn: 'Рейс / PNR', arr: 'Прилёт · время Парижа', dep: 'Вылет · время Парижа', link: 'Ссылка для гостя', copied: 'Скопировано', copyFail: 'Не удалось скопировать', more: 'Ещё действия', rot: 'Заменить ссылку на новую', off: 'Закрыть доступ' };
 const segBtn = (key, label, sel) => `<button type="button" role="tab" id="tt-${key}" aria-controls="tp-${key}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}">${esc(label)}<i class="seg-dot" hidden></i></button>`;
 
 export function editTrip(id, clientId) {
@@ -147,6 +147,7 @@ export function editTrip(id, clientId) {
     (id ? `<div class="seg-linked"><span>${esc(TT.linked)}</span><b class="tnum">${linked.length || esc(TT.linkedNone)}</b></div>` : '') + '</section>';
   const m = openModal({
     title: id ? 'Поездка' : 'Новая поездка',
+    cls: 'tp',
     body,
     onSave: async (v) => {
       const start = v.start ? v.start.slice(0, 10) : null;
@@ -182,29 +183,29 @@ export function editTrip(id, clientId) {
 }
 
 // вкладки: все поля остаются в форме, «Сохранить» сохраняет всё сразу
+const grow = (ta) => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 56), 260) + 'px'; };
 function wireTripTabs(form) {
   const tabs = [...form.querySelectorAll('.seg [role=tab]')];
-  const show = (tab, focus) => tabs.forEach((b) => {
+  const show = (tab, focus) => { tabs.forEach((b) => {
     const on = b === tab;
     b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;
     form.querySelector('#' + b.getAttribute('aria-controls')).hidden = !on;
     if (on && focus) b.focus();
   });
+  requestAnimationFrame(() => form.querySelectorAll('textarea.autogrow').forEach((ta) => ta.offsetParent && grow(ta))); };
   tabs.forEach((b, i) => {
     b.addEventListener('click', () => show(b));
     b.addEventListener('keydown', (e) => {
       const k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
       if (k) { e.preventDefault(); show(tabs[(i + k + tabs.length) % tabs.length], true); }
+      else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); show(tabs[e.key === 'Home' ? 0 : tabs.length - 1], true); }
     });
   });
   const flDot = tabs[1].querySelector('.seg-dot');
   const paint = () => { flDot.hidden = !(form.flight_in.value.trim() || form.flight_out.value.trim() || form.flight_in_at.value || form.flight_out_at.value); };
   form.addEventListener('input', paint); form.addEventListener('click', () => setTimeout(paint));
   paint();
-  form.querySelectorAll('textarea.autogrow').forEach((ta) => {
-    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 260) + 'px'; };
-    ta.addEventListener('input', grow); form.addEventListener('click', () => requestAnimationFrame(grow), { once: true }); setTimeout(grow, 0);
-  });
+  form.querySelectorAll('textarea.autogrow').forEach((ta) => { ta.addEventListener('input', () => grow(ta)); setTimeout(() => ta.offsetParent && grow(ta), 0); });
 }
 
 // Заезд/Выезд → Прилёт/Вылет, пока даты перелётов пусты или остались авто-подставленными
@@ -251,10 +252,16 @@ function wireTripShare(form, cid) {
     if (!tok) return;
     const ok = await copyText(portalUrl(tok));
     const t = share.querySelector('.tr-link-t'); clearTimeout(tm);
-    t.textContent = ok ? `${TT.copied} ✓` : portalUrl(tok); share.classList.add('done');
+    t.textContent = ok ? `${TT.copied} ✓` : TT.copyFail; share.classList.add('done');
     tm = setTimeout(() => { t.textContent = `🔗 ${TT.link}`; share.classList.remove('done'); }, 2200);
   };
   dots.onclick = () => setMenu(menu.hidden);
+  menu.addEventListener('keydown', (e) => {
+    const k = { ArrowDown: 1, ArrowUp: -1 }[e.key]; if (!k) return;
+    e.preventDefault(); const on = items.filter((b) => !b.disabled); const i = on.indexOf(document.activeElement);
+    on[(i + k + on.length) % on.length]?.focus();
+  });
+  box.addEventListener('focusout', (e) => { if (!menu.hidden && !box.contains(e.relatedTarget)) setMenu(false); });
   box.querySelector('#tripRotate').onclick = async () => { setMenu(false); if (confirm('Старая ссылка перестанет открываться. Выдать новую?')) await shareClient(cid, 'rotate'); paint(); };
   box.querySelector('#tripRevoke').onclick = async () => { setMenu(false); if (confirm('Гость больше не сможет открыть путеводитель по этой ссылке. Закрыть доступ?')) { await shareClient(cid, 'off'); paint(); } };
   const away = (e) => { if (!form.isConnected) { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc2, true); return; } if (!menu.hidden && !box.contains(e.target)) setMenu(false); };
