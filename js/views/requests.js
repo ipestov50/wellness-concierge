@@ -15,7 +15,7 @@ import { backupDue, daysSinceBackup } from '../backup.js';
 import { columns, statusLabel, isClosed, effectiveStatus, KINDS } from '../statuses.js';
 import { esc, fmtDeadline, fmtMoney, toast, field, options, openModal } from '../ui.js';
 import { state, byId, save, remove, updateWhere } from '../data.js';
-import { ui, render, registerView } from '../router.js';
+import { ui, render, smoothRender, registerView } from '../router.js';
 import { editRequest } from '../lazy.js';
 
 const isLate = (r) => r.deadline && !isClosed(r.status) && new Date(r.deadline) < new Date();
@@ -255,9 +255,9 @@ function view(app) {
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;
     try { localStorage.setItem('reqView', ui.reqView); } catch {}
-    render();
+    smoothRender();
   });
-  app.querySelector('[data-arc-toggle]')?.addEventListener('click', () => { ui.reqView = arc ? 'board' : 'archive'; render(); scrollTo(0, 0); });
+  app.querySelector('[data-arc-toggle]')?.addEventListener('click', () => { ui.reqView = arc ? 'board' : 'archive'; smoothRender(); scrollTo(0, 0); });
   if (board && !arc) enableDrag(app.querySelector('#board'));
   if (cal && cal$) cal$.bindCalendar(app);
   if (myday) bindDay(app);

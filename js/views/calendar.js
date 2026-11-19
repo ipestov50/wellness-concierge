@@ -2,7 +2,7 @@
 import { CATEGORIES, URGENCY_LABEL, TZ } from '../const.js';
 import { esc, avatar, toast, fromParisInput, tzBadge } from '../ui.js';
 import { state, byId, save } from '../data.js';
-import { ui, render } from '../router.js';
+import { ui, render, smoothRender } from '../router.js';
 import { isClosed, statusLabel, effectiveStatus, statusOf } from '../statuses.js';
 import { birthdayInfo } from '../birthday.js';
 import { editRequest } from '../lazy.js';
@@ -247,7 +247,7 @@ export function calendarView(list) {
 export function bindCalendar(app) {
   const cal = app.querySelector('.cal');
   if (!cal) return;
-  const go = (patch) => { Object.assign(ui, patch); render(); };
+  const go = (patch) => { Object.assign(ui, patch); smoothRender(); };
   cal.querySelectorAll('[data-calmode]').forEach((b) => b.onclick = () => go({ calMode: b.dataset.calmode }));
   cal.querySelector('[data-caltoday]').onclick = () => go({ calDate: todayParis() });
   cal.querySelectorAll('[data-calnav]').forEach((b) => b.onclick = () => {

@@ -1,7 +1,7 @@
 import { getSupabase } from './supabase.js';
 import { esc, $, toast, closeModal } from './ui.js';
 import { state, onChange, loadAll, startRealtime, stopRealtime } from './data.js';
-import { ui, render, registerLazy, viewSkeleton } from './router.js';
+import { ui, render, smoothRender, registerLazy, viewSkeleton } from './router.js';
 import { editRequest, editClient, editPartner } from './lazy.js';
 import { openBackup, setLastBackupFromSession } from './backup.js';
 import { clearCache } from './api.js';
@@ -160,7 +160,7 @@ document.addEventListener('click', (e) => {
   const menu = $('#menuList');
   if (menu && !menu.hidden && !e.target.closest('.menu')) { menu.hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); }
   if (!t) return;
-  if (t.dataset.tab) { ui.tab = t.dataset.tab; ui.q = ''; render(); scrollTo(0, 0); }
+  if (t.dataset.tab) { ui.tab = t.dataset.tab; ui.q = ''; smoothRender(); scrollTo(0, 0); }
   else if (t.dataset.req) editRequest(t.dataset.req);
   else if (t.dataset.cl) { if (ui.client !== t.dataset.cl) ui.ctab = 'overview'; ui.client = t.dataset.cl; render(); if (matchMedia('(max-width: 760px)').matches) scrollTo(0, 0); }
   else if (t.dataset.newreq) editRequest(null, t.dataset.newreq);

@@ -56,6 +56,13 @@ export function render() {
 
 let lastKey = '', enterTimer;
 
+// плавная смена экрана: старый и новый вид перетекают друг в друга (если браузер умеет), иначе обычная перерисовка
+export function smoothRender() {
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!document.startViewTransition || calm) { render(); return; }
+  try { document.startViewTransition(() => render()); } catch { render(); }
+}
+
 // скользящая подложка под выбранной вкладкой
 const lastSel = {};
 export function updateGliders() {

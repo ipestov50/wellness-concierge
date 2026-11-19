@@ -360,8 +360,9 @@ body { background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in
 /* ---------- появление ---------- */
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .enter :is(.hero, .tgroup, .trow-wrap, .card-wrap, .row, .pcard, .panel) {
-  animation: rise .45s var(--ease) both; animation-delay: calc(var(--i, 0) * 32ms);
+  animation: riseSoft .6s cubic-bezier(.22, 1, .36, 1) both; animation-delay: calc(var(--i, 0) * 28ms);
 }
+@keyframes riseSoft { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ---------- галочка «Сделано» ---------- */
 
@@ -3254,3 +3255,9 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
   .ov.tp .foot #ok { flex: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .ov.tp .dlg, .ov.tp .seg-panel:not([hidden]) { animation: none; } .ov.tp * { transition: none !important; } }
+
+/* Плавная смена экранов: перетекание вида, шапка и меню остаются на месте */
+#app { view-transition-name: app; }
+::view-transition-group(app) { animation-duration: .5s; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-old(app), ::view-transition-new(app) { animation-duration: .5s; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(app), ::view-transition-old(app), ::view-transition-new(app) { animation: none; } }
