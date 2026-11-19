@@ -89,9 +89,10 @@ export default async function handler(req, res) {
     const due = s.due_at ? new Date(s.due_at).toISOString().slice(0, 10) : null;
     // гость сам рядом с близким в эту дату? Только тогда его привычки и поездка имеют значение для повода
     const low = (v) => String(v || '').toLowerCase();
-    const together = !person || trips.some((x) => due && x.start_date <= due && due <= (x.end_date || x.start_date)
-      && [person.role, (person.name || '').split(/\s+/)[0]].filter(Boolean).some((w) => low(x.companions).includes(low(w))));
-    const forOther = !!person && !together;
+    const together = (rkind !== 'person' ? true : !!person) && (!person || trips.some((x) => due && x.start_date <= due && due <= (x.end_date || x.start_date)
+      && [person.role, (person.name || '').split(/\s+/)[0]].filter(Boolean).some((w) => low(x.companions).includes(low(w)))));
+    // близкий не найден в people (удалён) — клиента рядом не считаем, его вкусы не переносим
+    const forOther = rkind === 'person' && !together;
     const stop = {
       гость: [...(c?.allergies || []), ...(c?.diet || []), ...(c?.health || [])],
       ...(person ? { получатель: person.allergies || [] } : {}),
@@ -103,7 +104,7 @@ export default async function handler(req, res) {
     const ctx = {
       сейчас_по_Парижу: now,
       повод: { тип: s.kind, суть: scrub(s.reason), к_дате: s.due_at ? new Date(s.due_at).toLocaleString('sv-SE', { timeZone: TZ }).slice(0, 16) : null },
-      получатель_повода: rkind === 'person' ? { кто: person ? `близкий клиента: ${person.role || 'роль не указана'}` : 'близкий клиента', аллергии: person?.allergies || [], что_известно: person?.notes || null, клиент_рядом_в_эту_дату: together }
+      получатель_повода: rkind === 'person' ? { кто: person ? `близкий клиента: ${person.role || 'роль не указана'}` : 'близкий клиента', аллергии: person?.allergies || [], что_известно: scrub(person?.notes) || null, клиент_рядом_в_эту_дату: together }
         : rkind === 'date' ? { кто: 'памятная дата клиента', что: scrub(s.title.replace(/^\S+\s/, '')) } : rkind === 'self' ? { кто: 'сам VIP-клиент' } : null,
       стоп_лист: stop,
       vip_клиент: c && (forOther
@@ -115,7 +116,7 @@ export default async function handler(req, res) {
           еда: c.pref_food, спа: c.pref_spa, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits,
         }),
       поездка: !forOther && t && {
-        город: t.city, страна: t.country, отель: t.hotel, заезд: t.start_date, выезд: t.end_date, с_кем: t.companions,
+        город: t.city, страна: t.country, отель: t.hotel, заезд: t.start_date, выезд: t.end_date, с_кем: scrub(t.companions),
         прилёт: t.flight_in_at ? new Date(t.flight_in_at).toLocaleString('sv-SE', { timeZone: TZ }).slice(0, 16) + (t.flight_in ? ' ' + t.flight_in : '') : null,
         вылет: t.flight_out_at ? new Date(t.flight_out_at).toLocaleString('sv-SE', { timeZone: TZ }).slice(0, 16) + (t.flight_out ? ' ' + t.flight_out : '') : null,
       },
@@ -144,7 +145,7 @@ export default async function handler(req, res) {
 4. Задачи: 1–5, конкретные, со временем по Парижу (реалистично, в будущем), с партнёром из списка (его id), если подходит по типу и городу. Учитывай «уже_запланировано» и сроки бронирования из «условий» партнёров.
 5. Ничего не выдумывай о людях — только факты из данных.
 
-Задачи, alerts и совет — по-русски. Сообщение клиенту — на его языке (RU/EN/FR), 2–3 предложения, тепло и ненавязчиво, без смайликов, обращение {имя}. В сообщении не упоминай чужие медицинские данные.` }] },
+Задачи, alerts и совет — по-русски. Сообщение клиенту — на его языке (RU/EN/FR), как пишет личный консьерж Les Clefs d'Or или Aman: сдержанно, с предвосхищением, тепло и без спешки. 2–3 короткие фразы, как в WhatsApp: без канцелярита, без восклицаний, без смайликов и без слов «уважаемый», «предлагаем», «в рамках». Обращение — «{имя}» (или «Dear {имя}» для EN), без имени в конце. Пиши о том, что готов сделать консьерж и что уже учтено, а не пересказывай список задач. Если в стоп-листе есть риск для повода или поездки — назови его спокойно и однозначно, одной фразой и без паники, например: «учла, что без орехов» (RU) или «noted: no nuts» (EN). Чужие медицинские данные не упоминай.` }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify(ctx) }] }],
         generationConfig: { temperature: 0.35, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 1024 } },
       }),

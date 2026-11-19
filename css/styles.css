@@ -3037,3 +3037,10 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .jarvis-sg .sg-task :is(b, small, span) { text-decoration: none !important; }
 .jarvis-sg .sg-task, .jarvis-sg .sg-task > label > * { opacity: 1 !important; }
 .jarvis-sg .sg::before { display: none; }
+/* Jarvis-карточка: цели касания >= 44px на мобильных, без горизонтального переполнения */
+@media (max-width: 768px) {
+  .jarvis-sg .sg-pager button { width: 44px; height: 44px; }
+  .jarvis-sg .sg-actions .btn, .jarvis-sg .sg-copy, .jarvis-sg .sg-wa, .jarvis-sg .sg-all { min-height: 44px; }
+  .jarvis-sg .sg-task label { min-height: 44px; }
+  .jarvis-sg .sg-actions { max-width: 100%; }
+}
