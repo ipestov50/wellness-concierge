@@ -17,7 +17,7 @@ const COPY = {
   updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
   noteLabel: '✦ Заметка консьержа',
   arrive: 'Прилёт · {city}', depart: 'Вылет · {city}', checkInFrom: 'Заезд с {t}', bookingN: 'Бронь {ref}',
-  hotelLabel: 'Ваше проживание', copyAddr: 'Скопировать адрес', copiedAddr: 'Адрес скопирован',
+  hotelLabel: 'Ваше проживание', stayIn: 'Заезд', stayOut: 'Выезд', copyAddr: 'Скопировать адрес', copiedAddr: 'Адрес скопирован',
   copyAddrFail: 'Не удалось скопировать. Адрес можно выделить вручную', openMap: 'Открыть на карте ↗',
   routeMap: 'Маршрут на карте ↗', routeFrom: 'Откуда', routeTo: 'Куда', driver: 'Ваш водитель: {name}',
   guestsN: '{n} {w}', luggageN: '{n} {w} багажа', routeDesc: 'Маршрут: {a} → {b}',
@@ -246,23 +246,31 @@ function setDock() {
   dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Написать консьержу</a>`;
 }
 
-function hotelCard() {
+// проживание показываем только в день заезда и в день выезда (даты за пределами поездки прижимаются к её краям)
+function stayMode(date) {
+  const st = data.stay, ds = (data.days || []).map((d) => d.date).sort();
+  if (!st || !ds.length) return '';
+  const clamp = (x) => (x < ds[0] ? ds[0] : x > ds[ds.length - 1] ? ds[ds.length - 1] : x);
+  const inD = clamp(st.checkIn || ds[0]), outD = st.checkOut ? clamp(st.checkOut) : '';
+  return date === inD ? 'in' : outD && date === outD ? 'out' : '';
+}
+function hotelCard(mode) {
   const st = data.stay;
-  if (!st) return '';
+  if (!st || !mode) return '';
   const { name, address: addr } = st;
   const acts = [];
   if (addr) acts.push(`<button class="btn" type="button" data-copy="${esc(addr)}" data-label="${esc(COPY.copyAddr)}" data-live="${esc(COPY.copiedAddr)}" data-fail="${esc(COPY.copyAddrFail)}">${svg('copy')}<span>${esc(COPY.copyAddr)}</span></button>`);
   acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent((name + ' ' + addr).trim())}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.openMap)}</span></a>`);
   const pills = [];
   if (st.guests > 0) pills.push(fill(COPY.guestsN, { n: st.guests, w: plural(st.guests, GUEST_W) }));
-  if (st.checkInTime) pills.push(fill(COPY.checkInFrom, { t: st.checkInTime }));
+  if (mode === 'in' && st.checkInTime) pills.push(fill(COPY.checkInFrom, { t: st.checkInTime }));
   if (st.bookingReference) pills.push(fill(COPY.bookingN, { ref: st.bookingReference }));
   if (st.roomType) pills.push(st.roomType);
   if (st.checkIn && st.checkOut) pills.push(`${shortDate(st.checkIn)} – ${shortDate(st.checkOut)}`);
   else if (st.checkIn || st.checkOut) pills.push(shortDate(st.checkIn || st.checkOut));
   const note = st.note ? `<div class="note"><span class="nl">${esc(COPY.noteLabel)}</span><p>${esc(st.note)}</p></div>` : '';
   return `<section class="card stay" aria-label="${esc(COPY.hotelLabel)}">
-    <div class="top"><div class="ico">${svg('Hotel')}</div><div class="cat stay-l">${esc(COPY.hotelLabel)}</div>
+    <div class="top"><div class="ico">${svg('Hotel')}</div><div class="cat stay-l">${esc(COPY.hotelLabel)} · ${esc(mode === 'in' ? COPY.stayIn : COPY.stayOut)}</div>
     <h2 class="title">${esc(name)}</h2>${addr ? `<p class="venue">${esc(addr)}</p>` : ''}
     ${pills.length ? `<div class="meta stay-meta">${pills.map((x) => `<span class="pill tnum">${esc(x)}</span>`).join('')}</div>` : ''}</div>
     <div class="perf"></div><div class="bot">${note}<div class="acts">${acts.join('')}</div></div></section>`;
@@ -347,8 +355,8 @@ function renderDay() {
   panel.setAttribute('aria-labelledby', 't-' + activeDate);
   const items = day ? day.items || [] : [];
   // перелёты — якорь дня и идут первыми; карточка проживания — сразу после них
-  const nA = items.filter(isAnchor).length, cards = items.map((it, i) => card(it, i, activeDate));
-  panel.innerHTML = items.length ? cards.slice(0, nA).join('') + hotelCard() + cards.slice(nA).join('') : hotelCard() + `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
+  const hc = hotelCard(stayMode(activeDate)), nA = items.filter(isAnchor).length, cards = items.map((it, i) => card(it, i, activeDate));
+  panel.innerHTML = items.length ? cards.slice(0, nA).join('') + hc + cards.slice(nA).join('') : hc + `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
   panel.onclick = (e) => { const c = e.target.closest('.card'); if (c && c.dataset.sig && badgeSet.has(c.dataset.sig)) { const it = items.find((x) => sigOf(activeDate, x) === c.dataset.sig); dropBadge(c.dataset.sig, it && dkey(c.dataset.sig, it)); } };
   panel.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
 }
