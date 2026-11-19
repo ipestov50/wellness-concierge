@@ -272,6 +272,10 @@ export function editRequest(id, presetClient, preset = {}) {
       <button type="button" class="rq-pill${r.original_message ? ' gone' : ''}" data-unfold="original_message">＋ Исходное сообщение</button></div>` +
     `<div class="rq-fold${r.clarifying_questions ? ' open' : ''}" data-fold="clarifying_questions"><div>${field('clarifying_questions', 'Что уточнить у гостя', area('clarifying_questions', r.clarifying_questions, 'rows="2"'))}</div></div>` +
     `<div class="rq-fold${r.original_message ? ' open' : ''}" data-fold="original_message"><div>${field('original_message', 'Исходное сообщение гостя', area('original_message', r.original_message, 'rows="2"'))}</div></div>` +
+    `<details class="rq-forguest"${r.guest_visible || r.booking_ref || r.dress_code || r.guest_note ? ' open' : ''}><summary>Для гостя</summary>` +
+    `<div class="checks">${check('guest_visible', 'Показать в путеводителе гостя', r.guest_visible)}</div>` +
+    `<div class="f2">${field('booking_ref', 'Номер брони', input('booking_ref', r.booking_ref, 'type="text" autocomplete="off"'))}${field('dress_code', 'Дресс-код', input('dress_code', r.dress_code, 'type="text" placeholder="Smart casual"'))}</div>` +
+    field('guest_note', 'Заметка для гостя', area('guest_note', r.guest_note, 'rows="2" placeholder="Видит гость: что взять, как добраться"')) + `</details>` +
     `<div class="checks">${check('needs_approval', 'Нужно одобрение гостя', r.needs_approval)}` +
     `${check('needs_review', 'Нужна проверка', r.needs_review)}</div><small class="hint">«Нужна проверка» ставится сама, если бюджет больше 500.</small>`;
   const m = openModal({
@@ -297,6 +301,7 @@ export function editRequest(id, presetClient, preset = {}) {
         venue: (() => { try { return v.venue_json ? JSON.parse(v.venue_json) : null; } catch { return r.venue || null; } })(),
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
         needs_approval: v.needs_approval, needs_review: v.needs_review,
+        guest_visible: !!v.guest_visible, booking_ref: nul((v.booking_ref || '').trim()), dress_code: nul((v.dress_code || '').trim()), guest_note: nul((v.guest_note || '').trim()),
       });
       toast(id ? 'Запрос сохранён' : 'Запрос создан');
     },

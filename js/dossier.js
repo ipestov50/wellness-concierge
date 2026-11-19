@@ -1,7 +1,8 @@
 // Досье гостя: поездки, окружение, важные даты, «любит / избегает»
 import { TZ } from './const.js';
 import { esc, options, field, openModal, toast, toList, fromParisInput, toParisInput, initials } from './ui.js';
-import { state, byId, save, remove } from './data.js';
+import { state, byId, save, remove, patchLocal } from './data.js';
+import { getSupabase } from './supabase.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 import { birthdayField, birthdayValue, birthdayInfo } from './birthday.js';
 import { render } from './router.js';
@@ -39,6 +40,64 @@ export function fmtRange(t) {
 }
 export const fmtFlight = (iso) => (iso ? new Date(iso).toLocaleString('ru-RU', { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
+// ---------- ссылка для гостя ----------
+const waDigits = (v) => String(v || '').replace(/\D/g, '');
+async function ensureWhatsapp(sb) {
+  let { data: s } = await sb.from('app_settings').select('owner_id,portal_whatsapp').maybeSingle();
+  if (!s) ({ data: s } = await sb.from('app_settings').insert({}).select('owner_id,portal_whatsapp').single());
+  if (s?.portal_whatsapp || localStorage.getItem('portalWaAsked')) return;
+  await new Promise((done) => {
+    let saved = false;
+    const m = openModal({
+      title: 'WhatsApp консьержа',
+      body: field('portal_whatsapp', 'Номер для кнопки «Написать» у гостя', inp('portal_whatsapp', '', 'type="tel" inputmode="tel" placeholder="33612345678" autocomplete="off"'), 'Только цифры с кодом страны, 8–15 цифр. Можно оставить пустым.'),
+      saveLabel: 'Сохранить',
+      onSave: async (v) => {
+        const d = waDigits(v.portal_whatsapp);
+        if (d && (d.length < 8 || d.length > 15)) throw new Error('номер: от 8 до 15 цифр');
+        if (d) { const { error } = await sb.from('app_settings').update({ portal_whatsapp: d }).eq('owner_id', s.owner_id); if (error) throw error; }
+        saved = true;
+      },
+      onClose: () => { if (!saved) localStorage.setItem('portalWaAsked', '1'); done(); },
+    });
+    void m;
+  });
+}
+const portalUrl = (tok) => `${location.origin}/t/${tok}`;
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+export async function shareTrip(id) {
+  const t = state.trips.find((x) => x.id === id);
+  if (!t) return;
+  try {
+    const sb = await getSupabase();
+    let tok = t.share_token;
+    if (!tok) {
+      await ensureWhatsapp(sb);
+      const { data, error } = await sb.rpc('trip_share', { p_trip: id });
+      if (error) throw error;
+      tok = data;
+      patchLocal('trips', id, { share_token: tok });
+    }
+    if (!tok) throw new Error('нет ссылки');
+    toast((await copyText(portalUrl(tok))) ? 'Ссылка для гостя скопирована' : portalUrl(tok));
+  } catch (e) { toast('Не удалось создать ссылку: ' + (e.message || e)); }
+}
+export async function revokeTrip(id) {
+  try {
+    const sb = await getSupabase();
+    const { error } = await sb.rpc('trip_share', { p_trip: id, p_on: false });
+    if (error) throw error;
+    patchLocal('trips', id, { share_token: null });
+    toast('Ссылка отозвана');
+  } catch (e) { toast('Не удалось отозвать: ' + (e.message || e)); }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-trip-share]');
+  if (b) { e.preventDefault(); shareTrip(b.dataset.tripShare); }
+});
+
 export function tripCard(t, { showGuest = false } = {}) {
   const st = tripState(t);
   const c = byId('clients', t.client_id);
@@ -53,7 +112,7 @@ export function tripCard(t, { showGuest = false } = {}) {
       ${t.flight_out || t.flight_out_at ? `<span class="trip-line">🛫 ${esc(t.flight_out || '')}${t.flight_out_at ? ' · ' + esc(fmtFlight(t.flight_out_at)) : ''}${t.flight_out_delay ? ` <b class="delay">+${t.flight_out_delay} мин</b>` : ''}</span>` : ''}
       ${t.companions ? `<span class="trip-line">👥 ${esc(t.companions)}</span>` : ''}
     </span>
-  </button>${st.kind !== 'past' && (t.flight_in_at || t.flight_out_at) ? `<div class="trip-delays">${[['in', t.flight_in_at, '🛬'], ['out', t.flight_out_at, '🛫']].filter(([, a]) => a && Date.parse(a) > Date.now() - 6 * 36e5).map(([d, , ic]) => `<button type="button" class="trip-delay" data-flight-delay="${t.id}" data-dir="${d}">${ic} ⏱ ${t[`flight_${d}_delay`] ? `задержка +${t[`flight_${d}_delay`]} мин` : 'Задержка?'}</button>`).join('')}</div>` : ''}${showBrief ? `<button type="button" class="trip-brief" data-brief="${t.id}" title="Перед вылетом: погода, праздники, визы, оплата">✈️ Перед вылетом${t.brief ? '' : ' <i>✦</i>'}</button>` : ''}</div>`;
+  </button>${st.kind !== 'past' ? `<div class="trip-delays"><button type="button" class="trip-delay" data-trip-share="${t.id}">🔗 Ссылка для гостя</button></div>` : ''}${st.kind !== 'past' && (t.flight_in_at || t.flight_out_at) ? `<div class="trip-delays">${[['in', t.flight_in_at, '🛬'], ['out', t.flight_out_at, '🛫']].filter(([, a]) => a && Date.parse(a) > Date.now() - 6 * 36e5).map(([d, , ic]) => `<button type="button" class="trip-delay" data-flight-delay="${t.id}" data-dir="${d}">${ic} ⏱ ${t[`flight_${d}_delay`] ? `задержка +${t[`flight_${d}_delay`]} мин` : 'Задержка?'}</button>`).join('')}</div>` : ''}${showBrief ? `<button type="button" class="trip-brief" data-brief="${t.id}" title="Перед вылетом: погода, праздники, визы, оплата">✈️ Перед вылетом${t.brief ? '' : ' <i>✦</i>'}</button>` : ''}</div>`;
 }
 
 const guestOptions = () => [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((c) => [c.id, (c.vip ? '★ ' : '') + c.name]);
@@ -75,7 +134,8 @@ export function editTrip(id, clientId) {
     `<div class="f2">${field('flight_out', 'Рейс обратно', inp('flight_out', t.flight_out, 'type="text" placeholder="AF 1146" autocapitalize="characters"'))}` +
     field('flight_out_at', 'Вылет (время Парижа)', deadlinePicker(t.flight_out_at, 'flight_out_at', { empty: 'Не указано', quick: false })) + '</div>' +
     field('companions', 'С кем', inp('companions', t.companions, 'type="text" placeholder="муж, двое детей, няня"')) +
-    field('notes', 'Заметки', `<textarea id="f-notes" name="notes" rows="2">${esc(t.notes)}</textarea>`);
+    field('notes', 'Заметки', `<textarea id="f-notes" name="notes" rows="2">${esc(t.notes)}</textarea>`) +
+    (id ? `<h3 class="form-sec">Путеводитель гостя</h3><div class="trip-delays"><button type="button" class="btn small" id="tripShare">🔗 Ссылка для гостя</button>${t.share_token ? '<button type="button" class="trip-delay" id="tripRevoke">Отозвать ссылку</button>' : ''}</div><small class="hint">Гость увидит только отмеченные «для гостя» запросы, рейсы и отель.</small>` : '');
   const m = openModal({
     title: id ? 'Поездка' : 'Новая поездка',
     body,
@@ -97,6 +157,15 @@ export function editTrip(id, clientId) {
     onDelete: id ? async () => { await remove('trips', id); toast('Поездка удалена'); } : null,
   });
   bindDeadlinePicker(m.form);
+  m.form.querySelector('#tripShare')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; await shareTrip(id); e.target.disabled = false;
+    if (state.trips.find((x) => x.id === id)?.share_token && !m.form.querySelector('#tripRevoke')) {
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'trip-delay'; r.id = 'tripRevoke'; r.textContent = 'Отозвать ссылку';
+      e.target.after(r); r.addEventListener('click', revoke);
+    }
+  });
+  const revoke = async () => { await revokeTrip(id); m.form.querySelector('#tripRevoke')?.remove(); };
+  m.form.querySelector('#tripRevoke')?.addEventListener('click', revoke);
 }
 
 // ---------- окружение ----------
