@@ -131,7 +131,7 @@ export function editTrip(id, clientId) {
     `<div class="f2 tm-grid">${field('city', 'Город', inp('city', t.city, 'type="text" required placeholder="Куршевель"'))}${field('country', 'Страна', inp('country', t.country, 'type="text" placeholder="Франция"'))}</div>` +
     `<div class="f2 tm-dates">${field('start', 'Заезд', deadlinePicker(t.start_date ? t.start_date + 'T12:00:00Z' : null, 'start', { dateOnly: true, empty: 'Не указан', quick: false }))}` +
     field('end', 'Выезд', deadlinePicker(t.end_date ? t.end_date + 'T12:00:00Z' : null, 'end', { dateOnly: true, empty: 'Не указан', quick: false })) + '</div>' +
-    `<div class="seg" role="tablist" aria-label="${esc(TT.tabs)}">${segBtn('stay', TT.stay, true)}${segBtn('fl', TT.fl, false)}${segBtn('nt', TT.nt, false)}</div>` +
+    `<div class="tseg" role="tablist" aria-label="${esc(TT.tabs)}">${segBtn('stay', TT.stay, true)}${segBtn('fl', TT.fl, false)}${segBtn('nt', TT.nt, false)}</div>` +
     `<section class="seg-panel" role="tabpanel" id="tp-stay" aria-labelledby="tt-stay"><small class="hint">${esc(AC.hint)}</small>` +
     field('ac_name', AC.name, inp('ac_name', ac.hotelName || t.hotel, `type="text" autocomplete="off" placeholder="${esc(AC.namePh)}"`)) +
     field('ac_addr', AC.addr, inp('ac_addr', ac.hotelAddress || t.hotel_address, `type="text" autocomplete="street-address" placeholder="${esc(AC.addrPh)}"`)) +
@@ -185,7 +185,7 @@ export function editTrip(id, clientId) {
 // вкладки: все поля остаются в форме, «Сохранить» сохраняет всё сразу
 const grow = (ta) => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 56), 260) + 'px'; };
 function wireTripTabs(form) {
-  const tabs = [...form.querySelectorAll('.seg [role=tab]')];
+  const tabs = [...form.querySelectorAll('.tseg [role=tab]')];
   const show = (tab, focus) => { tabs.forEach((b) => {
     const on = b === tab;
     b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;

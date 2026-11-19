@@ -3133,14 +3133,14 @@ select.flash { animation: flash-ring 1s var(--ease); }
 .tr-menu button:hover:not(:disabled) { background: #F5F1EB; }
 .tr-menu button.danger { color: #C85A48; }
 .tr-menu button:disabled { opacity: .4; cursor: default; }
-.tr-link:focus-visible, .tr-dots:focus-visible, .tr-menu button:focus-visible, .seg button:focus-visible { outline: 2px solid #265D56; outline-offset: 2px; }
+.tr-link:focus-visible, .tr-dots:focus-visible, .tr-menu button:focus-visible, .tseg button:focus-visible { outline: 2px solid #265D56; outline-offset: 2px; }
 .tm-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .tm-dates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
 .tm-fl { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 @media (max-width: 479px) { .tm-grid, .tm-fl { grid-template-columns: 1fr; } .tr-link-t { font-size: 12.5px; } .tr-link { padding: 0 10px; } }
-.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin: 6px 0 14px; background: #EFEAE1; border-radius: 14px; }
-.seg button { position: relative; min-height: 44px; padding: 0 8px; border: 0; border-radius: 11px; background: transparent; color: #6B625B; font: 600 13.5px/1 inherit; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
-.seg button[aria-selected="true"] { background: #fff; color: #2C2520; box-shadow: 0 1px 2px rgba(44,37,32,.12), 0 2px 8px rgba(44,37,32,.06); }
+.tseg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin: 6px 0 14px; background: #EFEAE1; border-radius: 14px; }
+.tseg button { position: relative; min-height: 44px; padding: 0 8px; border: 0; border-radius: 11px; background: transparent; color: #6B625B; font: 600 13.5px/1 inherit; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+.tseg button[aria-selected="true"] { background: #fff; color: #2C2520; box-shadow: 0 1px 2px rgba(44,37,32,.12), 0 2px 8px rgba(44,37,32,.06); }
 .seg-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: #B89356; vertical-align: middle; }
 .seg-dot[hidden] { display: none; }
 .seg-panel[hidden] { display: none; }
@@ -3150,7 +3150,7 @@ select.flash { animation: flash-ring 1s var(--ease); }
 textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing: border-box; }
 .seg-linked { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EFEAE1; color: #6B625B; font-size: 13px; }
 .seg-linked b { color: #2C2520; font-weight: 600; }
-@media (prefers-reduced-motion: reduce) { .seg button, .tr-link { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .tseg button, .tr-link { transition: none; } }
 .dlg-head .icon-btn { min-width: 44px; min-height: 44px; }
 
 /* ════════ Окно «Поездка»: Warm Editorial, тональные слои вместо рамок ════════ */
@@ -3212,9 +3212,9 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .ov.tp .chip-btn { background: var(--tp-well); border-color: transparent; }
 
 /* сегменты: рельс-«колодец» и белая таблетка */
-.ov.tp .seg { gap: 2px; padding: 4px; margin: 0 0 18px; background: var(--tp-well); border-radius: 999px; }
-.ov.tp .seg button { min-height: 44px; border-radius: 999px; color: var(--tp-mut); font-size: 13.5px; font-weight: 600; letter-spacing: .01em; transition: background .35s var(--tp-out), color .25s, box-shadow .35s var(--tp-out); }
-.ov.tp .seg button[aria-selected="true"] { background: var(--tp-card); color: var(--tp-ink); box-shadow: 0 1px 1px rgba(44,37,32,.06), 0 4px 12px -4px rgba(44,37,32,.18); }
+.ov.tp .tseg { gap: 2px; padding: 4px; margin: 0 0 18px; background: var(--tp-well); border-radius: 999px; }
+.ov.tp .tseg button { min-height: 44px; border-radius: 999px; color: var(--tp-mut); font-size: 13.5px; font-weight: 600; letter-spacing: .01em; transition: background .35s var(--tp-out), color .25s, box-shadow .35s var(--tp-out); }
+.ov.tp .tseg button[aria-selected="true"] { background: var(--tp-card); color: var(--tp-ink); box-shadow: 0 1px 1px rgba(44,37,32,.06), 0 4px 12px -4px rgba(44,37,32,.18); }
 .ov.tp .seg-dot { background: var(--tp-gold); }
 .ov.tp .seg-panel:not([hidden]) { animation: tpFade .25s var(--tp-out) both; }
 .ov.tp .seg-sub { margin: 4px 0 10px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
