@@ -11,7 +11,7 @@ const inp = (n, v, a = '') => `<input id="f-${n}" name="${n}" value="${esc(v)}" 
 const area = (n, v, a = '') => `<textarea id="f-${n}" name="${n}" rows="2" ${a}>${esc(v)}</textarea>`;
 const fld = (id, label, control, hint = '', cls = '') => `<div class="f ${cls}"><label for="${id}">${esc(label)}</label>${control}${hint ? `<small>${esc(hint)}</small>` : ''}</div>`;
 const SHELVES = [
-  ['safe', '🛡️', 'Безопасность', 'Безопасность и ограничения'],
+  ['safe', '🛡️', 'Ограничения', 'Ограничения'],
   ['taste', '✦', 'Вкусы', 'Вкусы и атмосфера'],
   ['road', '✈️', 'В пути', 'Транспорт и привычки'],
   ['reach', '📞', 'Связь', 'Контакты и связь'],

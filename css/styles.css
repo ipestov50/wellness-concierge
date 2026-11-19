@@ -3366,3 +3366,32 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
   .cseg-ico { font-size: 17px; }
 }
 @media (prefers-reduced-motion: reduce) { .cseg-ind, .cl-panel:not([hidden]), .chip { animation: none; transition: none; } }
+
+/* «Клиент»: просторные поля — больше воздуха, крупнее текст, ничего не нужно разглядывать */
+.ov.cl .dlg { max-width: 960px; padding: 32px 44px 26px; }
+.ov.cl .dlg-head { margin-bottom: 22px; }
+.ov.cl .cl-scroll { margin: 0 -14px; padding: 4px 14px 10px; }
+.ov.cl .cl-grid { gap: 0 28px; }
+.ov.cl .cl-grid .f { margin-bottom: 24px; }
+.ov.cl .cl-h { margin: 4px 0 22px; font-size: 26px; }
+.ov.cl .f > label { margin-bottom: 9px; font-size: 11.5px; letter-spacing: .1em; color: var(--tp-ink); opacity: .72; }
+.ov.cl .cl-grid textarea { min-height: 118px; max-height: 280px; padding: 16px 18px; font-size: 16.5px; line-height: 1.5; border-radius: 16px; }
+.ov.cl .cl-grid input[type=text], .ov.cl .cl-grid input[type=tel], .ov.cl .cl-grid input[type=email], .ov.cl .cl-grid input[type=date] { min-height: 56px; padding: 0 18px; font-size: 16.5px; border-radius: 16px; }
+.ov.cl .cl-grid .chip-box { min-height: 118px; align-content: flex-start; padding: 14px 16px; gap: 8px; border-radius: 16px; }
+.ov.cl .cl-grid .chip { min-height: 36px; padding: 0 6px 0 14px; font-size: 15px; }
+.ov.cl .chip-box .chip-in { min-height: 36px; font-size: 16.5px; }
+.ov.cl .cl-grid .lc-today { min-height: 56px; }
+.ov.cl .cl-grid .f small { margin-top: 8px; font-size: 12.5px; }
+.ov.cl .cl-row { gap: 16px; margin-bottom: 18px; }
+.ov.cl .cl-row input[type=text], .ov.cl .cl-row select { min-height: 52px; font-size: 16.5px; border-radius: 15px; }
+.ov.cl .vip-pill span { min-height: 52px; }
+.ov.cl .cseg { margin: 8px 0 24px; padding: 5px; }
+.ov.cl .cseg-ind { top: 5px; bottom: 5px; left: 5px; width: calc((100% - 16px) / 4); }
+.ov.cl .cseg button { min-height: 50px; font-size: 14.5px; }
+@media (max-width: 767px) {
+  .ov.cl .dlg { padding: 22px 18px calc(16px + env(safe-area-inset-bottom)); }
+  .ov.cl .cl-grid .f { margin-bottom: 20px; }
+  .ov.cl .cl-grid textarea { min-height: 104px; }
+  .ov.cl .cl-grid .chip-box { min-height: 96px; }
+  .ov.cl .cl-h { font-size: 24px; }
+}
