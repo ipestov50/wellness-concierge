@@ -43,8 +43,8 @@ const when = (row) => { try { return new Intl.DateTimeFormat('ru-RU', { timeZone
 
 export function precheckBlock() {
   const rows = precheckRows();
-  if (!rows.length) return '';
   const now = Date.now();
+  if (!rows.length) return idleLine(now);
   return `<section class="pc" aria-label="Тихое подтверждение">
     <header class="pc-h"><span class="pc-dot" aria-hidden="true"></span><b>Тихое подтверждение</b><span class="pc-n tnum">${rows.length}</span></header>
     <ul class="pc-list">${rows.map((x) => {
@@ -57,6 +57,19 @@ export function precheckBlock() {
         <div class="pc-act"><button type="button" class="pc-b" data-pc="msg" data-id="${esc(r.id)}">💬 Проверить партнёра</button><button type="button" class="pc-b ok" data-pc="ok" data-id="${esc(r.id)}">✓ Подтверждено</button></div>
       </li>`;
     }).join('')}</ul></section>`;
+}
+
+// когда проверять нечего — тихая строка, чтобы было видно, что радар работает, и что у него на очереди
+function idleLine(now) {
+  const conf = state.requests.filter(isConfirmed);
+  const timed = conf.filter((r) => r.deadline && !dateOnly(r.deadline));
+  const next = timed.filter((r) => Date.parse(r.deadline) > now).sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))[0];
+  let tail = 'Подтверждённых запросов со временем пока нет';
+  if (next) {
+    const hrs = (Date.parse(next.deadline) - now) / 36e5, c = byId('clients', next.client_id);
+    tail = `Ближайшее: ${hrs < 48 ? `через ${Math.max(1, Math.round(hrs))} ч` : `через ${Math.round(hrs / 24)} дн.`} · ${esc(clean(c?.name) || next.summary)}`;
+  } else if (conf.length) tail = 'У подтверждённых запросов не указано время — радар их не видит';
+  return `<section class="pc idle" aria-label="Тихое подтверждение"><header class="pc-h"><span class="pc-dot" aria-hidden="true"></span><b>Тихое подтверждение</b><span class="pc-idle">Сейчас перепроверять нечего · ${tail}</span></header></section>`;
 }
 
 function messageFor(row) {
