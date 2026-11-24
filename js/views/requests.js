@@ -4,6 +4,7 @@ import { optionsBadge, openOptions } from '../options.js';
 import { birthdayInfo } from '../birthday.js';
 import { smartBar, bindSmart } from '../smart.js';
 import { suggestionsBlock, refreshSuggestions } from '../suggest.js';
+import { precheckBlock } from '../precheck.js';
 import { viewSkeleton } from '../router.js';
 // календарь — отдельный модуль, грузится при первом открытии
 let cal$ = null, calLoading = null;
@@ -249,8 +250,8 @@ function view(app) {
       ${board ? `<button type="button" class="btn small arc-btn${arc ? ' on' : ''}" data-arc-toggle aria-pressed="${arc}">${arc ? '← Доска' : `🗄 Архив${archivedN ? ' · ' + archivedN : ''}`}</button>` : ''}
     </div>`;
   app.innerHTML = myday
-    ? `<div class="stack daystack">${dayNotes()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
-    : `<div class="board-top">${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : arc ? (arc$ ? arc$.archiveView(list) : (loadArc(), viewSkeleton())) : boardView(list.filter((r) => !r.archived_at))}`;
+    ? `<div class="stack daystack">${dayNotes()}${precheckBlock()}${suggestionsBlock()}${smartBar()}${toolbar}${dayView()}</div>`
+    : `<div class="board-top">${precheckBlock()}${smartBar()}${toolbar}</div>${cal ? (cal$ ? cal$.calendarView(list) : (loadCal(), viewSkeleton())) : arc ? (arc$ ? arc$.archiveView(list) : (loadArc(), viewSkeleton())) : boardView(list.filter((r) => !r.archived_at))}`;
   if (myday) refreshSuggestions();
   app.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
     ui.reqView = b.dataset.view;

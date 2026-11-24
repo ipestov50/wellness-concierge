@@ -3395,3 +3395,64 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
   .ov.cl .cl-grid .chip-box { min-height: 96px; }
   .ov.cl .cl-h { font-size: 24px; }
 }
+
+/* ════════ «Тихое подтверждение» и «План Б» ════════ */
+.pc { --pc-gold: #B89356; --pc-risk: #C85A48; margin: 0 0 18px; padding: 4px 4px 2px; }
+.pc-h { display: flex; align-items: center; gap: 10px; padding: 0 4px 10px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.pc-h b { font-weight: 600; }
+.pc-n { margin-left: auto; padding: 3px 8px; border-radius: 999px; background: var(--soft); letter-spacing: 0; }
+.pc-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--pc-gold); }
+.pc-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: inherit; animation: pcBreath 2.4s cubic-bezier(.22,1,.36,1) infinite; }
+@keyframes pcBreath { 0% { transform: scale(1); opacity: .5; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+.pc-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: 18px; box-shadow: 0 1px 2px rgba(44,37,32,.05); overflow: hidden; }
+.pc-row { display: grid; grid-template-columns: 176px minmax(170px, 1fr) minmax(0, auto) auto; align-items: center; gap: 8px 18px; padding: 14px 18px; transition: height .4s cubic-bezier(.34,1.3,.64,1), opacity .25s, transform .4s cubic-bezier(.34,1.3,.64,1), padding .4s cubic-bezier(.34,1.3,.64,1); }
+.pc-row + .pc-row { border-top: 1px solid rgba(44,37,32,.08); }
+.pc-row.leaving { height: 0 !important; padding-top: 0; padding-bottom: 0; opacity: 0; transform: translateX(28px) scale(.985); overflow: hidden; border-width: 0; }
+.pc-when { display: grid; gap: 4px; }
+.pc-tag { font: 600 12px/1.2 var(--f-body); letter-spacing: .02em; color: var(--pc-gold); }
+.pc-row.T3 .pc-tag { color: var(--pc-risk); }
+.pc-cd { font: 500 22px/1 var(--f-head); letter-spacing: -.01em; color: var(--ink); }
+.pc-main { display: grid; gap: 3px; min-width: 0; }
+.pc-main b { font-size: 15.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-main span { font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-main i { font-style: normal; color: var(--ink); font-weight: 600; }
+.pc-pills { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pc-pill { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--soft); color: var(--muted); font: 500 12.5px/1 var(--f-body); white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.pc-pill.risk { background: color-mix(in srgb, var(--pc-risk) 13%, transparent); color: var(--pc-risk); font-weight: 600; }
+.pc-pill.bk { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+.pc-pill.bk.add { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); cursor: pointer; transition: color .2s, box-shadow .2s; }
+.pc-pill.bk.add:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pc-act { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--soft); }
+.pc-b { min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: 600 13px/1 var(--f-body); cursor: pointer; white-space: nowrap; transition: background .3s cubic-bezier(.22,1,.36,1), color .2s, transform .15s; }
+.pc-b:active { transform: scale(.96); }
+.pc-b.done { color: var(--accent); }
+.pc-b.ok { background: var(--accent); color: var(--accent-ink); }
+.pc-b:focus-visible, .pc-pill.add:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 900px) {
+  .pc-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; }
+  .pc-when { grid-column: 1; } .pc-main { grid-column: 1 / -1; grid-row: 2; }
+  .pc-pills { grid-column: 1 / -1; justify-content: flex-start; }
+  .pc-act { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+  .pc-when { grid-template-columns: 1fr auto; align-items: baseline; grid-column: 1 / -1; }
+  .pc-b { min-height: 44px; } .pc-pill { min-height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .pc-dot::after { animation: none; } .pc-row, .pc-row.leaving { transition: none; } }
+
+/* «План Б» в форме запроса */
+.bk { margin: 0 0 14px; }
+.bk[hidden] { display: none; }
+.bk-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--soft); color: var(--muted); font: 600 13px/1 var(--f-body); cursor: pointer; transition: background .3s cubic-bezier(.22,1,.36,1), color .2s; }
+.bk-toggle:hover, .bk-toggle[aria-expanded="true"] { color: var(--accent); }
+.bk-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bk-fold { transition-duration: .45s, .3s; }
+.bk-box { display: grid; gap: 4px; padding: 14px 0 2px; }
+.bk-box .f { margin-bottom: 10px; }
+.bk-box input[type=text] { background: var(--soft); border-color: transparent; border-radius: 14px; box-shadow: none; transition: background .3s cubic-bezier(.22,1,.36,1), border-color .3s; }
+.bk-box input[type=text]:focus { background: var(--surface); border-color: var(--accent); outline: none; }
+.bk-jarvis { justify-self: start; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font: 600 13px/1 var(--f-body); cursor: pointer; transition: background .3s, transform .15s; }
+.bk-jarvis:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.bk-jarvis:disabled { opacity: .7; cursor: default; }
+.bk-jarvis:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bk.pulse .bk-box { animation: bkPulse .9s cubic-bezier(.22,1,.36,1); border-radius: 14px; }
+@keyframes bkPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@media (prefers-reduced-motion: reduce) { .bk.pulse .bk-box { animation: none; } }

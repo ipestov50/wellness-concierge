@@ -99,6 +99,40 @@ const AC = {
   hotelPh: 'Название отеля', addrPh: 'Улица, город', roomPh: 'Например, люкс', needHotel: 'Чтобы сохранить проживание, укажите отель и адрес', legacy: 'Отель и адрес можно добавить позже. Когда они появятся, гость увидит их в путеводителе',
   sync: 'Когда запрос отмечен «Выполнено» или «Подтверждено», данные обновят блок «Проживание» в поездке гостя',
 };
+// «План Б»: выезжающий блок и подбор запасного места Jarvis (с учётом стоп-листа гостя — это делает сервер)
+const BK_WORD = { 'Spa & Wellness': 'спа', Dining: 'ресторан', Transport: 'трансфер с водителем', Activities: 'активность', 'Health & Fitness': 'клиника или фитнес' };
+function bindBackup(form) {
+  const wrap = form.querySelector('#bk'); if (!wrap) return;
+  const fold = wrap.querySelector('#bk-fold'), tog = wrap.querySelector('#bk-toggle'), jv = wrap.querySelector('#bk-jarvis');
+  const names = ['backup_venue', 'backup_address', 'backup_contact', 'backup_notes'];
+  const set = (open) => { fold.classList.toggle('open', open); fold.inert = !open; tog.setAttribute('aria-expanded', String(open)); tog.querySelector('.bk-ico').textContent = open ? '🛡️' : '＋'; tog.querySelector('.bk-t').textContent = open ? BK.title : BK.open; };
+  tog.addEventListener('click', () => set(!fold.classList.contains('open')));
+  const filled = () => names.some((n) => form[n].value.trim());
+  form.category.addEventListener('change', () => { wrap.hidden = !(BK_CATS.includes(form.category.value) || filled()); });
+  jv.addEventListener('click', async () => {
+    const cid = form.client_id.value, cat = form.category.value;
+    const t = tpResolve(form), c = cid && cid !== '__new' ? byId('clients', cid) : null;
+    const city = (t && t.city) || c?.city || '';
+    const main = (() => { try { return (JSON.parse(form.venue_json?.value || 'null') || {}).name || ''; } catch { return ''; } })() || form.partner_id?.selectedOptions?.[0]?.text?.split(' · ')[0] || '';
+    const q = `${BK_WORD[cat] || ''} ${form.summary.value.trim()} — запасной вариант`.trim();
+    jv.disabled = true; const label = jv.textContent; jv.textContent = BK.busy;
+    try {
+      const { api } = await import('./api.js');
+      const out = await api('concierge-search', { query: q, category: 'venues', city, date_from: (form.deadline?.value || '').slice(0, 10) || null, client_id: c ? c.id : null });
+      const lc = (x) => String(x || '').toLowerCase();
+      const pick = (out.results || []).find((x) => x.title && lc(x.title) !== lc(main));
+      if (!pick) { toast(BK.none); return; }
+      form.backup_venue.value = pick.title || '';
+      form.backup_address.value = pick.addressOrVenue || '';
+      form.backup_contact.value = pick.contact || '';
+      set(true);
+      wrap.classList.remove('pulse'); void wrap.offsetWidth; wrap.classList.add('pulse');
+      toast(BK.done);
+    } catch (e) { toast(e.message === 'rate_limited' ? 'Лимит поиска исчерпан — чуть позже' : BK.fail); }
+    finally { jv.disabled = false; jv.textContent = label; }
+  });
+}
+
 // Тексты привязки к поездке
 const TP = { pill: 'Поездка', change: 'изменить', auto: 'Автоматически', none: 'Без поездки', label: 'Поездка гостя' };
 const tpDates = (t) => { const f = (d) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '') : ''); const a = f(t.start_date), b = f(t.end_date); return a && b && a !== b ? a + '–' + b : a || b; };
@@ -126,6 +160,18 @@ const accBlock = (a, open) => `<div class="rq-fold tr-fold${open ? ' open' : ''}
   ${field('ac_addr', AC.addr, input('ac_addr', a.hotelAddress, `type="text" aria-required="true" autocomplete="off" enterkeyhint="next" placeholder="${esc(AC.addrPh)}"`))}<small class="hint" id="ac-hint" hidden>${esc(AC.legacy)}</small><small class="hint ac-sync">${esc(AC.sync)}</small>
   <div class="tr-steps">${stepper('ac_guests', AC.guests, a.guestsCount || 1, 1)}</div>
   <div class="tr-steps ac-pair">${field('ac_checkin', AC.checkin, timeField('ac_checkin', a.checkInTime))}${field('ac_room', AC.room, input('ac_room', a.roomType, `type="text" autocomplete="off" placeholder="${esc(AC.roomPh)}"`))}</div></div></div></div>`;
+// «План Б»: запасной вариант на случай, если основной сорвётся (только для владельца, гостю не показывается)
+const BK_CATS = ['Spa & Wellness', 'Dining', 'Transport', 'Activities', 'Health & Fitness'];
+const BK = { open: '＋ План Б (запасной вариант)', title: 'План Б', venue: 'Запасное место / партнёр', addr: 'Адрес', contact: 'Контакт / телефон партнёра', notes: 'Условия перехвата', notesPh: 'Держат слот без предоплаты до 15:00', venuePh: 'Название места', jarvis: '✦ Подобрать План Б (Jarvis)', busy: 'Jarvis ищет…', none: 'Jarvis не нашёл подходящего запасного места', done: 'План Б подобран', fail: 'Не удалось подобрать — попробуйте ещё раз' };
+const hasBk = (r) => !!(r.backup_venue || r.backup_address || r.backup_contact || r.backup_notes);
+const bkBlock = (r, show, open) => `<div class="bk" id="bk"${show ? '' : ' hidden'}>
+  <button type="button" class="bk-toggle" id="bk-toggle" aria-expanded="${open}" aria-controls="bk-fold"><span class="bk-ico" aria-hidden="true">${open ? '🛡️' : '＋'}</span><span class="bk-t">${open ? esc(BK.title) : esc(BK.open)}</span></button>
+  <div class="rq-fold tr-fold bk-fold${open ? ' open' : ''}" id="bk-fold"${open ? '' : ' inert'}><div><div class="bk-box">
+    ${field('backup_venue', BK.venue, input('backup_venue', r.backup_venue, `type="text" autocomplete="off" placeholder="${esc(BK.venuePh)}"`))}
+    ${field('backup_address', BK.addr, input('backup_address', r.backup_address, 'type="text" autocomplete="off"'))}
+    <div class="f2">${field('backup_contact', BK.contact, input('backup_contact', r.backup_contact, 'type="text" autocomplete="off" inputmode="tel"'))}${field('backup_notes', BK.notes, input('backup_notes', r.backup_notes, `type="text" autocomplete="off" placeholder="${esc(BK.notesPh)}"`))}</div>
+    <button type="button" class="bk-jarvis" id="bk-jarvis">${esc(BK.jarvis)}</button>
+  </div></div></div></div>`;
 const QUICK = [['Столик в ресторане', 'Dining'], ['Трансфер', 'Transport'], ['Спа на двоих', 'Spa & Wellness'], ['Бронь отеля', 'Accommodation'], ['Подарок', 'Gifts & Events']];
 
 // капсула гостя: имя, живое время, стоп-лист — раскрывается при выборе
@@ -330,7 +376,7 @@ function bindRequestForm(form) {
   }
 }
 
-export function editRequest(id, presetClient, preset = {}) {
+export function editRequest(id, presetClient, preset = {}, opts = {}) {
   const ex = id ? byId('requests', id) : null;
   if (ex && !ex.checklist) {
     // запрос создан до появления чек-листов — собираем его сейчас
@@ -356,7 +402,7 @@ export function editRequest(id, presetClient, preset = {}) {
       <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
-    transferBlock(r.transfer || {}, r.category === 'Transport') + accBlock(r.accommodation || {}, r.category === 'Accommodation') +
+    transferBlock(r.transfer || {}, r.category === 'Transport') + accBlock(r.accommodation || {}, r.category === 'Accommodation') + bkBlock(r, BK_CATS.includes(r.category) || hasBk(r), hasBk(r) || !!opts.openBackup) +
     field('urgency', 'Срочность', urgencyPicker(r.urgency)) +
     field('deadline', 'Срок · время Парижа', deadlinePicker(r.deadline) + '<small class="gtime" id="req-gtime"></small>') +
     `<div class="f rq-budget"><label for="f-budget_amount">Бюджет</label>
@@ -411,7 +457,8 @@ export function editRequest(id, presetClient, preset = {}) {
         accommodation = { hotelName: hn, hotelAddress: ha, guestsCount: Math.max(1, parseInt(v.tr_ac_guests, 10) || 1), checkInTime: /^\d{1,2}:\d{2}$/.test(ct) ? ct : null, roomType: rt || null };
       }
       const tripPick = (() => { const f = m.form; if (!f.trip_id || f.trip_id.value === '__none') return null; try { const t = clientId === f.client_id.value ? tpResolve(f) : null; return t ? t.id : (f.trip_id.value || null); } catch { return null; } })();
-      await save('requests', id, {
+      const bkOn = ['backup_venue', 'backup_address', 'backup_contact', 'backup_notes'].some((k) => (v[k] || '').trim()) || 'backup_venue' in r;
+      const payload = {
         trip_id: tripPick, transfer, accommodation, client_id: clientId, summary: v.summary.trim(), category: v.category, status: v.status, urgency: v.urgency,
         deadline: fromParisInput(v.deadline), budget_amount: v.budget_amount === '' ? null : Number(v.budget_amount),
         currency: v.budget_amount === '' ? nul(v.currency) : v.currency, partner_id: nul(v.partner_id),
@@ -419,7 +466,16 @@ export function editRequest(id, presetClient, preset = {}) {
         clarifying_questions: nul(v.clarifying_questions.trim()), original_message: nul(v.original_message.trim()),
         needs_approval: v.needs_approval, needs_review: v.needs_review,
         guest_visible: v.guest_hidden ? false : null, booking_ref: nul((v.booking_ref || '').trim()), dress_code: nul((v.dress_code || '').trim()), guest_note: nul((v.guest_note || '').trim()),
-      });
+        ...(bkOn ? { backup_venue: nul((v.backup_venue || '').trim()), backup_address: nul((v.backup_address || '').trim()), backup_contact: nul((v.backup_contact || '').trim()), backup_notes: nul((v.backup_notes || '').trim()) } : {}),
+      };
+      try { await save('requests', id, payload); }
+      catch (e) {
+        // колонки «Плана Б» ещё нет в базе — остальное всё равно сохраняем
+        if (!bkOn || !/backup_/.test(String(e.message || e))) throw e;
+        for (const k of ['backup_venue', 'backup_address', 'backup_contact', 'backup_notes']) delete payload[k];
+        await save('requests', id, payload); toast('Запрос сохранён, но «План Б» пока не сохраняется: нужно обновить базу');
+        return;
+      }
       toast(id ? 'Запрос сохранён' : 'Запрос создан');
     },
     onDelete: id ? async () => { await remove('requests', id); toast('Запрос удалён'); } : null,
@@ -431,6 +487,7 @@ export function editRequest(id, presetClient, preset = {}) {
   bindGuest(m.form);
   if (id) m.form.dataset.reqId = id;
   bindRequestForm(m.form);
+  bindBackup(m.form);
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
