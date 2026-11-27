@@ -2,6 +2,8 @@
 import { gfetch, FLASH, LITE, cacheKey, getCache, setCache } from './_cache.js';
 import { owner, rest, isId, askJSON, norm } from './_owner.js';
 import { stopList } from '../js/stoplist.js';
+import discovery from './_discovery.js';
+import gamma from './_gamma.js';
 
 // Категории идеи (для гостя и фильтров) и категории запросов приложения (для заготовки запроса)
 const IDEA_CATS = ['Dining', 'Gifts & Events', 'Transport', 'Spa & Wellness', 'Activities', 'Trip Touch'];
@@ -30,6 +32,10 @@ const similar = (a, b) => { const A = stems(a), B = stems(b); if (!A.size || !B.
 const firstWord = (n) => String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/)[0] || '';
 
 export default async function handler(req, res) {
+  // Vercel Hobby: не больше 12 функций, поэтому «вопросы для звонка» и «промпт для Gamma» живут за этим же адресом (см. rewrites в vercel.json)
+  const kind = req.query?.kind;
+  if (kind === 'discovery') return discovery(req, res);
+  if (kind === 'gamma') return gamma(req, res);
   const auth = await owner(req, res); if (!auth) return;
   const id = String(req.body?.client_id || '');
   if (!isId(id)) return res.status(400).json({ error: 'bad_id' });
