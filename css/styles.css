@@ -3461,3 +3461,87 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .pc.idle .pc-h { padding-bottom: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px; flex-wrap: wrap; }
 .pc.idle .pc-h b { text-transform: uppercase; letter-spacing: .12em; font-size: 10px; font-weight: 600; }
 .pc-idle { color: var(--muted); }
+
+/* ════════ «Wellness-маршрут (Gamma)»: живая карточка звонка ════════ */
+.wl-entry { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font: 600 13px/1 var(--f-body); cursor: pointer; transition: background .3s cubic-bezier(.22,1,.36,1); }
+.wl-entry:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.wl-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ov.wl .dlg { max-width: 1040px; }
+.ov.wl .wl-body { padding-top: 6px; }
+.wl-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.wl-left .f { margin-bottom: 20px; }
+.wl-guest { display: flex; gap: 8px; align-items: center; }
+.wl-guest select { flex: 1; min-width: 0; }
+.wl-oneoff-in { margin-top: 8px; }
+.wl-oneoff-in[hidden] { display: none; }
+.wl-dossier { display: flex; flex-wrap: wrap; gap: 6px; }
+.wl-dossier:not(:empty) { margin-top: 10px; }
+.wl-d { display: inline-flex; align-items: center; min-height: 28px; padding: 0 11px; border-radius: 999px; background: var(--tp-well); color: var(--tp-mut); font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wl-chip { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--tp-well); color: var(--tp-mut); font: 600 13.5px/1 var(--f-body); cursor: pointer; transition: background .3s var(--tp-out), color .2s, transform .15s; }
+.wl-chip:hover { color: var(--tp-ink); }
+.wl-chip:active { transform: scale(.97); }
+.wl-chip[aria-pressed="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-chip:focus-visible, .wl-pill:focus-visible, .wq-head:focus-visible, .wq-c:focus-visible, .wq-save:focus-visible, .wl-go:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--tp-well); color: var(--tp-acc); font: 600 13px/1 var(--f-body); cursor: pointer; white-space: nowrap; text-decoration: none; transition: background .3s var(--tp-out), color .2s; }
+.wl-pill:hover { background: color-mix(in srgb, var(--tp-acc) 16%, var(--tp-well)); }
+.wl-pill.solid { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-pill.solid:hover { background: color-mix(in srgb, var(--tp-acc) 88%, #000); }
+.wl-pill.done { background: color-mix(in srgb, var(--tp-acc) 18%, var(--tp-well)); color: var(--tp-acc); }
+.wl-dates .f2 { gap: 10px; }
+
+/* правая панель: вопросы одним листом с тонкими разделителями */
+.wl-right { position: sticky; top: 0; padding: 18px; border-radius: 22px; background: var(--tp-well); }
+.wl-qh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.wl-qh h3 { margin: 0 auto 0 0; font: 500 22px/1.1 var(--tp-serif); letter-spacing: -.01em; color: var(--tp-ink); }
+.wl-sync { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--tp-mut); font-variant-numeric: tabular-nums; }
+.wl-sync i { width: 8px; height: 8px; border-radius: 50%; background: #A59B91; transition: background .3s; }
+.wl-sync[data-s="wait"] i { background: var(--tp-gold); }
+.wl-sync[data-s="loading"] i { background: var(--tp-acc); animation: wlPulse 1s cubic-bezier(.22,1,.36,1) infinite; }
+.wl-sync[data-s="ready"] i { background: var(--tp-acc); }
+.wl-sync[data-s="error"] i { background: var(--tp-risk); }
+@keyframes wlPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.7); opacity: .4; } }
+.wl-qs { background: var(--tp-card); border-radius: 18px; overflow: hidden; }
+.wl-empty { margin: 0; padding: 22px 20px; color: var(--tp-mut); font-size: 14.5px; line-height: 1.5; }
+.wq + .wq { border-top: 1px solid var(--tp-hair); }
+.wq-head { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; width: 100%; min-height: 44px; padding: 14px 18px; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--tp-ink); transition: background .25s var(--tp-out); }
+.wq-head:hover { background: color-mix(in srgb, var(--tp-well) 55%, transparent); }
+.wq-cat { grid-column: 1 / -1; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-gold); }
+.wq-text { grid-column: 1; font-size: 15.5px; line-height: 1.4; }
+.wq-st { grid-column: 2; grid-row: 2; align-self: start; font: 600 12px/1.4 var(--f-body); color: var(--tp-acc); white-space: nowrap; }
+.wq-st.later { color: var(--tp-mut); }
+.wq-a { grid-column: 1 / -1; font-size: 13.5px; color: var(--tp-mut); }
+.wq[data-state="done"] .wq-text, .wq[data-state="later"] .wq-text { color: var(--tp-mut); }
+.wq-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s var(--tp-out); }
+.wq.open .wq-body { grid-template-rows: 1fr; }
+.wq-in { overflow: hidden; min-height: 0; padding: 0 18px; }
+.wq.open .wq-in { padding-bottom: 16px; }
+.wq-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.wq-c { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--tp-well); color: var(--tp-ink); font: 600 13px/1 var(--f-body); cursor: pointer; transition: background .25s var(--tp-out), color .2s; }
+.wq-c:hover { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wq-c.soft { color: var(--tp-mut); background: transparent; box-shadow: inset 0 0 0 1px var(--tp-hair); }
+.wq-row { display: flex; gap: 8px; }
+.ov.wl .wq-input { flex: 1; min-width: 0; min-height: 44px; }
+.wq-save { flex: none; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--tp-acc); color: var(--tp-acc-ink); font: 600 13px/1 var(--f-body); cursor: pointer; }
+.wl-build { display: flex; justify-content: flex-end; margin-top: 16px; }
+.wl-go { min-height: 48px; padding: 0 24px; border: 0; border-radius: 999px; background: var(--tp-acc); color: var(--tp-acc-ink); font: 600 14px/1 var(--f-body); cursor: pointer; transition: transform .3s var(--tp-out), box-shadow .3s; }
+.wl-go:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 24px -12px var(--tp-acc); }
+.wl-go:disabled { opacity: .7; cursor: default; }
+
+/* результат: промпт для Gamma и письмо */
+.wl-out { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--tp-hair); }
+.wl-out[hidden] { display: none; }
+.wl-oh h3 { margin: 0 0 12px; font: 500 22px/1.1 var(--tp-serif); letter-spacing: -.01em; }
+.wl-warn { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--tp-risk) 12%, transparent); color: var(--tp-risk); font-size: 13.5px; }
+.wl-ocols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.wl-ol { display: block; margin-bottom: 8px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
+.wl-pre { margin: 0 0 10px; padding: 16px 18px; max-height: 340px; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 16px; background: var(--tp-well); color: var(--tp-ink); font: 400 13.5px/1.55 var(--f-body); }
+.wl-oa { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 767px) {
+  .wl-grid, .wl-ocols { grid-template-columns: 1fr; gap: 20px; }
+  .wl-right { position: static; padding: 14px; }
+  .wl-qh h3 { flex: 1 1 100%; }
+  .wl-guest { flex-wrap: wrap; } .wl-guest .wl-pill { flex: 1 1 100%; }
+  .wl-oa .wl-pill { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .wq-body, .wl-chip, .wq-head, .wl-sync[data-s="loading"] i { transition: none; animation: none; } }

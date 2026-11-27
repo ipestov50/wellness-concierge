@@ -399,7 +399,7 @@ export function editRequest(id, presetClient, preset = {}, opts = {}) {
     field('new_language', 'Язык', select('new_language', options(LANGUAGES, 'RU'))) + '</div>' +
     field('new_allergies', 'Аллергии и ограничения (если знаете)', input('new_allergies', '', 'type="text" placeholder="через запятую"')) + '</div>' +
     `<div class="f rq-what"><label for="f-summary">Что нужно</label><div class="rq-cmd"><span class="rq-cmd-ico" aria-hidden="true">✦</span>${input('summary', r.summary, 'type="text" required class="rq-hero" placeholder="Массаж на двоих в пятницу вечером"')}</div>
-      <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div></div>` +
+      <div class="rq-quick${r.summary ? ' gone' : ''}" id="rq-quick">${QUICK.map(([t, c]) => `<button type="button" class="rq-chip" data-qf="${esc(t)}" data-cat="${esc(c)}">${CATEGORIES[c] || ''} ${esc(t)}</button>`).join('')}</div>${id ? '' : '<button type="button" class="wl-entry" id="rq-wellness">✦ Wellness-маршрут (Gamma)</button>'}</div>` +
     `<div class="f2">${field('category', 'Категория', select('category', options(Object.entries(CATEGORIES).map(([k, i]) => [k, i + ' ' + k]), r.category)))}` +
     field('status', 'Статус', select('status', options(statusOptions(), statusOf(r.status) ? r.status : firstKey()))) + '</div>' +
     transferBlock(r.transfer || {}, r.category === 'Transport') + accBlock(r.accommodation || {}, r.category === 'Accommodation') + bkBlock(r, BK_CATS.includes(r.category) || hasBk(r), hasBk(r) || !!opts.openBackup) +
@@ -488,6 +488,7 @@ export function editRequest(id, presetClient, preset = {}, opts = {}) {
   if (id) m.form.dataset.reqId = id;
   bindRequestForm(m.form);
   bindBackup(m.form);
+  m.form.querySelector('#rq-wellness')?.addEventListener('click', () => { const cid = m.form.client_id.value; m.close(); import('./wellness.js').then((w) => w.openWellness(cid && cid !== '__new' ? cid : '')); });
   bindDeadlinePicker(m.form);
   bindChecklist(m.form);
   bindRoad(m.form);
