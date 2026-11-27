@@ -3630,3 +3630,19 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .ov.cl .tf-pill input[type=text]:focus { background: transparent; border: 0; }
 .ov.wl .wl-times, .ov.wl .wl-dates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 @media (max-width: 420px) { .ov.wl .wl-times .tf-pill { min-width: 0; padding: 0 8px; } .ov.wl .wl-dates input[type=date] { padding: 0 10px; font-size: 15px; } }
+
+/* Wellness: attribution badges, filter pills, "NEW" highlight */
+.wl-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.wl-filters:empty { display: none; }
+.wl-f { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--tp-card); color: var(--tp-mut); font: 600 12.5px/1 var(--f-body); font-variant-numeric: tabular-nums; cursor: pointer; transition: background .25s var(--tp-out), color .2s; }
+.wl-f:hover { color: var(--tp-ink); }
+.wl-f[aria-pressed="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-f:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wq-ctx { grid-column: 1 / -1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wq-tag { display: inline-flex; align-items: center; min-height: 22px; padding: 0 9px; border-radius: 999px; background: color-mix(in srgb, var(--tp-gold) 15%, transparent); color: #8A6A32; font: 700 10px/1 var(--f-body); letter-spacing: .08em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wq-new { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: var(--tp-acc); color: var(--tp-acc-ink); font: 700 9.5px/1 var(--f-body); letter-spacing: .1em; }
+.wq-text { grid-row: 2; } .wq-st { grid-row: 2; } .wq-a { grid-row: 3; }
+.wq.is-new { animation: wqNew 1.6s cubic-bezier(.22,1,.36,1); }
+@keyframes wqNew { 0% { background: color-mix(in srgb, var(--tp-acc) 16%, transparent); transform: translateY(6px); opacity: .4; } 40% { transform: none; opacity: 1; } 100% { background: transparent; } }
+@media (max-width: 767px) { .wl-f { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .wq.is-new { animation: none; } }

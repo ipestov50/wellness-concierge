@@ -24,10 +24,12 @@ const addDays = (s, n) => ymd(new Date(Date.parse(s + 'T00:00:00Z') + n * 864e5)
 const diff = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
 const mins = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : null);
 const fmtT = (m) => { const x = ((m % 1440) + 1440) % 1440; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
+const dateLabel = (s) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const shortDate = (s) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const longDate = (s) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 export function openWellness(presetClient) {
-  const S = { anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null };
+  const S = { filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -57,6 +59,7 @@ export function openWellness(presetClient) {
     <div class="wl-right">
       <section class="wl-flow" aria-label="${T.flow}"><div class="wl-fh"><h3>${T.flow}</h3><span class="wl-range tnum" id="wl-range"></span></div><div id="wl-flow"></div></section>
       <div class="wl-qh"><h3>${T.qh}</h3><span class="wl-sync" id="wl-sync" role="status" aria-live="polite"><i aria-hidden="true"></i><span></span></span><button type="button" class="wl-pill" id="wl-refresh">${T.refresh}</button></div>
+      <div class="wl-filters" id="wl-filters" role="group" aria-label="Filter questions"></div>
       <div class="wl-qs" id="wl-qs"></div>
       <div class="wl-build"><button type="button" class="wl-go" id="wl-go">${T.build}</button></div>
     </div>
@@ -100,51 +103,49 @@ export function openWellness(presetClient) {
     paintDur();
   };
 
-  // ---------- fixed anchors ----------
-  const dayOptions = () => {
-    const n = Math.min(days() || 3, 14), cur = $('#wl_a_day').value;
-    const o = [['Arrival', 'Arrival day'], ...Array.from({ length: n }, (_, i) => [`Day ${i + 1}`, `Day ${i + 1}`]), ['Departure', 'Departure day']];
-    $('#wl_a_day').innerHTML = o.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
-    $('#wl_a_day').value = o.some(([v]) => v === cur) ? cur : (o[1] || o[0])[0];
+  // ---------- fixed anchors (by calendar date) ----------
+  const tripDays = () => {
+    if (!(arrival() && departure() && departure() >= arrival())) return [];
+    const out = [], n = Math.min(diff(arrival(), departure()) + 1, 30);
+    for (let i = 0; i < n; i++) { const date = addDays(arrival(), i); out.push({ date, role: i === 0 ? 'Arrival' : i === n - 1 ? 'Departure' : '' }); }
+    return out;
   };
-  const dayLabel = (d) => (d === 'Arrival' ? 'Arrival day' : d === 'Departure' ? 'Departure day' : d);
-  const dayKey = (d) => (d === 'Arrival' ? 0 : d === 'Departure' ? 999 : +d.replace(/\D/g, '') || 1);
+  const dayOptions = () => {
+    const sel = $('#wl_a_day'), cur = sel.value, ds = tripDays();
+    sel.innerHTML = ds.length ? ds.map((d) => `<option value="${esc(d.date)}">${esc(dateLabel(d.date))}${d.role ? ` (${d.role})` : ''}</option>`).join('') : '<option value="">Set trip dates first</option>';
+    sel.value = ds.some((d) => d.date === cur) ? cur : (ds[0]?.date || '');
+  };
   const paintAnchors = () => {
-    $('#wl-achips').innerHTML = S.anchors.map((a, i) => `<span class="wl-ach"><span class="tnum">${esc(dayLabel(a.day))} · ${esc(a.time)}</span> — ${esc(a.activity)}<button type="button" class="wl-ax" data-ax="${i}" aria-label="Remove ${esc(a.activity)}">×</button></span>`).join('');
+    $('#wl-achips').innerHTML = S.anchors.map((a, i) => `<span class="wl-ach"><span class="tnum">${esc(dateLabel(a.date))} · ${esc(a.time)}</span> — ${esc(a.activity)}<button type="button" class="wl-ax" data-ax="${i}" aria-label="Remove ${esc(a.activity)}">×</button></span>`).join('');
   };
   const addAnchor = () => {
-    const act = val('wl_a_act').slice(0, 120), t = normTime(val('wl_a_time'));
+    const act = val('wl_a_act').replace(/^\s*\d{1,2}[:.]\d{2}\s*[-–—]?\s*/, '').slice(0, 120), t = normTime(val('wl_a_time')), date = $('#wl_a_day').value;
+    if (!date) { toast('Set arrival and departure dates first'); $('#wl_from').focus(); return; }
     if (!act) { $('#wl_a_act').focus(); return; }
     if (!t) { toast('Add a time, e.g. 11:00'); $('#f-wl_a_time').focus(); return; }
-    S.anchors.push({ day: $('#wl_a_day').value, time: t, activity: act });
-    S.anchors.sort((a, b) => dayKey(a.day) - dayKey(b.day) || a.time.localeCompare(b.time));
+    S.anchors.push({ date, time: t, activity: act });
+    S.anchors.sort((x, y) => x.date.localeCompare(y.date) || x.time.localeCompare(y.time));
     f.elements.wl_a_act.value = ''; f.elements.wl_a_time.value = '';
     paintAnchors(); paintFlow(); $('#wl_a_act').focus(); schedule();
   };
 
   // ---------- live trip flow (instant, no network) ----------
   const flowItems = () => {
-    const n = days(), rows = [];
-    const anchorsOf = (key) => S.anchors.filter((a) => a.day === key).map((a) => [a.time, a.activity, 'anchor']);
-    if (!n) return rows;
-    for (let d = 1; d <= n; d++) {
-      const first = d === 1, last = d === n && n > 1;
-      const it = [];
-      const title = first && last ? 'Day 1' : first ? `Day 1 · ${bridge() ? 'Arrival & Bridge' : 'Arrival'}` : last ? `Day ${d} · Departure` : `Day ${d}`;
+    const ds = tripDays(), rows = [];
+    const anchorsOf = (date) => S.anchors.filter((a) => a.date === date).map((a) => [a.time, a.activity, 'anchor']);
+    ds.forEach((d, i) => {
+      const first = i === 0, last = i === ds.length - 1 && ds.length > 1, it = [];
+      const suffix = first && last ? '' : first ? (bridge() ? ' · Arrival & Bridge' : ' · Arrival') : last ? ' · Departure' : '';
       if (first) {
         if (arrT()) it.push([arrT(), 'Arrival', 'fixed']);
         if (bridge()) it.push([arrT(), 'Bridge → 15:00 check-in', 'bridge']);
         else if (arrT()) it.push([early() ? arrT() : fmtT(Math.max(mins(arrT()), 15 * 60)), early() ? 'Early check-in' : 'Check-in', 'fixed']);
-        it.push(...anchorsOf('Arrival'));
       }
-      it.push(...anchorsOf(`Day ${d}`));
-      if (last || (first && n === 1)) {
-        it.push(...anchorsOf('Departure'));
-        if (depT()) { it.push([fmtT(mins(depT()) - 180), 'Airport transfer', 'fixed']); it.push([depT(), 'Departure', 'fixed']); }
-      }
-      it.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-      rows.push({ title, it });
-    }
+      it.push(...anchorsOf(d.date));
+      if (last && depT()) { it.push([fmtT(mins(depT()) - 180), 'Airport transfer', 'fixed']); it.push([depT(), 'Departure', 'fixed']); }
+      it.sort((a, c) => String(a[0]).localeCompare(String(c[0])));
+      rows.push({ title: `${dateLabel(d.date)}${suffix}`, it });
+    });
     return rows;
   };
   const paintFlow = () => {
@@ -176,18 +177,26 @@ export function openWellness(presetClient) {
   // ---------- questions (grouped in conversation order) ----------
   const card = (q) => {
     const open = S.openId === q.id;
-    return `<article class="wq${open ? ' open' : ''}" data-id="${esc(q.id)}" data-state="${esc(q.state || 'new')}">
-      <button type="button" class="wq-head" data-q="${esc(q.id)}" aria-expanded="${open}"><span class="wq-text">${esc(q.text)}</span>${q.state === 'done' ? `<span class="wq-st">${T.captured}</span>` : ''}${q.state === 'done' && !open ? `<span class="wq-a">${esc(q.answer)}</span>` : ''}</button>
+    return `<article class="wq${open ? ' open' : ''}${q.isNew ? ' is-new' : ''}" data-id="${esc(q.id)}" data-state="${esc(q.state || 'new')}">
+      <button type="button" class="wq-head" data-q="${esc(q.id)}" aria-expanded="${open}">${q.contextTag || q.isNew ? `<span class="wq-ctx">${q.contextTag ? `<span class="wq-tag tnum">${esc(q.contextTag)}</span>` : ''}${q.isNew ? '<span class="wq-new">NEW</span>' : ''}</span>` : ''}<span class="wq-text">${esc(q.text)}</span>${q.state === 'done' ? `<span class="wq-st">${T.captured}</span>` : ''}${q.state === 'done' && !open ? `<span class="wq-a">${esc(q.answer)}</span>` : ''}</button>
       <div class="wq-body"><div class="wq-in"><div class="wq-chips">${(q.chips || []).slice(0, 3).map((c) => `<button type="button" class="wq-c" data-a="${esc(c)}" data-q="${esc(q.id)}">${esc(c)}</button>`).join('')}</div>
         <div class="wq-row"><input type="text" class="wq-input" data-q="${esc(q.id)}" value="${esc(q.answer || '')}" placeholder="${esc(T.ans)}" autocomplete="off" aria-label="Guest answer"><button type="button" class="wq-save" data-save="${esc(q.id)}">${T.save}</button></div></div></div></article>`;
   };
+  const visible = (q) => S.filter === 'all' || (S.filter === 'done' ? q.state === 'done' : q.dayDate === S.filter);
+  const paintFilters = () => {
+    const ds = tripDays().filter((d) => S.questions.some((q) => q.dayDate === d.date));
+    const one = (k, label) => `<button type="button" class="wl-f" data-filter="${esc(k)}" aria-pressed="${S.filter === k}">${esc(label)}</button>`;
+    $('#wl-filters').innerHTML = S.questions.length ? one('all', 'All') + ds.map((d) => one(d.date, shortDate(d.date))).join('') + (S.questions.some((q) => q.state === 'done') ? one('done', 'Captured') : '') : '';
+  };
   const paintQs = () => {
     const box = $('#wl-qs');
+    paintFilters();
     if (!S.questions.length) { box.innerHTML = `<p class="wl-empty">${esc(S.status === 'loading' ? 'Jarvis is preparing questions…' : T.empty)}</p>`; return; }
-    box.innerHTML = STAGES.map((st, i) => {
-      const qs = S.questions.filter((q) => q.category === st);
+    const html = STAGES.map((st, i) => {
+      const qs = S.questions.filter((q) => q.category === st && visible(q));
       return qs.length ? `<div class="wq-stage"><div class="wq-sh">${i + 1} · ${esc(st.toUpperCase())}</div>${qs.map(card).join('')}</div>` : '';
     }).join('');
+    box.innerHTML = html || `<p class="wl-empty">No questions for this filter yet.</p>`;
   };
   const box$ = (id) => $(`.wq[data-id="${CSS.escape(id)}"] .wq-input`);
   const commit = (id, answer) => {
@@ -207,12 +216,11 @@ export function openWellness(presetClient) {
     S.ctrl?.abort(); const ctrl = (S.ctrl = new AbortController());
     setStatus('loading', 'Jarvis is preparing questions…'); paintQs();
     try {
-      const r = await api('discovery-questions', { ...payload(), answered: answered().map((q) => ({ question: q.text, answer: q.answer })), asked: [...S.asked] }, { signal: ctrl.signal });
+      const r = await api('discovery-questions', { ...payload(), answered: answered().map((q) => ({ question: q.text, answer: q.answer })), open: S.questions.filter((q) => q.state !== 'done').map((q) => q.text), openTopics: S.questions.map((q) => q.topic).filter(Boolean), asked: [...S.asked] }, { signal: ctrl.signal });
       if (ctrl !== S.ctrl) return;
-      const keep = S.questions.filter((q) => q.state === 'done');
-      const fresh = (r.questions || []).filter((q) => !keep.some((k) => k.text.toLowerCase() === q.text.toLowerCase()));
-      fresh.forEach((q) => S.asked.add(q.text));
-      S.questions = [...keep, ...fresh]; S.openId = null; setStatus('ready', `Updated · ${hm()}`); paintQs();
+      const fresh = (r.questions || []).filter((q) => !S.questions.some((k) => k.text.toLowerCase() === q.text.toLowerCase())).map((q) => ({ ...q, isNew: true }));
+      fresh.forEach((q) => { S.asked.add(q.text); setTimeout(() => { q.isNew = false; const el = f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"]`); el?.classList.remove('is-new'); el?.querySelector('.wq-new')?.remove(); }, 5000); });
+      S.questions = [...S.questions, ...fresh]; setStatus('ready', `Updated · ${hm()}`); paintQs();
     } catch (e) {
       if (e.name === 'AbortError') return;
       setStatus('error', e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not update — tap Refresh'); paintQs();
@@ -250,6 +258,7 @@ export function openWellness(presetClient) {
   f.addEventListener('click', async (e) => {
     const t = e.target;
     if (t.closest('#wl-a-add')) return addAnchor();
+    const fl = t.closest('[data-filter]'); if (fl) { S.filter = fl.dataset.filter; paintQs(); return; }
     const ax = t.closest('[data-ax]'); if (ax) { S.anchors.splice(+ax.dataset.ax, 1); paintAnchors(); paintFlow(); return schedule(); }
     const dur = t.closest('[data-dur]'); if (dur) { pickDuration(+dur.dataset.dur); dayOptions(); paintFlow(); return schedule(); }
     const tag = t.closest('[data-tag]'); if (tag) { const k = tag.dataset.tag; S.tags.has(k) ? S.tags.delete(k) : S.tags.add(k); tag.setAttribute('aria-pressed', String(S.tags.has(k))); paintFlow(); return schedule(); }

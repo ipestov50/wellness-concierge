@@ -32,10 +32,23 @@ export async function dossier(auth, clientId, extraAllergies = []) {
   };
 }
 
-// Фиксированное время: якоря маршрута «день · ЧЧ:ММ · что». Всё проверяется и обрезается.
-export function parseAnchors(x) {
-  return (Array.isArray(x) ? x : []).slice(0, 20).map((a) => ({ day: str(a?.day, 24), time: /^\d{2}:\d{2}$/.test(a?.time || '') ? a.time : '', activity: str(a?.activity, 120) }))
-    .filter((a) => a.day && a.time && a.activity && /^(Arrival|Departure|Day \d{1,2})$/.test(a.day));
+// Фиксированное время: якоря маршрута «дата · ЧЧ:ММ · что». Дата — из диапазона поездки; день (Day N / Arrival / Departure) считаем здесь.
+export function parseAnchors(x, range = {}) {
+  const ymd = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : '');
+  const diff = (p, q) => Math.round((Date.parse(q + 'T00:00:00Z') - Date.parse(p + 'T00:00:00Z')) / 864e5);
+  return (Array.isArray(x) ? x : []).slice(0, 20).map((a) => {
+    const date = ymd(a?.date);
+    let day = str(a?.day, 24);
+    if (date && range.from) { const n = diff(range.from, date) + 1; day = date === range.from ? 'Arrival' : range.to && date === range.to ? 'Departure' : n >= 1 ? `Day ${n}` : ''; }
+    return { date, day, time: /^\d{2}:\d{2}$/.test(a?.time || '') ? a.time : '', activity: str(a?.activity, 120).replace(/^\s*\d{1,2}[:.]\d{2}\s*[-–—]?\s*/, '') };
+  }).filter((a) => a.time && a.activity && /^(Arrival|Departure|Day \d{1,2})$/.test(a.day));
+}
+// Даты поездки списком — модель привязывает вопросы к дням
+export function tripDates(t) {
+  if (!t.from || !t.to || t.to < t.from) return [];
+  const out = [];
+  for (let d = t.from, i = 0; d <= t.to && i < 14; i++) { out.push({ date: d, role: d === t.from ? 'Arrival' : d === t.to ? 'Departure' : '' }); d = new Date(Date.parse(d + 'T00:00:00Z') + 864e5).toISOString().slice(0, 10); }
+  return out;
 }
 
 // Нужен ли «мост до заселения»: прилёт раньше 14:00 без подтверждённого раннего заселения (стандартное заселение 15:00–16:00)
