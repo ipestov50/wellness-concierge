@@ -12,6 +12,10 @@
     {
       "source": "/api/gamma-prompt",
       "destination": "/api/ideas?kind=gamma"
+    },
+    {
+      "source": "/api/gamma-deck",
+      "destination": "/api/ideas?kind=gamma-deck"
     }
   ],
   "headers": [

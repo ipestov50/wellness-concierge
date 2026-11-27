@@ -58,7 +58,7 @@ async function lookupEn(name) {
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set(), day: {}, filter: 'all' }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set(), day: {}, filter: 'all' }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '', deck: { id: '', status: '', url: '', pdf: '', err: '', pct: 0, key: '', timer: 0 } };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -568,9 +568,41 @@ export function openWellness(presetClient) {
     o.innerHTML = `<div class="wl-oh"><h3>${T.outTitle}</h3>${(r.warnings || []).length ? `<p class="wl-warn">⚠ Please review manually: ${esc(r.warnings.join('; '))}</p>` : ''}</div>
       <div class="wl-vt" role="tablist" aria-label="Output"><button type="button" role="tab" data-otab="prompt" aria-selected="${!mail}">Gamma Master Prompt</button><button type="button" role="tab" data-otab="mail" aria-selected="${mail}">Guest Email</button></div>
       <pre class="wl-pre" id="wl-pre" tabindex="0"></pre>
-      <div class="wl-oa">${mail ? `<button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button>` : `<button type="button" class="wl-pill solid" data-copy="prompt">${T.copyP}</button><a class="wl-pill" href="https://gamma.app" target="_blank" rel="noopener noreferrer">${T.open}</a>`}</div>`;
+      <div class="wl-oa">${mail ? `<button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button>` : `<button type="button" class="wl-pill solid" data-deck${S.deck.status === 'pending' ? ' disabled' : ''}>${S.deck.status === 'pending' ? 'Gamma is designing…' : S.deck.url && S.deck.key === r.gammaPrompt ? '↻ Regenerate Presentation' : '✦ Generate Presentation'}</button><button type="button" class="wl-pill" data-copy="prompt">${T.copyP}</button>`}</div>
+      ${mail ? '' : `<div class="wl-deck" id="wl-deck" role="status" aria-live="polite">${deckHtml()}</div>`}`;
     o.querySelector('#wl-pre').textContent = mail ? emailText() : r.gammaPrompt;
     if (focus && focus !== 'live') { showTab('cur'); o.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  };
+
+  // ---------- ✦ Gamma Generate API: prompt → presentation + PDF (server holds the key; we poll every 5 s) ----------
+  const deckHtml = () => {
+    const d = S.deck;
+    if (d.status === 'pending') return `<div class="wl-dk-bar"><i style="width:${Math.max(6, d.pct)}%"></i></div><span class="wl-dk-t">Gamma is building the deck and PDF · usually 1–3 minutes. You can keep working.</span>`;
+    if (d.status === 'completed' && d.url) return `<span class="wl-ok">Presentation ready ✓</span><a class="wl-pill" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Gamma ↗</a>${d.pdf ? `<a class="wl-pill" href="${esc(d.pdf)}" target="_blank" rel="noopener noreferrer">Download PDF ↓</a>` : ''}${d.key !== S.out?.gammaPrompt ? '<span class="wl-dk-t">The prompt has changed since — regenerate to refresh.</span>' : ''}`;
+    if (d.err) return `<span class="wl-warn">⚠ ${esc(d.err)}</span>`;
+    return '';
+  };
+  const paintDeck = () => { const el = $('#wl-deck'); if (el) el.innerHTML = deckHtml(); const b = $('[data-deck]'); if (b) { b.disabled = S.deck.status === 'pending'; b.textContent = S.deck.status === 'pending' ? 'Gamma is designing…' : S.deck.url && S.deck.key === S.out?.gammaPrompt ? '↻ Regenerate Presentation' : '✦ Generate Presentation'; } };
+  const DECK_ERR = { no_gamma_key: 'Gamma is not connected yet — add GAMMA_API_KEY in the hosting settings.', gamma_bad_key: 'Gamma rejected the API key — please check it.', gamma_no_credits: 'Not enough Gamma credits for this presentation.', gamma_busy: 'Gamma is busy — try again in a minute.', gamma_timeout: 'Gamma did not answer in time — try again.' };
+  const pollDeck = async (started) => {
+    const d = S.deck; if (d.status !== 'pending' || m.signal.aborted) return;
+    if (Date.now() - started > 25 * 60e3) { Object.assign(d, { status: 'failed', err: 'Gamma is taking unusually long — open gamma.app to check.' }); return paintDeck(); }
+    try {
+      const r = await api('gamma-deck', { kind: 'gamma-deck', action: 'status', id: d.id }, { signal: m.signal });
+      if (r.status === 'completed') { Object.assign(d, { status: 'completed', url: r.gammaUrl, pdf: r.exportUrl, pct: 100 }); toast('Gamma presentation ready ✓'); return paintDeck(); }
+      if (r.status === 'failed') { Object.assign(d, { status: 'failed', err: `Gamma could not build it: ${r.error}` }); return paintDeck(); }
+      d.pct = Math.min(92, d.pct + 7);
+    } catch (e) { if (e.name === 'AbortError') return; d.pct = Math.min(92, d.pct + 2); } // a transient status error: keep polling
+    paintDeck(); d.timer = setTimeout(() => pollDeck(started), 5000);
+  };
+  const genDeck = async () => {
+    if (S.deck.status === 'pending' || !S.out?.gammaPrompt) return;
+    clearTimeout(S.deck.timer);
+    Object.assign(S.deck, { id: '', status: 'pending', url: '', pdf: '', err: '', pct: 4, key: S.out.gammaPrompt }); paintDeck();
+    try {
+      const r = await api('gamma-deck', { kind: 'gamma-deck', action: 'start', prompt: S.out.gammaPrompt, title: val('wl_dest') && !hasCyr(val('wl_dest')) ? `Wellness Journey · ${val('wl_dest')}` : 'Your Wellness Journey' }, { signal: m.signal });
+      S.deck.id = r.generationId; paintDeck(); S.deck.timer = setTimeout(() => pollDeck(Date.now()), 5000);
+    } catch (e) { if (e.name === 'AbortError') return; Object.assign(S.deck, { status: 'failed', err: DECK_ERR[e.message] || 'Could not start Gamma — please retry.' }); paintDeck(); }
   };
 
   const paintTabs = () => {
@@ -680,6 +712,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-skip-stage]')) return closeStage(S.active, 'skipped');
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
+    if (t.closest('[data-deck]')) return genDeck();
     const cf = t.closest('[data-cf]'); if (cf) { S.cur.filter = cf.dataset.cf; return paintCur(); }
     const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); paintFlow(); return; }
     const cp = t.closest('[data-copy]');
@@ -709,5 +742,5 @@ export function openWellness(presetClient) {
     else if (e.key === 'Enter' && (e.target.id === 'wl_dest' || e.target.id === 'wl_goal' || e.target.id === 'wl_ages')) e.preventDefault();
   });
   paintDossier(); dayOptions(); paintAnchors(); paintDur(); paintParty(); paintFlow(); paintTabs(); setStatus('idle', 'Waiting for the call brief'); paintQs();
-  m.signal.addEventListener?.('abort', () => { clearTimeout(S.timer); S.ctrl?.abort(); });
+  m.signal.addEventListener?.('abort', () => { clearTimeout(S.timer); clearTimeout(S.deck.timer); S.ctrl?.abort(); });
 }
