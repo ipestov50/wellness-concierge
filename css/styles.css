@@ -3808,3 +3808,37 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .wl-rf:hover:not(:disabled) { background: var(--tp-well); transform: rotate(90deg); }
 .wl-rf:disabled { opacity: .4; cursor: default; }
 .wl-rf:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+
+/* Wellness: compact 3-tab right cockpit, sticky action bar, 2-column curated grid, tabbed output viewer */
+.cl-scroll { scrollbar-gutter: stable; }
+.wl-right { box-sizing: border-box; max-width: 100%; padding: 14px 20px 0 16px; display: flex; flex-direction: column; min-width: 0; }
+.wl-rtabs { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 4px; margin-bottom: 14px; border-radius: 999px; background: var(--tp-card); --i: 0; }
+.wl-rind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 14px) / 3); border-radius: 999px; background: var(--tp-acc); transform: translateX(calc(var(--i, 0) * (100% + 2px))); transition: transform .4s var(--tp-out); pointer-events: none; }
+.wl-rtabs button { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--tp-mut); font: 600 13px/1.1 var(--f-body); cursor: pointer; transition: color .25s; min-width: 0; }
+.wl-rtabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-rtabs button b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.wl-rtabs button[aria-selected="true"] { color: var(--tp-acc-ink); }
+.wl-rtabs button:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: -2px; }
+.wl-rpane[hidden] { display: none; }
+.wl-rpane:not([hidden]) { animation: tpFade .3s var(--tp-out) both; }
+.wl-flowd { margin-bottom: 14px; background: var(--tp-card); border-radius: 16px; }
+.wl-flowd summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 16px; cursor: pointer; list-style: none; font: 500 17px/1 var(--tp-serif); color: var(--tp-ink); }
+.wl-flowd summary::-webkit-details-marker { display: none; }
+.wl-flowd summary::after { content: "▾"; color: var(--tp-mut); font-size: 13px; transition: transform .3s var(--tp-out); }
+.wl-flowd[open] summary::after { transform: rotate(180deg); }
+.wl-flowd summary:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; border-radius: 16px; }
+.wl-flowd > div { padding: 0 6px 12px; }
+.wl-flowd .wl-days { background: transparent; }
+.wl-build { position: sticky; bottom: 0; z-index: 4; margin: 14px -20px 0 -16px; padding: 12px 20px 14px 16px; background: linear-gradient(180deg, transparent, var(--tp-well) 22%); }
+.wl-livebar { margin-top: 12px; }
+.wl-curl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wl-vt { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 10px; border-radius: 999px; background: var(--tp-card); }
+.wl-vt button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--tp-mut); font: 600 12.5px/1 var(--f-body); cursor: pointer; transition: background .25s var(--tp-out), color .2s; }
+.wl-vt button[aria-selected="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-vt button:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-out { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--tp-hair); }
+.wl-pre { max-height: 300px; }
+@media (max-width: 767px) { .wl-right { padding: 14px 0 0; } .wl-build { margin: 14px 0 0; padding: 12px 0 14px; } .wl-curl { grid-template-columns: 1fr; } .wl-rtabs button { font-size: 12px; } }
+@media (max-width: 400px) { .wl-rtabs button span { font-size: 11.5px; } }
+@media (prefers-reduced-motion: reduce) { .wl-rind, .wl-rpane:not([hidden]) { transition: none; animation: none; } }
+@media (max-width: 767px) { .wl-build { flex-wrap: nowrap; gap: 6px; } .wl-build .wl-go { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 12.5px; white-space: nowrap; } }

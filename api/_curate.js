@@ -11,6 +11,7 @@ const SCHEMA = {
     kind: { type: 'STRING', enum: KINDS },
     title: { type: 'STRING', description: 'Short guest-facing title in English, up to 60 characters' },
     venueName: { type: 'STRING', nullable: true, description: 'Real venue name in the destination, only if you are confident it exists; null for a service touch or when unsure' },
+    address: { type: 'STRING', nullable: true, description: 'Real street address with city, only if you are confident, else null' },
     why: { type: 'STRING', description: 'One Les Clefs d\'Or sentence (up to 170 characters) on why this fits THIS guest' },
   }, required: ['kind', 'title', 'why'] } } },
   required: ['suggestions'],
@@ -44,8 +45,8 @@ Rules:
       ctx, SCHEMA, { temperature: 0.7, budget: 0 });
     const guard = d.stop.map(norm).filter((w) => w.length >= 4), seen = new Set();
     const suggestions = (out.suggestions || []).filter((x) => x?.title && x?.why).map((x) => ({
-      kind: KINDS.includes(x.kind) ? x.kind : 'venue', title: str(x.title, 80), venueName: str(x.venueName, 120), why: str(x.why, 220),
-    })).filter((x) => !/[А-Яа-яЁё]/.test(`${x.title}${x.why}${x.venueName}`) && !guard.some((w) => norm(`${x.title} ${x.why} ${x.venueName}`).includes(w)) && !seen.has(norm(x.title)) && seen.add(norm(x.title)))
+      kind: KINDS.includes(x.kind) ? x.kind : 'venue', title: str(x.title, 80), venueName: str(x.venueName, 120), address: x.venueName ? str(x.address, 200) : '', why: str(x.why, 220),
+    })).filter((x) => !/[А-Яа-яЁё]/.test(`${x.title}${x.why}${x.venueName}${x.address}`) && !guard.some((w) => norm(`${x.title} ${x.why} ${x.venueName}`).includes(w)) && !seen.has(norm(x.title)) && seen.add(norm(x.title)))
       .slice(0, 4).map((x, i) => ({ ...x, id: `s${Date.now().toString(36)}${i}` }));
     return res.status(200).json({ suggestions });
   } catch (e) {

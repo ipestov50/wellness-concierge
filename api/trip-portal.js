@@ -6,13 +6,13 @@ const iso = (v) => (typeof v === 'string' && ISO.test(v) ? v : null);
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function wmo(c) {
-  if (c === 0 || c === 1) return { kind: 'clear', text: 'Ясно' };
-  if (c === 2 || c === 3) return { kind: 'cloud', text: 'Облачно' };
-  if (c === 45 || c === 48) return { kind: 'fog', text: 'Туман' };
-  if (c >= 95) return { kind: 'storm', text: 'Гроза' };
-  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return { kind: 'snow', text: 'Снег' };
-  if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82)) return { kind: 'rain', text: 'Дождь' };
-  return { kind: 'cloud', text: 'Облачно' };
+  if (c === 0 || c === 1) return { kind: 'clear', text: 'Clear' };
+  if (c === 2 || c === 3) return { kind: 'cloud', text: 'Cloudy' };
+  if (c === 45 || c === 48) return { kind: 'fog', text: 'Fog' };
+  if (c >= 95) return { kind: 'storm', text: 'Storm' };
+  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return { kind: 'snow', text: 'Snow' };
+  if ((c >= 51 && c <= 67) || (c >= 80 && c <= 82)) return { kind: 'rain', text: 'Rain' };
+  return { kind: 'cloud', text: 'Cloudy' };
 }
 
 async function weather(lat, lon) {

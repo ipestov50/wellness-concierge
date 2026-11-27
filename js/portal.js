@@ -1,30 +1,30 @@
 // Public guest trip page. Standalone: no app imports.
 // All NEW user-facing strings live here so they are easy to polish.
 const COPY = {
-  wa: 'Добрый день. Есть вопрос по вашему путешествию ({city}, {range}), день {day}{event}.',
-  waEvent: ' — «{event}»',
-  careRain: 'Ожидается дождь — пригодится зонт. Если понадобится сухой трансфер, скажите нам заранее.',
-  careSnow: 'Ожидается снег — тёплая одежда не помешает. Если нужен трансфер, напишите нам заранее.',
-  careStorm: 'Возможна гроза — следим за прогнозом и, если понадобится, предложим гибкую замену.',
-  inDays: 'Через {n} дн.', tomorrow: 'Завтра', today: 'Сегодня',
-  dayOf: 'Сегодня · День {x} из {y}', ended: 'Поездка завершена',
+  wa: 'Hello. I have a question about my trip ({city}, {range}), day {day}{event}.',
+  waEvent: ' — “{event}”',
+  careRain: 'Rain is expected — an umbrella will come in handy. If you would like a dry transfer, just let us know in advance.',
+  careSnow: 'Snow is expected — warm clothing is a good idea. If you need a transfer, message us in advance.',
+  careStorm: 'Storms are possible — we are watching the forecast and will offer a flexible alternative if needed.',
+  inDays: 'In {n} days', tomorrow: 'Tomorrow', today: 'Today',
+  dayOf: 'Today · Day {x} of {y}', ended: 'Trip completed',
   events: '{n} {word}',
-  copyPnr: 'Копировать PNR', copyRef: 'Скопировать номер брони', copied: 'Скопировано',
-  copiedLive: 'Номер брони скопирован', copyFail: 'Не удалось скопировать. Номер можно выделить вручную',
-  anchorTag: 'Перелёт',
-  clockAria: 'Местное время', clockLocal: 'местное время · {city}', clockLocalBare: 'местное время',
-  liveOn: 'Обновляется в реальном времени', liveOff: 'Нет связи · показаны последние данные',
-  updated: 'Обновлено консьержем', dayUpdated: 'есть обновления', updatedLive: 'Маршрут обновлён консьержем',
-  noteLabel: '✦ Заметка консьержа',
-  arrive: 'Прилёт · {city}', depart: 'Вылет · {city}', checkInFrom: 'Заезд с {t}', bookingN: 'Бронь {ref}',
-  hotelLabel: 'Ваше проживание', stayIn: 'Заезд', stayOut: 'Выезд', copyAddr: 'Скопировать адрес', copiedAddr: 'Адрес скопирован',
-  copyAddrFail: 'Не удалось скопировать. Адрес можно выделить вручную', openMap: 'Открыть на карте ↗',
-  routeMap: 'Маршрут на карте ↗', routeFrom: 'Откуда', routeTo: 'Куда', driver: 'Ваш водитель: {name}',
-  guestsN: '{n} {w}', luggageN: '{n} {w} багажа', routeDesc: 'Маршрут: {a} → {b}',
+  copyPnr: 'Copy PNR', copyRef: 'Copy booking reference', copied: 'Copied',
+  copiedLive: 'Booking reference copied', copyFail: 'Could not copy. You can select the reference manually',
+  anchorTag: 'Flight',
+  clockAria: 'Local time', clockLocal: 'local time · {city}', clockLocalBare: 'local time',
+  liveOn: 'Updating live', liveOff: 'Offline · showing the latest data',
+  updated: 'Updated by your concierge', dayUpdated: 'new updates', updatedLive: 'Itinerary updated by your concierge',
+  noteLabel: '✦ Concierge note',
+  arrive: 'Arrival · {city}', depart: 'Departure · {city}', checkInFrom: 'Check-in from {t}', bookingN: 'Booking {ref}',
+  hotelLabel: 'Your stay', stayIn: 'Check-In', stayOut: 'Check-Out', copyAddr: 'Copy address', copiedAddr: 'Address copied',
+  copyAddrFail: 'Could not copy. You can select the address manually', openMap: 'Open in Google Maps ↗',
+  routeMap: 'Directions ↗', routeFrom: 'From', routeTo: 'To', driver: 'Your driver: {name}',
+  guestsN: '{n} {w}', luggageN: '{n} {w}', routeDesc: 'Route: {a} → {b}',
 };
-const GUEST_W = ['гость', 'гостя', 'гостей'], BAG_W = ['место', 'места', 'мест'];
+const GUEST_W = ['guest', 'guests'], BAG_W = ['bag', 'bags'];
 const REFRESH_MS = 15000, BADGE_MS = 30000, FRESH_MS = 24 * 36e5;
-const plural = (n, [a, b, c]) => { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; };
+const plural = (n, [a, b]) => (Math.abs(n) === 1 ? a : b);
 const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? '');
 
 const $ = (s) => document.querySelector(s);
@@ -58,7 +58,7 @@ const P = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.500 1.500M17.500 17.500 19 19M5 19l1.500-1.500M17.500 6.500 19 5"/>',
 };
 const CAT_ICON = { 'Flight': 'Flight', 'Hotel': 'Hotel', 'Accommodation': 'Hotel', 'Dining': 'Dining', 'Spa & Wellness': 'Spa', 'Health & Fitness': 'Spa', 'Transport': 'Transport', 'Activities': 'Activities', 'Gifts & Events': 'Gift' };
-const CAT_RU = { 'Flight': 'Перелёт', 'Hotel': 'Проживание', 'Accommodation': 'Проживание', 'Dining': 'Ресторан', 'Spa & Wellness': 'Спа и велнес', 'Health & Fitness': 'Здоровье и спорт', 'Transport': 'Трансфер', 'Activities': 'Впечатления', 'Gifts & Events': 'Подарки и события', 'Other': 'Прочее' };
+const CAT_RU = { 'Flight': 'Flight', 'Hotel': 'Stay', 'Accommodation': 'Stay', 'Dining': 'Dining', 'Spa & Wellness': 'Spa & Wellness', 'Health & Fitness': 'Health & Fitness', 'Transport': 'Transfer', 'Activities': 'Experience', 'Gifts & Events': 'Gifts & Events', 'Other': 'Other' };
 const svg = (k, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[k] || P.Other}</svg>`;
 
 let data = null, activeDate = null, clockTimer = null, copyTimer = null, userPicked = false, lastSig = '';
@@ -97,10 +97,10 @@ function setLive(ok) {
 }
 
 /* ---------- dates ---------- */
-const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const parts = (d) => String(d || '').split('-').map(Number);
 const shortDate = (d) => { const [, m, day] = parts(d); return m ? `${day} ${MONTHS[m - 1]}` : ''; };
-const WD = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const dayNum = (d) => { const [y, m, x] = parts(d); return Math.round(Date.UTC(y, m - 1, x) / 864e5); };
 const weekday = (d) => { const [y, m, x] = parts(d); return WD[new Date(Date.UTC(y, m - 1, x)).getUTCDay()]; };
 const addDays = (d, n) => new Date((dayNum(d) + n) * 864e5).toISOString().slice(0, 10);
@@ -116,12 +116,12 @@ function weatherKind(w) {
     if (c === 2 || c === 3) return 'cloud';
     if (c <= 1) return 'clear';
   }
-  if (/гроз/.test(t)) return 'storm';
-  if (/снег|снеж/.test(t)) return 'snow';
-  if (/дожд|ливн|морос|ливень/.test(t)) return 'rain';
-  if (/туман|дымк/.test(t)) return 'fog';
-  if (/облач|пасмур/.test(t)) return 'cloud';
-  return /ясно|солнеч/.test(t) ? 'clear' : 'cloud';
+  if (/thunder|storm/.test(t)) return 'storm';
+  if (/snow/.test(t)) return 'snow';
+  if (/rain|shower|drizzle/.test(t)) return 'rain';
+  if (/fog|mist|haze/.test(t)) return 'fog';
+  if (/cloud|overcast/.test(t)) return 'cloud';
+  return /clear|sunny/.test(t) ? 'clear' : 'cloud';
 }
 const KIND_ICON = { clear: 'sun', cloud: 'cloud', rain: 'rain', snow: 'snow', fog: 'fog', storm: 'storm' };
 function careNote() {
@@ -155,7 +155,7 @@ function statusText(today) {
   } else if (today > ds[ds.length - 1]) return COPY.ended;
   else t = fill(COPY.dayOf, { x: ds.filter((d) => d <= today).length, y: ds.length });
   const ev = data.days.reduce((n, d) => n + (d.items || []).filter((i) => i.kind === 'request').length, 0);
-  return ev ? `${t} · ${fill(COPY.events, { n: ev, word: plural(ev, ['событие', 'события', 'событий']) })}`: t;
+  return ev ? `${t} · ${fill(COPY.events, { n: ev, word: plural(ev, ['event', 'events']) })}`: t;
 }
 function todayIn(tz) {
   try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
@@ -165,7 +165,7 @@ function greetingIn(tz) {
   let h;
   try { h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz || undefined, hour: '2-digit', hour12: false }).format(new Date())) % 24; }
   catch { h = new Date().getHours(); }
-  return h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
+  return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
 /* ---------- views ---------- */
@@ -173,7 +173,7 @@ function stateView(title, text, retry) {
   clearTimeout(clockTimer);
   dock.hidden = true;
   app.setAttribute('aria-busy', 'false');
-  app.innerHTML = `<div class="state"><svg class="key" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${P.key}</svg><h1>${esc(title)}</h1><p>${esc(text)}</p>${retry ? '<button class="btn" id="retry" type="button">Попробовать снова</button>' : ''}</div>`;
+  app.innerHTML = `<div class="state"><svg class="key" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${P.key}</svg><h1>${esc(title)}</h1><p>${esc(text)}</p>${retry ? '<button class="btn" id="retry" type="button">Try again</button>' : ''}</div>`;
   if (retry) $('#retry').onclick = load;
 }
 
@@ -194,7 +194,7 @@ function render() {
       <div class="brand"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${P.key}</svg>Les Clefs d’Or <span>· Personal Concierge</span></div>
       <div style="height:28px"></div>
       ${name ? `<p class="greet">${greetingIn(trip.tz)}, ${name}</p>` : ''}
-      <h1>${esc(trip.title || 'Ваше путешествие')}</h1>
+      <h1>${esc(trip.title || 'Your journey')}</h1>
       <div class="meta">
         ${status ? `<span class="pill badge" id="status">${esc(status)}</span>` : ''}
         ${range ? `<span class="pill tnum">${esc(range)}</span>` : ''}
@@ -205,7 +205,7 @@ function render() {
       <div class="clock"><b id="clk" role="img" aria-label="${COPY.clockAria}"><span class="hh">--</span><span class="colon">:</span><span class="mm">--</span></b><small>${esc(String(trip.city || '').trim() ? fill(COPY.clockLocal, { city: String(trip.city).trim() }) : COPY.clockLocalBare)}</small></div>
       <div class="livebar" id="lv"><i class="dot" aria-hidden="true"></i><span>${COPY.liveOn}</span></div>
     </header>
-    <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Дни путешествия" id="tabs"><span class="ind" id="ind"></span>
+    <div class="tabsbar"><div class="tabs" role="tablist" aria-label="Trip days" id="tabs"><span class="ind" id="ind"></span>
       ${days.map((d, i) => `<button class="tab${d.date === today ? ' today' : ''}${dayDots.has(d.date) && d.date !== activeDate ? ' upd' : ''}" role="tab" id="t-${esc(d.date)}" data-date="${esc(d.date)}" aria-selected="${d.date === activeDate}" tabindex="${d.date === activeDate ? 0 : -1}" aria-controls="panel">${esc(tabLabel(d, i))}${dayDots.has(d.date) && d.date !== activeDate ? ` <span class="sr">· ${COPY.dayUpdated}</span>` : ''}</button>`).join('')}
     </div></div>
     <section id="panel" role="tabpanel" class="list" aria-live="polite"></section>`;
@@ -222,7 +222,7 @@ function render() {
 function tabLabel(d, i) {
   const ds = data.days.map((x) => x.date);
   const consecutive = ds.every((x, j) => j === 0 || dayNum(x) - dayNum(ds[j - 1]) === 1);
-  return consecutive ? `День ${i + 1} · ${shortDate(d.date)}` : `${weekday(d.date)} · ${shortDate(d.date)}`;
+  return consecutive ? `Day ${i + 1} · ${shortDate(d.date)}` : `${weekday(d.date)} · ${shortDate(d.date)}`;
 }
 function setCare() {
   const el = $('#care'); if (!el) return;
@@ -243,7 +243,7 @@ function setDock() {
   const wa = data.concierge && String(data.concierge.whatsapp || '').replace(/\D/g, '');
   if (!wa) { dock.hidden = true; return; }
   dock.hidden = false;
-  dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Написать консьержу</a>`;
+  dock.innerHTML = `<a class="cta" href="https://wa.me/${wa}?text=${encodeURIComponent(waText())}" target="_blank" rel="noopener noreferrer">${svg('wa')}Message Concierge</a>`;
 }
 
 // проживание показываем только в день заезда и в день выезда (даты за пределами поездки прижимаются к её краям)
@@ -294,7 +294,7 @@ function routeHtml(tr) {
 
 const timeMin = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : Infinity; };
 // прилёт и вылет — якорь дня: всегда первыми, дальше по времени
-const isAnchor = (it) => it && it.kind === 'flight' && /^\s*(прил[её]т|вылет|arriv|depart)/i.test(String(it.title || ''));
+const isAnchor = (it) => it && it.kind === 'flight' && /^\s*(arriv|depart)/i.test(String(it.title || ''));
 const anchorRank = (it) => (isAnchor(it) ? 0 : 1);
 function normDays(j) {
   (j.days || []).forEach((d) => { if (Array.isArray(d.items)) d.items = d.items.filter(Boolean).sort((a, b) => { const r = anchorRank(a) - anchorRank(b); if (r) return r; const x = timeMin(a.time), y = timeMin(b.time); return x === y ? 0 : x < y ? -1 : 1; }); });
@@ -304,7 +304,7 @@ const shortPlace = (t) => { const v = String(t || '').split(',')[0].trim(); retu
 function flightTitle(t) {
   const city = String((data && data.trip && data.trip.city) || '').trim(), k = t.toLowerCase();
   if (!city) return t;
-  return k === 'прилёт' || k === 'прилет' ? fill(COPY.arrive, { city }) : k === 'вылет' ? fill(COPY.depart, { city }) : t;
+  return k === 'arrival' ? fill(COPY.arrive, { city }) : k === 'departure' ? fill(COPY.depart, { city }) : t;
 }
 function displayTitle(it) {
   const title = String(it.title || ''), ref = String(it.bookingReference || '').trim();
@@ -314,7 +314,7 @@ function displayTitle(it) {
   }
   if (it.kind === 'flight') return flightTitle(title.trim());
   const tr = transferOf(it);
-  if (tr && tr.pickup && tr.dropoff && /^\s*(трансфер|transfer)\s*[.!:…]*\s*$/i.test(title)) return `${shortPlace(tr.pickup)} → ${shortPlace(tr.dropoff)}`;
+  if (tr && tr.pickup && tr.dropoff && /^\s*transfer\s*[.!:…]*\s*$/i.test(title)) return `${shortPlace(tr.pickup)} → ${shortPlace(tr.dropoff)}`;
   return title;
 }
 function card(it, idx, date) {
@@ -326,20 +326,20 @@ function card(it, idx, date) {
   const showVenue = true;
   const place = [vName, addr].filter(Boolean).join(', ');
   const rows = [];
-  if (it.dressCode) rows.push(['Дресс-код', esc(it.dressCode)]);
-  if (it.bookingReference) rows.push(['Бронь', `<span class="ref">${esc(it.bookingReference)}</span>`]);
+  if (it.dressCode) rows.push(['Dress code', esc(it.dressCode)]);
+  if (it.bookingReference) rows.push(['Booking', `<span class="ref">${esc(it.bookingReference)}</span>`]);
   const acts = [];
   if (it.bookingReference) {
     const label = it.kind === 'flight' ? COPY.copyPnr : COPY.copyRef;
     acts.push(`<button class="btn" type="button" data-copy="${esc(it.bookingReference)}" data-label="${esc(label)}">${svg('copy')}<span>${esc(label)}</span></button>`);
   }
   if (tr && tr.pickup && tr.dropoff) acts.push(`<a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(tr.pickup)}&destination=${encodeURIComponent(tr.dropoff)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${esc(COPY.routeMap)}</span></a>`);
-  else if (tr || place) { const q = tr ? (tr.pickup || tr.dropoff) : place; acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${tr ? esc(COPY.openMap) : 'Показать на карте ↗'}</span></a>`); }
+  else if (tr || place) { const q = tr ? (tr.pickup || tr.dropoff) : place; acts.push(`<a class="btn" href="https://maps.google.com/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${svg('pin')}<span>${tr ? esc(COPY.openMap) : 'Open in Google Maps ↗'}</span></a>`); }
   const upd = badgeSet.has(sig) && !dismissed.has(dkey(sig, it));
   return `<article class="card kind-${esc(it.kind || 'request')}${isAnchor(it) ? ' anchor' : ''}${tr ? ' transfer' : ''}${entering.has(sig) ? ' enter' : ''}" data-sig="${esc(sig)}">
     <div class="top">
       <div class="ico">${svg(cat)}</div>
-      <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'В течение дня'}</div>
+      <div class="time tnum${it.time ? '' : ' none'}">${it.time ? esc(it.time) : 'Anytime during the day'}</div>
       <div class="cat">${esc(isAnchor(it) ? COPY.anchorTag : (CAT_RU[it.category] || CAT_RU.Other))}</div>
       ${upd ? `<span class="upd">✦ ${esc(COPY.updated)}</span>` : ''}
       <h2 class="title">${esc(displayTitle(it))}</h2>
@@ -356,7 +356,7 @@ function renderDay() {
   const items = day ? day.items || [] : [];
   // перелёты — якорь дня и идут первыми; карточка проживания — сразу после них
   const hc = hotelCard(stayMode(activeDate)), nA = items.filter(isAnchor).length, cards = items.map((it, i) => card(it, i, activeDate));
-  panel.innerHTML = items.length ? cards.slice(0, nA).join('') + hc + cards.slice(nA).join('') : hc + `<div class="empty"><h2>День в вашем распоряжении</h2><p>На этот день пока ничего не запланировано. Мы рядом, если захотите что-то добавить.</p></div>`;
+  panel.innerHTML = items.length ? cards.slice(0, nA).join('') + hc + cards.slice(nA).join('') : hc + `<div class="empty"><h2>The day is yours</h2><p>Nothing is planned for this day yet. We are here if you would like to add something.</p></div>`;
   panel.onclick = (e) => { const c = e.target.closest('.card'); if (c && c.dataset.sig && badgeSet.has(c.dataset.sig)) { const it = items.find((x) => sigOf(activeDate, x) === c.dataset.sig); dropBadge(c.dataset.sig, it && dkey(c.dataset.sig, it)); } };
   panel.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copyRef(b)));
 }
@@ -414,7 +414,7 @@ function startClock(tz) {
   clearTimeout(clockTimer);
   const opt = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
   let f;
-  try { f = new Intl.DateTimeFormat('ru-RU', { timeZone: tz || undefined, ...opt }); } catch { f = new Intl.DateTimeFormat('ru-RU', opt); }
+  try { f = new Intl.DateTimeFormat('en-GB', { timeZone: tz || undefined, ...opt }); } catch { f = new Intl.DateTimeFormat('en-GB', opt); }
   const tick = () => {
     const el = $('#clk');
     if (el) {
@@ -465,21 +465,21 @@ function demoData() {
   const old = new Date(Date.now() - 5 * 864e5).toISOString(), recent = new Date(Date.now() - 2 * 36e5).toISOString();
   const e = { venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: '', updatedAt: old };
   demoState = {
-    guest: { firstName: 'Анна' },
-    trip: { title: 'Берлин', city: 'Берлин', country: 'Германия', start: d(2), end: d(8), tz: 'Europe/Berlin', lat: 52.52, lon: 13.4 },
-    stay: { name: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, 10117 Berlin, Германия', guests: 2, checkInTime: '15:00', roomType: 'Deluxe Suite', bookingReference: 'AD-448120', note: 'Номер с видом на Бранденбургские ворота.\nРанний заезд согласован.', checkIn: d(2), checkOut: d(8) },
-    weather: { tempC: 4, code: 61, text: 'Дождь', kind: 'rain', windKmh: 18, daily: [
-      { date: d(2), kind: 'rain', text: 'Дождь', tMax: 5, tMin: 2 }, { date: d(3), kind: 'cloud', text: 'Облачно', tMax: 6, tMin: 1 }, { date: d(6), kind: 'clear', text: 'Ясно', tMax: 8, tMin: 0 } ] },
+    guest: { firstName: 'Anna' },
+    trip: { title: 'Berlin', city: 'Berlin', country: 'Germany', start: d(2), end: d(8), tz: 'Europe/Berlin', lat: 52.52, lon: 13.4 },
+    stay: { name: 'Hotel Adlon Kempinski', address: 'Unter den Linden 77, 10117 Berlin, Germany', guests: 2, checkInTime: '15:00', roomType: 'Deluxe Suite', bookingReference: 'AD-448120', note: 'A room with a view of the Brandenburg Gate.\nEarly check-in confirmed.', checkIn: d(2), checkOut: d(8) },
+    weather: { tempC: 4, code: 61, text: 'Rain', kind: 'rain', windKmh: 18, daily: [
+      { date: d(2), kind: 'rain', text: 'Rain', tMax: 5, tMin: 2 }, { date: d(3), kind: 'cloud', text: 'Cloudy', tMax: 6, tMin: 1 }, { date: d(6), kind: 'clear', text: 'Clear', tMax: 8, tMin: 0 } ] },
     days: [
       { date: d(2), items: [
-        { ...e, time: '09:15', title: 'Прилёт · B43CSZ', category: 'Flight', kind: 'flight', venueName: 'Шереметьево, терминал B', bookingReference: 'B43CSZ', guestNotes: 'Приоритетная регистрация' },
-        { ...e, time: '20:30', title: 'Ужин, ресторан', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Столик у окна, без морепродуктов' } ] },
+        { ...e, time: '09:15', title: 'Arrival · B43CSZ', category: 'Flight', kind: 'flight', venueName: 'Sheremetyevo, Terminal B', bookingReference: 'B43CSZ', guestNotes: 'Priority check-in' },
+        { ...e, time: '20:30', title: 'Dinner at the restaurant', category: 'Dining', kind: 'request', venueName: 'Rutz', address: 'Chausseestraße 8, Berlin', bookingReference: 'RZ-5521', dressCode: 'Smart elegant', guestNotes: 'Window table, no seafood' } ] },
       { date: d(3), items: [
-        { ...e, time: '11:00', title: 'Спа-программа «Восстановление»', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
+        { ...e, time: '11:00', title: 'Restoration spa programme', category: 'Spa & Wellness', kind: 'request', venueName: 'Adlon Spa' } ] },
       { date: d(6), items: [
-        { ...e, time: '18:40', title: 'Вылет · K7QD2P', category: 'Flight', kind: 'flight', venueName: 'BER, терминал 1', bookingReference: 'K7QD2P' },
-        { ...e, time: '14:15', title: 'Трансфер', category: 'Transport', kind: 'request', guestNotes: 'Водитель встретит у входа', updatedAt: recent, bookingReference: 'TR-1042',
-          transfer: { pickup: 'Hotel Adlon Kempinski, Unter den Linden 77, 10117 Berlin', dropoff: 'Аэропорт Берлин Бранденбург (BER), Terminal 1, Melli-Beese-Ring 1, 12529 Schönefeld', passengers: 2, luggage: 5, driver: 'Markus' } } ] },
+        { ...e, time: '18:40', title: 'Departure · K7QD2P', category: 'Flight', kind: 'flight', venueName: 'BER, Terminal 1', bookingReference: 'K7QD2P' },
+        { ...e, time: '14:15', title: 'Transfer', category: 'Transport', kind: 'request', guestNotes: 'Your driver will meet you at the entrance', updatedAt: recent, bookingReference: 'TR-1042',
+          transfer: { pickup: 'Hotel Adlon Kempinski, Unter den Linden 77, 10117 Berlin', dropoff: 'Berlin Brandenburg Airport (BER), Terminal 1, Melli-Beese-Ring 1, 12529 Schönefeld', passengers: 2, luggage: 5, driver: 'Markus' } } ] },
     ],
     concierge: { whatsapp: '+49 30 1234 5678' },
     updatedAt: new Date().toISOString(),
@@ -489,9 +489,9 @@ function demoData() {
 function mutateDemo() {
   const now = new Date().toISOString();
   demoData();
-  demoState.days[1].items.push({ time: '16:30', title: 'Прогулка по Музейному острову', category: 'Activities', kind: 'request', venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: 'Гид встретит у входа.\nВозьмите паспорт.', updatedAt: now });
+  demoState.days[1].items.push({ time: '16:30', title: 'Museum Island walk', category: 'Activities', kind: 'request', venueName: '', address: '', bookingReference: '', dressCode: '', guestNotes: 'Your guide will meet you at the entrance.\nPlease bring your passport.', updatedAt: now });
   const din = demoState.days[0].items[1];
-  din.guestNotes = 'Столик у окна, без морепродуктов. Шеф подготовит безглютеновое меню.'; din.updatedAt = now;
+  din.guestNotes = 'Window table, no seafood. The chef will prepare a gluten-free menu.'; din.updatedAt = now;
   demoState.updatedAt = now;
 }
 
@@ -546,9 +546,9 @@ async function load() {
     let j;
     if (DEMO) j = demoData();
     else {
-      if (!token) return stateView('Эта ссылка неактивна', 'Ваш консьерж с радостью пришлёт новую.');
+      if (!token) return stateView('This link is no longer active', 'Your concierge will gladly send you a new one.');
       const r = await fetch('/api/trip-portal?token=' + encodeURIComponent(token), { headers: { Accept: 'application/json' }, cache: 'no-store' });
-      if (r.status === 400 || r.status === 404) { data = null; return stateView('Эта ссылка неактивна', 'Похоже, срок её действия истёк. Ваш консьерж с радостью пришлёт новую.'); }
+      if (r.status === 400 || r.status === 404) { data = null; return stateView('This link is no longer active', 'It looks like it has expired. Your concierge will gladly send you a new one.'); }
       if (!r.ok) throw new Error('http');
       j = await r.json();
     }
@@ -560,7 +560,7 @@ async function load() {
   } catch {
     lastOk = false;
     if (data) return setLive(false); // keep the last good data on a silent refresh failure
-    stateView('Минуту терпения', 'Маршрут пока не открывается. Проверьте соединение и попробуйте ещё раз.', true);
+    stateView('One moment', 'Your itinerary is not opening right now. Please check your connection and try again.', true);
   } finally { inflight = false; }
 }
 

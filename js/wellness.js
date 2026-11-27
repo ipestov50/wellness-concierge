@@ -8,7 +8,6 @@ import { state, byId, save, patchLocal } from './data.js';
 import { getSupabase } from './supabase.js';
 import { chipField, bindChips } from './chips.js';
 import { timeField, bindTimeFields, normTime } from './timefield.js';
-import { lookupPlace } from './tz.js';
 import { statusOf, firstKey } from './statuses.js';
 
 const DURATIONS = [2, 3, 4, 5, 7];
@@ -46,10 +45,19 @@ function zonedIso(date, time, tz) {
   } catch { return new Date(guess).toISOString(); }
 }
 const guessCategory = (t) => (/massage|spa|sauna|hammam|thermal|facial|wellness|treatment|yoga|ritual/i.test(t) ? 'Spa & Wellness' : /dinner|lunch|breakfast|brunch|restaurant|tasting|tea|coffee/i.test(t) ? 'Dining' : /pick ?up|transfer|airport|chauffeur|driver|drive|arriv|depart/i.test(t) ? 'Transport' : /check.?in|hotel|room/i.test(t) ? 'Accommodation' : /doctor|clinic|physio|gym|fitness|trainer/i.test(t) ? 'Health & Fitness' : 'Other');
+// the guest portal is in English, so the trip's place name comes from an English geocode
+async function lookupEn(name) {
+  if (!name?.trim()) return null;
+  try {
+    const j = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name.trim())}&count=1&language=en`)).json();
+    const x = j.results?.[0];
+    return x ? { tz: x.timezone, cc: x.country_code, country: x.country, lat: x.latitude, lon: x.longitude, name: x.name } : null;
+  } catch { return null; }
+}
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set() }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set() }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -83,17 +91,25 @@ export function openWellness(presetClient) {
       <div class="f"><label for="wl_notes">${T.notes}</label><textarea id="wl_notes" name="wl_notes" rows="4" placeholder="${esc(T.notesPh)}"></textarea><div class="wl-signals" id="wl-signals" aria-live="polite"></div></div>
     </div>
     <div class="wl-right">
-      <section class="wl-flow" aria-label="${T.flow}"><div class="wl-fh"><h3>${T.flow}</h3><span class="wl-range tnum" id="wl-range"></span></div><div id="wl-flow"></div></section>
-      <div class="wl-qh"><h3>${T.qh}</h3><span class="wl-sync" id="wl-sync" role="status" aria-live="polite"><i aria-hidden="true"></i><span></span></span></div>
-      <div class="wl-stepper" id="wl-stepper" role="group" aria-label="Discovery stages"></div>
-      <div class="wl-qs" id="wl-qs"></div>
-      <section class="wl-capt" id="wl-capt" aria-label="Captured brief"></section>
-      <section class="wl-cur" id="wl-cur" aria-label="Curated suggestions"></section>
-      <div class="wl-build"><button type="button" class="wl-go" id="wl-go-gamma">${T.gamma}</button><button type="button" class="wl-go alt" id="wl-go-mail">${T.mail}</button><button type="button" class="wl-go live" id="wl-go-live">${T.live}</button></div>
+      <div class="wl-rtabs" role="tablist" aria-label="Cockpit sections"><i class="wl-rind" aria-hidden="true"></i>
+        <button type="button" role="tab" id="rt-disc" data-rtab="disc" aria-selected="true" aria-controls="rp-disc"><span>Discovery</span></button>
+        <button type="button" role="tab" id="rt-capt" data-rtab="capt" aria-selected="false" aria-controls="rp-capt"><span>Captured</span><b class="tnum" id="rt-capt-n"></b></button>
+        <button type="button" role="tab" id="rt-cur" data-rtab="cur" aria-selected="false" aria-controls="rp-cur"><span>Curate &amp; Export</span><b class="tnum" id="rt-cur-n"></b></button></div>
+      <div class="wl-rpane" id="rp-disc" role="tabpanel" aria-labelledby="rt-disc">
+        <details class="wl-flowd" id="wl-flowd"><summary><span>${T.flow}</span><span class="wl-range tnum" id="wl-range"></span></summary><div id="wl-flow"></div></details>
+        <div class="wl-qh"><h3>${T.qh}</h3><span class="wl-sync" id="wl-sync" role="status" aria-live="polite"><i aria-hidden="true"></i><span></span></span></div>
+        <div class="wl-stepper" id="wl-stepper" role="group" aria-label="Discovery stages"></div>
+        <div class="wl-qs" id="wl-qs"></div>
+      </div>
+      <div class="wl-rpane" id="rp-capt" role="tabpanel" aria-labelledby="rt-capt" hidden><section class="wl-capt" id="wl-capt" aria-label="Captured brief"></section></div>
+      <div class="wl-rpane" id="rp-cur" role="tabpanel" aria-labelledby="rt-cur" hidden>
+        <section class="wl-cur" id="wl-cur" aria-label="Curated suggestions"></section>
+        <section class="wl-out" id="wl-out" hidden aria-live="polite"></section>
+      </div>
       <div class="wl-livebar" id="wl-livebar" hidden></div>
+      <div class="wl-build"><button type="button" class="wl-go" id="wl-go-gamma">${T.gamma}</button><button type="button" class="wl-go alt" id="wl-go-mail">${T.mail}</button><button type="button" class="wl-go live" id="wl-go-live">${T.live}</button></div>
     </div>
-  </div>
-  <section class="wl-out" id="wl-out" hidden aria-live="polite"></section></div>`;
+  </div></div>`;
   const m = openModal({ title: T.title, saveLabel: 'Close', body, cls: 'tp cl wl', onSave: async () => {} });
   const f = m.form;
   f.querySelector('.foot').hidden = true;
@@ -343,7 +359,7 @@ export function openWellness(presetClient) {
   const paintQs = () => {
     ensureActive();
     const box = $('#wl-qs');
-    paintStepper(); paintCur();
+    paintStepper(); paintCur(); paintTabs();
     if (!hasBrief()) { box.innerHTML = `<div class="wl-guide"><p>${esc(T.guideMsg)}</p><ul>${gate().map(([l, ok]) => `<li class="${ok ? 'ok' : 'no'}"><i aria-hidden="true">${ok ? '✓' : '○'}</i>${esc(l)}</li>`).join('')}</ul></div>`; $('#wl-capt').innerHTML = ''; return; }
     box.innerHTML = activeCard();
     $('#wl-capt').innerHTML = captured();
@@ -403,6 +419,7 @@ export function openWellness(presetClient) {
   const paintCur = () => {
     const box = $('#wl-cur'), c = S.cur;
     if (!hasBrief()) { box.innerHTML = ''; return; }
+    paintTabs();
     box.innerHTML = `<div class="wl-curh"><b>✦ Curated Suggestions</b><button type="button" class="wl-pill" data-curate ${c.busy ? 'disabled' : ''}>${c.busy ? 'Jarvis is curating…' : c.items.length ? '↻ Re-curate' : '✦ Suggest Venues &amp; Service Touches'}</button></div>
       ${c.items.length ? `<div class="wl-curl">${c.items.map((x) => { const inc = c.included.has(x.id); return `<article class="wl-cc${inc ? ' inc' : ''}"><div class="wl-cck"><span class="wq-tag">${esc(KIND[x.kind] || 'Idea')}</span></div><h5>${esc(x.title)}</h5>${x.venueName ? `<div class="wl-cv">${esc(x.venueName)}</div>` : ''}<p>${esc(x.why)}</p><button type="button" class="wl-inc" data-inc="${esc(x.id)}" aria-pressed="${inc}">${inc ? '✓ Included' : '+ Add to Proposal'}</button></article>`; }).join('')}</div>` : '<p class="wl-empty small">Approve what you like — only included ideas go into the Gamma proposal.</p>'}`;
   };
@@ -430,7 +447,7 @@ export function openWellness(presetClient) {
   const buildOut = async (focus) => {
     if (!val('wl_dest')) { toast('Add a destination first'); $('#wl_dest').focus(); return false; }
     if (S.busy) return false;
-    const approved = S.cur.items.filter((x) => S.cur.included.has(x.id)).map(({ kind, title, venueName, why }) => ({ kind, title, venueName, why }));
+    const approved = S.cur.items.filter((x) => S.cur.included.has(x.id)).map(({ kind, title, venueName, address, why }) => ({ kind, title, venueName, address, why }));
     const key = JSON.stringify([payload(), answered().map((q) => q.answer), S.signals, approved]);
     if (S.out && S.outKey === key) { paintOut(focus); return true; }
     S.busy = true; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = true));
@@ -441,16 +458,25 @@ export function openWellness(presetClient) {
   };
   const paintOut = (focus) => {
     const o = $('#wl-out'), r = S.out; if (!r) { o.hidden = true; return; }
+    if (focus === 'mail') S.outTab = 'mail'; else if (focus === 'gamma') S.outTab = 'prompt';
     o.hidden = false;
+    const mail = S.outTab === 'mail';
     o.innerHTML = `<div class="wl-oh"><h3>${T.outTitle}</h3>${(r.warnings || []).length ? `<p class="wl-warn">⚠ Please review manually: ${esc(r.warnings.join('; '))}</p>` : ''}</div>
-      <div class="wl-ocols"><div class="wl-ocol" id="wl-oc-prompt"><span class="wl-ol">Gamma · master prompt</span><pre class="wl-pre" id="wl-pre" tabindex="0"></pre>
-        <div class="wl-oa"><button type="button" class="wl-pill solid" data-copy="prompt">${T.copyP}</button><a class="wl-pill" href="https://gamma.app" target="_blank" rel="noopener noreferrer">${T.open}</a></div></div>
-      <div class="wl-ocol" id="wl-oc-mail"><span class="wl-ol">Guest email</span><pre class="wl-pre" id="wl-mail" tabindex="0"></pre>
-        <div class="wl-oa"><button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button></div></div></div>`;
-    o.querySelector('#wl-pre').textContent = r.gammaPrompt;
-    o.querySelector('#wl-mail').textContent = emailText();
-    if (focus !== 'live') (o.querySelector(focus === 'mail' ? '#wl-oc-mail' : '#wl-oc-prompt') || o).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      <div class="wl-vt" role="tablist" aria-label="Output"><button type="button" role="tab" data-otab="prompt" aria-selected="${!mail}">Gamma Master Prompt</button><button type="button" role="tab" data-otab="mail" aria-selected="${mail}">Guest Email</button></div>
+      <pre class="wl-pre" id="wl-pre" tabindex="0"></pre>
+      <div class="wl-oa">${mail ? `<button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button>` : `<button type="button" class="wl-pill solid" data-copy="prompt">${T.copyP}</button><a class="wl-pill" href="https://gamma.app" target="_blank" rel="noopener noreferrer">${T.open}</a>`}</div>`;
+    o.querySelector('#wl-pre').textContent = mail ? emailText() : r.gammaPrompt;
+    if (focus && focus !== 'live') { showTab('cur'); o.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   };
+
+  const paintTabs = () => {
+    const tabs = ['disc', 'capt', 'cur'];
+    tabs.forEach((k) => { const on = S.rtab === k; $(`#rt-${k}`).setAttribute('aria-selected', String(on)); $(`#rp-${k}`).hidden = !on; });
+    const i = tabs.indexOf(S.rtab); $('.wl-rtabs').style.setProperty('--i', i);
+    const nCap = answered().length, nInc = S.cur.included.size;
+    $('#rt-capt-n').textContent = nCap ? `(${nCap})` : ''; $('#rt-cur-n').textContent = nInc ? `(${nInc})` : '';
+  };
+  const showTab = (k) => { S.rtab = k; paintTabs(); };
 
   // ---------- 🔗 Live Link: client → trip → portal link → requests ----------
   const confirmedKey = () => (statusOf('confirmed') ? 'confirmed' : (state.statuses.find((s) => /подтвержд|confirm/i.test(s.label))?.key || firstKey()));
@@ -477,24 +503,50 @@ export function openWellness(presetClient) {
       }
       const cid = S.ids.client, client = byId('clients', cid);
       // 2) trip
-      const place = await lookupPlace(val('wl_dest')), tz = place?.tz || client?.home_tz || 'Europe/Paris';
+      const place = await lookupEn(val('wl_dest')), tz = place?.tz || client?.home_tz || 'Europe/Paris';
       const tripRow = await save('trips', S.ids.trip, {
-        client_id: cid, city: val('wl_dest'), country: place?.country || null, country_code: place?.cc || null, start_date: arrival(), end_date: departure(), tz,
+        client_id: cid, city: place?.name || (/[А-Яа-яЁё]/.test(val('wl_dest')) ? 'Destination' : val('wl_dest')), country: place?.country || null, country_code: place?.cc || null, start_date: arrival(), end_date: departure(), tz,
         flight_in_at: arrT() ? zonedIso(arrival(), arrT(), tz) : null, flight_out_at: depT() ? zonedIso(departure(), depT(), tz) : null, lat: place?.lat ?? null, lon: place?.lon ?? null,
-        companions: partyText(), notes: val('wl_notes') || null,
+        companions: partyText(), notes: S.out.notesEnglish || (val('wl_notes') && !/[А-Яа-яЁё]/.test(val('wl_notes')) ? val('wl_notes') : null),
       });
       S.ids.trip = tripRow.id;
       // 3) portal link (the guest portal is per guest)
       let token = client?.portal_token;
       if (!token) { const { data, error } = await sb.rpc('client_portal_share', { p_client: cid, p_mode: 'on' }); if (error) throw error; token = data; patchLocal('clients', cid, { portal_token: token || null }); }
       if (!token) throw new Error('no portal link');
-      // 4) requests: every anchor and itinerary item
+      // 4) requests. ONLY confirmed facts reach the Board, Calendar and portal: fixed anchors, bookings stated in the notes/answers and the suggestions the concierge marked ✓ Included. Everything is stored in English.
       const status = confirmedKey(), items = new Map();
-      // ONLY what the concierge confirmed with the guest: fixed anchors + bookings the model found stated in the notes/answers. Creative suggestions stay in the Gamma proposal.
+      const noCyr = (t) => !/[А-Яа-яЁё]/.test(String(t || ''));
+      const fallbackTitle = (cat) => ({ 'Spa & Wellness': 'Spa treatment', Dining: 'Dining', Transport: 'Private transfer', Accommodation: 'Hotel service', 'Health & Fitness': 'Wellness session' })[cat] || 'Planned activity';
       for (const i of (S.out.confirmedBookings || [])) items.set(`${i.date}|${i.time}|${i.title.toLowerCase()}`, { date: i.date, time: i.time, title: i.title, category: i.category, venueName: i.venueName, address: i.address, guestNotes: i.guestNotes });
       for (const a of S.anchors) { // anchors are authoritative: replace a booking at the same slot
         for (const [k, v] of items) if (v.date === a.date && v.time === a.time) items.delete(k);
-        items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { date: a.date, time: a.time, title: a.activity, category: guessCategory(a.activity), venueName: '', address: '', guestNotes: '' });
+        const en = (S.out.anchorsEnglish || []).find((x) => x.date === a.date && x.time === a.time)?.en, cat = guessCategory(`${en || ''} ${a.activity}`);
+        items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { date: a.date, time: a.time, title: en || (noCyr(a.activity) ? a.activity : fallbackTitle(cat)), category: cat, venueName: '', address: '', guestNotes: '' });
+      }
+      // ✓ Included suggestions get a logical date and slot that never collides with anchors or each other
+      const taken = [...items.values()].map((v) => ({ d: v.date, m: mins(v.time) }));
+      const free = (d, m) => taken.every((x) => x.d !== d || Math.abs(x.m - m) >= 90);
+      const ds = tripDays().map((x) => x.date), first = ds[0], lastD = ds[ds.length - 1], arrM = arrT() ? mins(arrT()) : null, depM = depT() ? mins(depT()) : null;
+      const place1 = (kind) => {
+        if (kind === 'bridge' || kind === 'touch') {
+          let m = kind === 'bridge' ? Math.min(Math.max((arrM ?? 540) + 30, 540), 810) : (arrM !== null && (arrM >= 900 || early()) ? arrM + 45 : 900);
+          for (let k = 0; k < 5 && !free(first, m); k++) m += 60;
+          return [first, m];
+        }
+        const slots = [990, 1170, 660, 840];
+        for (const d of ds.slice(first === lastD ? 0 : 1).concat(first === lastD ? [] : [first])) for (const m of slots) {
+          if (d === first && arrM !== null && m < arrM + 60) continue;
+          if (d === lastD && depM !== null && m > depM - 240) continue;
+          if (free(d, m)) return [d, m];
+        }
+        return [first, 1020];
+      };
+      for (const x of S.cur.items.filter((y) => S.cur.included.has(y.id))) {
+        if (!noCyr(`${x.title}${x.why}${x.venueName}`)) continue;
+        const [d, m] = place1(x.kind); taken.push({ d, m });
+        const time = fmtT(m), cat = x.kind === 'touch' ? 'Other' : guessCategory(`${x.title} ${x.venueName}`);
+        items.set(`inc:${x.id}`, { date: d, time, title: x.title, category: cat === 'Other' && x.kind !== 'touch' ? 'Activities' : cat, venueName: x.venueName || '', address: x.address || '', guestNotes: x.why });
       }
       let n = 0;
       for (const [k, it] of items) {
@@ -506,9 +558,9 @@ export function openWellness(presetClient) {
       S.liveUrl = `${location.origin}/t/${token}`;
       let ok = true; try { await navigator.clipboard.writeText(S.liveUrl); } catch { ok = false; }
       $('#wl-livebar').hidden = false;
-      $('#wl-livebar').innerHTML = `<span class="wl-ok">${ok ? 'Live Link Copied ✓' : 'Live Link ready'}</span><a class="wl-pill" href="${esc(S.liveUrl)}" target="_blank" rel="noopener noreferrer">Open Portal ↗</a><span class="wl-lm tnum">${n} confirmed item${n === 1 ? '' : 's'} on the Board, Calendar and portal</span>`;
+      $('#wl-livebar').innerHTML = `<span class="wl-ok">${ok ? 'Live Link Copied ✓' : 'Live Link ready'}</span><a class="wl-pill" href="${esc(S.liveUrl)}" target="_blank" rel="noopener noreferrer">Open Portal ↗</a><span class="wl-lm tnum">${n} confirmed item${n === 1 ? '' : 's'} synced to Board, Calendar &amp; Portal ✓</span>`;
       paintOut('live');
-      toast(n ? `Live itinerary created · ${n} confirmed item${n === 1 ? '' : 's'}` : 'Live link ready · no confirmed items yet (add Fixed Time Anchors)');
+      toast(n ? `${n} confirmed item${n === 1 ? '' : 's'} synced to Board, Calendar & Portal ✓` : 'Live link ready · no confirmed items yet (add Fixed Time Anchors or include suggestions)');
     } catch (e) {
       toast('Could not create the live link: ' + (e.message || e), 'err');
     } finally { S.busy = false; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = false)); btn.textContent = label; }
@@ -517,6 +569,8 @@ export function openWellness(presetClient) {
   // ---------- events (delegated on the form) ----------
   f.addEventListener('click', async (e) => {
     const t = e.target;
+    const rt = t.closest('[data-rtab]'); if (rt) return showTab(rt.dataset.rtab);
+    const ot = t.closest('[data-otab]'); if (ot) { S.outTab = ot.dataset.otab; return paintOut(); }
     const pk = t.closest('[data-pick]'); if (pk) return openCal(pk.dataset.pick);
     const cd = t.closest('[data-cd]'); if (cd) return pickDay(cd.dataset.cd);
     const cn = t.closest('[data-cn]'); if (cn) { const [y, mo] = (S.cal.month || ymd(new Date()).slice(0, 7)).split('-').map(Number); S.cal.month = new Date(Date.UTC(y, mo - 1 + +cn.dataset.cn, 1)).toISOString().slice(0, 7); return paintCal(); }
@@ -552,7 +606,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-skip-stage]')) return closeStage(S.active, 'skipped');
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
-    const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); return; }
+    const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); return; }
     const cp = t.closest('[data-copy]');
     if (cp && S.out) {
       const text = cp.dataset.copy === 'prompt' ? S.out.gammaPrompt : emailText(), label = cp.textContent;
@@ -578,6 +632,6 @@ export function openWellness(presetClient) {
     else if (e.key === 'Enter' && (e.target.id === 'wl_a_act' || e.target.id === 'f-wl_a_time')) { e.preventDefault(); addAnchor(); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_dest' || e.target.id === 'wl_goal' || e.target.id === 'wl_ages')) e.preventDefault();
   });
-  paintDossier(); dayOptions(); paintAnchors(); paintDur(); paintParty(); paintFlow(); setStatus('idle', 'Waiting for the call brief'); paintQs();
+  paintDossier(); dayOptions(); paintAnchors(); paintDur(); paintParty(); paintFlow(); paintTabs(); setStatus('idle', 'Waiting for the call brief'); paintQs();
   m.signal.addEventListener?.('abort', () => { clearTimeout(S.timer); S.ctrl?.abort(); });
 }

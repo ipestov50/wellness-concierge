@@ -12,13 +12,15 @@ const SCHEMA = {
     gammaPrompt: { type: 'STRING', description: 'Slide-structured master prompt for Gamma.app, slides separated by a line with ---' },
     emailSubject: { type: 'STRING', description: 'Warm, short email subject line in English' },
     emailBody: { type: 'STRING', description: 'Ready-to-send guest email in refined hospitality English' },
+    anchorsEnglish: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Each fixedAnchors activity translated into short natural hospitality English, SAME ORDER and length as fixedAnchors' },
+    notesEnglish: { type: 'STRING', nullable: true, description: 'liveNotes translated into concise clean English (empty if there are no notes)' },
     confirmedBookings: { type: 'ARRAY', description: 'ONLY bookings the guest or concierge explicitly confirmed in liveNotes or discoveryAnswers with a date (or day) and a time. Never your own suggestions.', items: { type: 'OBJECT', properties: {
       date: { type: 'STRING', description: 'YYYY-MM-DD from tripDates' }, time: { type: 'STRING', description: 'HH:MM 24h' }, title: { type: 'STRING', description: 'What was confirmed, in English, up to 70 characters' },
       category: { type: 'STRING', enum: ITEM_CATS }, venueName: { type: 'STRING', nullable: true, description: 'Venue name ONLY if literally stated in the notes or answers, else null' },
       address: { type: 'STRING', nullable: true, description: 'Address ONLY if literally stated, else null' }, guestNotes: { type: 'STRING', nullable: true },
     }, required: ['date', 'time', 'title', 'category'] } },
   },
-  required: ['gammaPrompt', 'emailSubject', 'emailBody', 'confirmedBookings'],
+  required: ['gammaPrompt', 'emailSubject', 'emailBody', 'confirmedBookings', 'anchorsEnglish'],
 };
 const missing = (p) => SECTIONS.filter((s) => !p.toLowerCase().includes(s.toLowerCase()));
 const lostAnchors = (p, anchors) => anchors.filter((a) => !p.includes(a.time)).map((a) => `${a.day} ${a.time}`);
@@ -32,7 +34,7 @@ export default async function handler(req, res) {
   try {
     const d = await dossier(auth, b.client_id, list(b.allergies, 20));
     const answers = (Array.isArray(b.answers) ? b.answers : []).slice(0, 20).map((x) => ({ category: str(x?.category, 40), question: str(x?.question, 200), answer: str(x?.answer, 300) })).filter((x) => x.question && x.answer);
-    const approved = (Array.isArray(b.approvedSuggestions) ? b.approvedSuggestions : []).slice(0, 8).map((x) => ({ kind: str(x?.kind, 10), title: str(x?.title, 80), venueName: str(x?.venueName, 120), why: str(x?.why, 220) })).filter((x) => x.title);
+    const approved = (Array.isArray(b.approvedSuggestions) ? b.approvedSuggestions : []).slice(0, 8).map((x) => ({ kind: str(x?.kind, 10), title: str(x?.title, 80), venueName: str(x?.venueName, 120), address: str(x?.address, 200), why: str(x?.why, 220) })).filter((x) => x.title);
     const anchors = parseAnchors(b.fixedAnchors, { from: t.from, to: t.to }), liveNotes = str(b.liveNotes, 1500) || t.notes;
     const first = firstName(d.client?.name || str(b.guestName, 80));
     const ctx = {
@@ -52,6 +54,7 @@ QUALITY RULES (strict):
 - confirmedBookings. Separate from the proposal: list ONLY what the guest or concierge explicitly confirmed in liveNotes or discoveryAnswers with a date (or day) and a time. Your own creative suggestions never go here (they stay inside gammaPrompt). Venue and address only if literally stated there, otherwise null. When nothing is confirmed return an empty list.
 - APPROVED SUGGESTIONS. approvedSuggestions are venues and service touches the concierge personally approved: include every one of them by name in "Selected experiences" with its rationale, and place the venues and bridge ideas in "Your personalised itinerary" on sensible days and times that respect all anchors and arrival/departure times. Do not add other venues unless the discoveryAnswers ask for them.
 - DISCOVERY STAGES. discoveryAnswers are grouped by the call's chronological stages: Welcome & Arrival, Pace & Rhythm, Dining & Stop-List, Wellness & Family, Departure. Use each stage's answers where they belong in the itinerary (arrival touches on Day 1, departure touches on the last day).
+- ENGLISH FOR THE GUEST PORTAL. anchorsEnglish must be each fixedAnchors activity in short natural hospitality English (same order and count, no Cyrillic); notesEnglish is liveNotes in concise clean English. These are stored on the guest's live itinerary.
 - LESS IS MORE. Never invent busy excursions the guest did not ask for (food markets, private chefs, Michelin tours, galleries, sightseeing). For Deep Rest, Slow Living or any restorative goal keep every day spacious: at most 2-3 intentional touchpoints per day (one core wellness ritual, one restorative meal, unhurried quiet time), each tied to the stated goals, discoveryAnswers or anchors.
 - CAUSAL CHRONOLOGY. Translate anchor labels into natural hospitality English (e.g. an arrival becomes "Arrival at the airport", a massage becomes "Restorative full-body massage"). If an Arrival time is anchored, NOTHING (airport pickup, check-in, activities) may be scheduled before it: private chauffeur pickup at that time, check-in about 45 minutes later, then a light in-suite dinner roughly 90 minutes after pickup. If a Departure time is anchored, schedule the airport transfer 2.5-3 hours before that flight, with nothing after it.
 - PURE ENGLISH. gammaPrompt and emailBody must contain zero Cyrillic characters: translate every Russian note, answer, goal and stop-list item into English yourself, and treat the English equivalents of stopList items as forbidden too.
@@ -79,6 +82,7 @@ const problems = (o) => [...(lostApproved(o.gammaPrompt || '', approved).length 
     const fill = (s) => String(s || '').replace(/\{\{\s*GUEST\s*\}\}/gi, latin(first) || 'there');
     return res.status(200).json({
       gammaPrompt: fill(out.gammaPrompt).slice(0, 12000), emailSubject: fill(out.emailSubject).slice(0, 200), emailBody: fill(out.emailBody).slice(0, 5000),
+      anchorsEnglish: anchors.map((an, i) => { const t2 = str(Array.isArray(out.anchorsEnglish) ? out.anchorsEnglish[i] : '', 120); return { date: an.date, time: an.time, en: /[А-Яа-яЁё]/.test(t2) ? '' : t2 }; }), notesEnglish: /[А-Яа-яЁё]/.test(String(out.notesEnglish || '')) ? '' : str(out.notesEnglish, 1500),
       confirmedBookings: items, warnings: bad,
     });
   } catch (e) {
