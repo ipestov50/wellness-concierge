@@ -14,7 +14,9 @@ const SCHEMA = {
     venueName: { type: 'STRING', nullable: true, description: 'Real venue name in the destination, only if you are confident it exists; null for a service touch or when unsure' },
     address: { type: 'STRING', nullable: true, description: 'Real street address with city, only if you are confident, else null' },
     why: { type: 'STRING', description: 'One Les Clefs d\'Or sentence (up to 170 characters) on why this fits THIS guest' },
-  }, required: ['kind', 'title', 'why'] } } },
+    about: { type: 'STRING', description: 'READ ALOUD on the call: what this place or service actually is, in plain spoken English, 1 or 2 short sentences, max 160 characters. Concrete: what it looks like, what you do there.' },
+    pitch: { type: 'STRING', description: 'READ ALOUD on the call: why I recommend it to this guest, in the first person, addressed to the guest as "you", 1 or 2 short sentences, max 200 characters, built on one real preference they stated' },
+  }, required: ['kind', 'title', 'why', 'about', 'pitch'] } } },
   required: ['suggestions'],
 };
 
@@ -49,12 +51,15 @@ ${bridge ? '- "bridge": a pre-check-in morning experience from the arrival time 
 - Strictly respect stopListNeverRecommend (guest and family allergies, diet, health) and everything in capturedAnswers and spontaneousCallNotes (weather, repeat visit: choose insider gems then, favourite music and dishes).
 - Keep it spacious and on-goal: no tourist clutter, no generic hotel clichés.
 - Every "why" is one concrete sentence tied to this guest's own words, party or answers.
+- "about" and "pitch" are read aloud by the concierge on a live phone call, so write them the way a warm person talks: short sentences, everyday words, no marketing adjectives, no jargon, no lists, no dashes or brackets, easy to say in one breath.
+  about: say plainly what it is ("It's a small family-run restaurant in Le Marais with only eight tables, known for slow-cooked French classics.").
+  pitch: say why I suggest it, tied to ONE real thing the guest told us in capturedAnswers, guestGoalInTheirWords, goalTags, party or spontaneousCallNotes ("You mentioned you love quiet evenings, so I thought of this place because it never feels rushed."). Start with "You mentioned", "Since you", "Because you" or "I thought of you". Never invent a preference the guest did not state; if nothing specific was said, tie it to the trip goal.
 - Natural hospitality English. Never use the guest's name.`,
       ctx, SCHEMA, { temperature: 0.7, budget: 0 });
     const guard = d.stop.map(norm).filter((w) => w.length >= 4), seen = new Set();
     const suggestions = (out.suggestions || []).filter((x) => x?.title && x?.why).map((x) => ({
-      kind: slot || (KINDS.includes(x.kind) ? x.kind : focus || 'culture'), title: str(x.title, 80), venueName: str(x.venueName, 120), address: x.venueName ? str(x.address, 200) : '', why: str(x.why, 220),
-    })).filter((x) => !/[А-Яа-яЁё]/.test(`${x.title}${x.why}${x.venueName}${x.address}`) && !guard.some((w) => norm(`${x.title} ${x.why} ${x.venueName}`).includes(w)) && !seen.has(norm(x.title)) && seen.add(norm(x.title)))
+      kind: slot || (KINDS.includes(x.kind) ? x.kind : focus || 'culture'), title: str(x.title, 80), venueName: str(x.venueName, 120), address: x.venueName ? str(x.address, 200) : '', why: str(x.why, 220), about: str(x.about, 200), pitch: str(x.pitch, 240),
+    })).filter((x) => !/[А-Яа-яЁё]/.test(`${x.title}${x.why}${x.venueName}${x.address}${x.about}${x.pitch}`) && !guard.some((w) => norm(`${x.title} ${x.why} ${x.venueName} ${x.about} ${x.pitch}`).includes(w)) && !seen.has(norm(x.title)) && seen.add(norm(x.title)))
       .filter((x) => slot || !focus || x.kind === focus || (focus === 'touch' && x.kind === 'bridge')).filter((x) => !exclude.some((e) => norm(e) === norm(x.title))).slice(0, slot ? 1 : focus ? 2 : 5).map((x, i) => ({ ...x, id: `s${Date.now().toString(36)}${i}` }));
     return res.status(200).json({ suggestions });
   } catch (e) {

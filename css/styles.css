@@ -3926,3 +3926,9 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .ov.wl .wl-cslot select { width: 100%; min-height: 36px; padding: 0 26px 0 12px; border-radius: 999px; font-size: 12px; }
 .ov.wl .wl-cslot input.wl-ctime { flex: 0 0 64px; width: 64px; min-width: 0; min-height: 36px; padding: 0 6px; border-radius: 999px; font-size: 13px; text-align: center; }
 @media (max-width: 767px) { .ov.wl .wl-cslot select, .ov.wl .wl-cslot input.wl-ctime { min-height: 44px; } }
+/* curated cards: read-aloud lines for the live call; cards go single-column when the pane is narrow */
+.wl-curl { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.wl-say { margin: 6px 0 12px; display: grid; gap: 8px; }
+.wl-cc .wl-say p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--tp-ink); }
+.wl-say b { display: block; margin-bottom: 2px; font: 600 10.5px/1.2 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--tp-mut); }
+@media (max-width: 767px) { .wl-curl { grid-template-columns: 1fr; } }
