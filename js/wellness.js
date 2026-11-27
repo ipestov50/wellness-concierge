@@ -32,8 +32,11 @@ export function openWellness(presetClient) {
       <div class="f"><label id="wl-goal-l">${T.goals}</label><div class="wl-chips" role="group" aria-labelledby="wl-goal-l">${GOALS.map((g) => `<button type="button" class="wl-chip" data-goal="${esc(g)}" aria-pressed="false">${esc(g)}</button>`).join('')}</div></div>
       <div class="f"><label for="wl_allergies-in">${T.stop}</label>${chipField('wl_allergies', c0?.allergies || [], { tone: 'risk', placeholder: T.stopPh, label: 'Аллергии' })}</div>
       <div class="f wl-anch"><label for="wl_a_act">${T.anch}</label>
-        <div class="wl-arow"><select id="wl_a_day" name="wl_a_day" aria-label="День"></select>${timeField('wl_a_time', '', { chips: false })}<input type="text" id="wl_a_act" name="wl_a_act" placeholder="${esc(T.anchPh)}" autocomplete="off" maxlength="120" enterkeyhint="done"><button type="button" class="wl-add" id="wl-a-add" aria-label="Добавить якорь">＋</button></div>
-        <div class="wl-achips" id="wl-achips" aria-live="polite"></div><small class="wl-ahint">${T.anchHint}</small></div>
+        <div class="wl-achips" id="wl-achips" aria-live="polite"></div>
+        <div class="wl-arow1"><select id="wl_a_day" name="wl_a_day" aria-label="День"></select>${timeField('wl_a_time', '', { chips: false })}</div>
+        <div class="wl-aquick" role="group" aria-label="Время суток">${['09:00', '11:00', '14:00', '17:00', '20:00'].map((t) => `<button type="button" data-aq="${t}">${t}</button>`).join('')}</div>
+        <div class="wl-arow2"><input type="text" id="wl_a_act" name="wl_a_act" placeholder="${esc(T.anchPh)}" autocomplete="off" maxlength="120" enterkeyhint="done"><button type="button" class="wl-addp" id="wl-a-add">＋ Добавить</button></div>
+        <small class="wl-ahint">${T.anchHint}</small></div>
       <div class="f"><label for="wl_notes">${T.notes}</label><textarea id="wl_notes" name="wl_notes" rows="4" placeholder="${esc(T.notesPh)}"></textarea></div>
     </div>
     <div class="wl-right">
@@ -182,6 +185,7 @@ export function openWellness(presetClient) {
   f.addEventListener('click', async (e) => {
     const t = e.target;
     if (t.closest('#wl-a-add')) return addAnchor();
+    const aq = t.closest('[data-aq]'); if (aq) { f.elements.wl_a_time.value = aq.dataset.aq; $('#wl_a_act').focus(); return; }
     const ax = t.closest('[data-ax]'); if (ax) { S.anchors.splice(+ax.dataset.ax, 1); paintAnchors(); return; }
     const dur = t.closest('[data-dur]');
     if (dur) { const n = +dur.dataset.dur; S.dur = S.dur === n ? null : n; f.querySelectorAll('[data-dur]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.dur === S.dur))); return schedule(); }
