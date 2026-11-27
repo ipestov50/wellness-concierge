@@ -28,7 +28,10 @@ export default async function handler(req, res) {
     const answers = (Array.isArray(b.answers) ? b.answers : []).slice(0, 40).map((x) => ({ stage: str(x?.category, 40), question: str(x?.question, 200), answer: str(x?.answer, 300) })).filter((x) => x.answer);
     const bridge = bridgeNeeded(t);
     const focus = typeof b.focusCategory === 'string' && Object.hasOwn(FOCUS, b.focusCategory) ? b.focusCategory : '';
-    const exclude = list(b.exclude, 12, 80);
+    const slot = typeof b.slotType === 'string' && KINDS.includes(b.slotType) ? b.slotType : ''; // ↻ on a single card: exactly 1 fresh idea of that kind
+    const arr = (x) => (Array.isArray(x) ? x : []);
+    const exclude = list([...arr(b.exclude), ...arr(b.excludeTitles)], 24, 80);
+    const SLOT = { ...FOCUS, bridge: 'Morning bridge: a pre-check-in experience from the arrival time until about 15:00', touch: 'Service touch: a proactive in-suite, chauffeur or arrival VIP detail' };
     const ctx = {
       destination: t.destination, tripDates: tripDates(t), arrivalTime: t.arrivalTime || null, departureTime: t.departureTime || null, earlyCheckInConfirmed: t.earlyCheckIn, preCheckInBridgeNeeded: bridge,
       party: t.party, guestGoalInTheirWords: t.goalText || null, goalTags: t.goals, fixedAnchors: parseAnchors(b.fixedAnchors, { from: t.from, to: t.to }),
@@ -36,7 +39,7 @@ export default async function handler(req, res) {
     };
     const out = await askJSON(gfetch, auth, [FLASH, LITE],
       `You are a senior Les Clefs d'Or concierge curating a 360° wellness trip (city, culture, wellness, dining and service), to be approved by the concierge before the proposal is written.
-${focus ? `Return exactly 2 fresh alternatives, ALL in this one category: ${FOCUS[focus]}. Use kind "${focus}"${focus === 'touch' && bridge ? ' (or "bridge" for a pre-check-in morning experience)' : ''}. Never repeat anything in alreadySuggestedNeverRepeat.\n` : `Return up to 5 diverse, destination-authentic recommendations spanning the full trip, one per kind:
+${slot ? `Return exactly 1 fresh replacement of kind "${slot}": ${SLOT[slot]}. It must be genuinely different from everything in alreadySuggestedNeverRepeat (different venue, different idea).\n` : focus ? `Return exactly 2 fresh alternatives, ALL in this one category: ${FOCUS[focus]}. Use kind "${focus}"${focus === 'touch' && bridge ? ' (or "bridge" for a pre-check-in morning experience)' : ''}. Never repeat anything in alreadySuggestedNeverRepeat.\n` : `Return up to 5 diverse, destination-authentic recommendations spanning the full trip, one per kind:
 ${bridge ? '- "bridge": a pre-check-in morning experience from the arrival time until about 15:00 (scenic private chauffeur orientation, a quiet private gallery, or thermal lounge & breakfast), matching the Arrival & First Hours answers.\n' : ''}- "culture": an insider museum, architectural walk, private atelier or neighbourhood gem tailored to the City & Cultural Discovery answers (if the guest chose pure rest, make it a very gentle, short neighbourhood moment).
 - "wellness": a signature spa, thermal or treatment experience tailored to the Body, Spa & Recovery answers (pressure, timing, children's care).
 - "dining": a culinary gem tailored to the Dining & Stop-List answers.
@@ -50,9 +53,9 @@ ${bridge ? '- "bridge": a pre-check-in morning experience from the arrival time 
       ctx, SCHEMA, { temperature: 0.7, budget: 0 });
     const guard = d.stop.map(norm).filter((w) => w.length >= 4), seen = new Set();
     const suggestions = (out.suggestions || []).filter((x) => x?.title && x?.why).map((x) => ({
-      kind: KINDS.includes(x.kind) ? x.kind : focus || 'culture', title: str(x.title, 80), venueName: str(x.venueName, 120), address: x.venueName ? str(x.address, 200) : '', why: str(x.why, 220),
+      kind: slot || (KINDS.includes(x.kind) ? x.kind : focus || 'culture'), title: str(x.title, 80), venueName: str(x.venueName, 120), address: x.venueName ? str(x.address, 200) : '', why: str(x.why, 220),
     })).filter((x) => !/[А-Яа-яЁё]/.test(`${x.title}${x.why}${x.venueName}${x.address}`) && !guard.some((w) => norm(`${x.title} ${x.why} ${x.venueName}`).includes(w)) && !seen.has(norm(x.title)) && seen.add(norm(x.title)))
-      .filter((x) => !focus || x.kind === focus || (focus === 'touch' && x.kind === 'bridge')).filter((x) => !exclude.some((e) => norm(e) === norm(x.title))).slice(0, focus ? 2 : 5).map((x, i) => ({ ...x, id: `s${Date.now().toString(36)}${i}` }));
+      .filter((x) => slot || !focus || x.kind === focus || (focus === 'touch' && x.kind === 'bridge')).filter((x) => !exclude.some((e) => norm(e) === norm(x.title))).slice(0, slot ? 1 : focus ? 2 : 5).map((x, i) => ({ ...x, id: `s${Date.now().toString(36)}${i}` }));
     return res.status(200).json({ suggestions });
   } catch (e) {
     return res.status(e.message === 'rate_limited' ? 502 : 500).json({ error: String(e.message || e), tried: e.tried });

@@ -60,7 +60,7 @@ async function lookupEn(name) {
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set(), day: {}, filter: 'all' }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '', deck: { id: '', status: '', url: '', pdf: '', err: '', pct: 0, key: '', timer: 0 } };
+  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set(), day: {}, time: {}, tEdited: new Set(), replacing: new Set(), dismissed: [], filter: 'all' }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '', deck: { id: '', status: '', url: '', pdf: '', err: '', pct: 0, key: '', timer: 0 } };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -81,8 +81,7 @@ export function openWellness(presetClient) {
       <div class="wl-party">${step('adults', T.adults, 1)}${step('kids', T.kids, 0)}</div>
       <div class="wl-fold" id="wl-ages-fold" inert><div><div class="f"><label for="wl_ages">${T.ages}</label><input type="text" id="wl_ages" name="wl_ages" placeholder="${esc(T.agesPh)}" autocomplete="off" maxlength="60"></div></div></div>
       <div class="f2 wl-times"><div class="f"><label for="f-wl_arr_time">${T.arrT}</label>${timeField('wl_arr_time', '', { chips: false })}</div><div class="f"><label for="f-wl_dep_time">${T.depT}</label>${timeField('wl_dep_time', '', { chips: false })}</div></div>
-      <label class="wl-toggle"><input type="checkbox" id="wl_early" name="wl_early"><span>${T.early}</span></label><small class="wl-note">${T.earlyNote}</small>
-      <div class="wl-bridge" id="wl-bridge" role="status" hidden>${T.bridge}</div>
+      <div class="wl-ecbar" id="wl-ecbar"><span class="wl-ect" id="wl-ect" role="status" aria-live="polite"></span><label class="wl-switch"><input type="checkbox" role="switch" id="wl_early" name="wl_early"><i aria-hidden="true"></i><span>Early Check-In</span></label></div>
       <div class="f wl-goal"><label for="wl_goal">${T.goal}</label><input type="text" id="wl_goal" name="wl_goal" placeholder="${esc(T.goalPh)}" autocomplete="off" maxlength="300">
         <div class="wl-chips wl-tags" role="group" aria-label="Quick tags">${TAGS.map((g) => `<button type="button" class="wl-tag" data-tag="${esc(g)}" aria-pressed="false">${esc(g)}</button>`).join('')}</div></div>
       <div class="f"><label for="wl_allergies-in">${T.stop}</label>${chipField('wl_allergies', c0?.allergies || [], { tone: 'risk', placeholder: T.stopPh, label: 'Allergies', remove: 'Remove' })}</div>
@@ -254,7 +253,8 @@ export function openWellness(presetClient) {
     };
     for (const x of S.cur.items.filter((y) => S.cur.included.has(y.id))) {
       if (hasCyr(`${x.title}${x.why}${x.venueName}`)) continue;
-      const [d, m] = slot(x.kind, S.cur.day[x.id]); taken.push({ d, m }); out.push({ x, date: d, time: fmtT(m) });
+      const own = ds.includes(S.cur.day[x.id]) && S.cur.time[x.id]; // the concierge's chosen slot on the card wins
+      const [d, m] = own ? [S.cur.day[x.id], mins(S.cur.time[x.id])] : slot(x.kind, S.cur.day[x.id]); taken.push({ d, m }); out.push({ x, date: d, time: fmtT(m) });
     }
     return out;
   };
@@ -316,7 +316,9 @@ export function openWellness(presetClient) {
     const extra = [`<li class="wl-fx"><b>Party</b><span>${esc(partyText())}</span></li>`, goal && `<li class="wl-fx"><b>Goal</b><span>${esc(goal.slice(0, 120))}</span></li>`, notes && `<li class="wl-fx"><b>Notes</b><span>${esc(notes.slice(0, 120))}${notes.length > 120 ? '…' : ''}</span></li>`, caps && `<li class="wl-fx"><b>Captured</b><span class="tnum">${caps} preference${caps === 1 ? '' : 's'}</span></li>`].filter(Boolean).join('');
     const notes2 = buildTripFlowNotes();
     box.innerHTML = rows.length ? `<ol class="wl-days">${rows.map((r) => `<li class="wl-day"><b class="wl-dt">${esc(r.title)}</b>${r.it.length ? `<ul>${r.it.map(([t, l, k, role]) => `<li class="k-${k}"><span class="tnum">${esc(t)}</span><span class="wl-fl"><span class="wl-flt">${esc(l)}</span>${notes2[role] ? `<div class="wl-flow-note">↳ ${esc(notes2[role])}</div>` : ''}</span></li>`).join('')}</ul>` : ''}</li>`).join('')}</ol><ul class="wl-fxs">${extra}</ul>` : `<p class="wl-empty">${esc(T.flowEmpty)}</p><ul class="wl-fxs">${extra}</ul>`;
-    $('#wl-bridge').hidden = !bridge();
+    const ec = $('#wl-ecbar'), need = bridge();
+    ec.classList.toggle('need', need); ec.classList.toggle('on', early());
+    $('#wl-ect').textContent = early() ? 'Early check-in confirmed · straight to the suite' : need ? `Lands ${arrT()} · pre-check-in bridge until 15:00` : 'Standard check-in 15:00–16:00';
   };
 
   // ---------- signals from the notes ----------
@@ -504,6 +506,23 @@ export function openWellness(presetClient) {
       S.cur.day[x.id] = d; load[d]++;
     }
   };
+  // sensible default time per card: never on top of an anchor or another card that day, never before landing or after the departure transfer
+  const DEF_T = { culture: 690, wellness: 990, dining: 1170, venue: 690 };
+  const defTime = (x, d) => {
+    const ds = tripDays().map((y) => y.date), arrM = arrT() ? mins(arrT()) : null, depM = depT() ? mins(depT()) : null;
+    let m = x.kind === 'bridge' ? Math.min(Math.max((arrM ?? 540) + 30, 540), 810) : x.kind === 'touch' ? (early() && arrM !== null ? arrM + 45 : Math.max(900, (arrM ?? 0) + 60)) : DEF_T[x.kind] ?? 840;
+    if (x.kind === 'wellness' && /morning/i.test(ansOf('wellness', 2))) m = 600;
+    if (d === ds[0] && arrM !== null && x.kind !== 'bridge') m = Math.max(m, arrM + 60);
+    const busy = [...S.anchors.filter((a) => a.date === d).map((a) => mins(a.time)), ...S.cur.items.filter((y) => y.id !== x.id && S.cur.day[y.id] === d && S.cur.time[y.id]).map((y) => mins(S.cur.time[y.id]))];
+    for (let k = 0; k < 8 && busy.some((b) => Math.abs(b - m) < 90); k++) m += 90;
+    if (d === ds[ds.length - 1] && ds.length > 1 && depM !== null) m = Math.min(m, depM - 240);
+    return fmtT(Math.min(1350, Math.max(420, Math.round(m / 15) * 15)));
+  };
+  const timeIn = (x) => {
+    if (!tripDays().length) return '';
+    if (!S.cur.time[x.id]) S.cur.time[x.id] = defTime(x, S.cur.day[x.id]);
+    return `<input type="text" class="wl-ctime tnum" data-ctime="${esc(x.id)}" value="${esc(S.cur.time[x.id])}" maxlength="5" placeholder="HH:MM" autocomplete="off" aria-label="Time for ${esc(x.title)}">`;
+  };
   const daySel = (x) => {
     const ds = tripDays(); if (!ds.length) return '';
     if (!ds.some((d) => d.date === S.cur.day[x.id])) assignDays([x]);
@@ -517,7 +536,9 @@ export function openWellness(presetClient) {
     const label = c.busy ? 'Jarvis is curating…' : !c.items.length ? '✦ Curate the Full Trip' : c.filter === 'all' ? '↻ Re-curate' : `↻ Re-curate ${fl}`;
     box.innerHTML = `<div class="wl-curh"><b>✦ Curated Suggestions</b><button type="button" class="wl-pill" data-curate ${c.busy ? 'disabled' : ''}>${esc(label)}</button></div>
       ${c.items.length ? `<div class="wl-curf" role="group" aria-label="Filter suggestions">${FILTERS.map(([k, l]) => { const n = k === 'all' ? c.items.length : c.items.filter((x) => groupOf(x.kind) === k).length; return `<button type="button" class="wl-cfp" data-cf="${k}" aria-pressed="${c.filter === k}">${esc(l)}${n ? ` <span class="tnum">${n}</span>` : ''}</button>`; }).join('')}</div>` : ''}
-      ${shown.length ? `<div class="wl-curl">${shown.map((x) => { const inc = c.included.has(x.id); return `<article class="wl-cc${inc ? ' inc' : ''}"><div class="wl-cck"><span class="wq-tag">${esc(KIND[x.kind] || 'Idea')}</span>${daySel(x)}</div><h5>${esc(x.title)}</h5>${x.venueName ? `<div class="wl-cv">${esc(x.venueName)}</div>` : ''}<p>${esc(x.why)}</p><button type="button" class="wl-inc" data-inc="${esc(x.id)}" aria-pressed="${inc}">${inc ? '✓ Included' : '+ Add to Proposal'}</button></article>`; }).join('')}</div>`
+      ${shown.length ? `<div class="wl-curl">${shown.map((x) => { const inc = c.included.has(x.id), busy = c.replacing.has(x.id); return `<article class="wl-cc${inc ? ' inc' : ''}${busy ? ' busy' : ''}" data-card="${esc(x.id)}" aria-busy="${busy}"><div class="wl-cck"><span class="wq-tag">${esc(KIND[x.kind] || 'Idea')}</span>${inc ? '' : `<button type="button" class="wl-rf wl-crf" data-replace="${esc(x.id)}" title="Replace this suggestion" aria-label="Replace this suggestion: ${esc(x.title)}"${busy || c.busy ? ' disabled' : ''}>↻</button>`}</div>
+        ${busy ? '<div class="wl-skel" role="status"><span class="sr-only">Jarvis is finding an alternative…</span><i></i><i></i><i></i></div>' : `<h5>${esc(x.title)}</h5>${x.venueName ? `<div class="wl-cv">${esc(x.venueName)}</div>` : ''}<p>${esc(x.why)}</p>`}
+        <div class="wl-cslot">${daySel(x)}${timeIn(x)}</div><button type="button" class="wl-inc" data-inc="${esc(x.id)}" aria-pressed="${inc}"${busy ? ' disabled' : ''}>${inc ? '✓ Included' : '+ Add to Proposal'}</button></article>`; }).join('')}</div>`
         : c.items.length ? `<p class="wl-empty small">Nothing in ${esc(fl)} yet. Re-curate to explore.</p>` : '<p class="wl-empty small">City, wellness, dining and service ideas for the whole trip. Approve what you like — only included ideas go into the Gamma proposal.</p>'}`;
   };
   const curate = async () => {
@@ -525,17 +546,31 @@ export function openWellness(presetClient) {
     const focus = S.cur.filter === 'all' || !S.cur.items.length ? '' : S.cur.filter;
     S.cur.busy = true; S.cur.auto = true; paintCur();
     try {
-      const r = await api('ideas', { kind: 'curate', focusCategory: focus, exclude: S.cur.items.map((x) => x.title), ...payload(), signals: S.signals, answers: answered().map((a) => ({ category: a.category, question: a.text, answer: a.answer })) }, { signal: m.signal });
+      const r = await api('ideas', { kind: 'curate', focusCategory: focus, exclude: [...S.cur.items.map((x) => x.title), ...S.cur.dismissed].slice(-20), ...payload(), signals: S.signals, answers: answered().map((a) => ({ category: a.category, question: a.text, answer: a.answer })) }, { signal: m.signal });
       const fresh = r.suggestions || [];
       // a category re-curate replaces only that category's not-yet-included ideas; everything approved stays
       S.cur.items = focus ? [...S.cur.items.filter((x) => groupOf(x.kind) !== focus || S.cur.included.has(x.id)), ...fresh.filter((x) => groupOf(x.kind) === focus)] : [...S.cur.items.filter((x) => S.cur.included.has(x.id)), ...fresh];
       const ids = new Set(S.cur.items.map((x) => x.id));
       S.cur.included = new Set([...S.cur.included].filter((id) => ids.has(id)));
-      S.cur.day = Object.fromEntries(Object.entries(S.cur.day).filter(([id]) => ids.has(id)));
+      S.cur.day = Object.fromEntries(Object.entries(S.cur.day).filter(([id]) => ids.has(id))); S.cur.time = Object.fromEntries(Object.entries(S.cur.time).filter(([id]) => ids.has(id)));
       assignDays(S.cur.items);
       if (focus && !fresh.length) toast('No fresh ideas in this category — try again shortly');
     } catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not curate suggestions — please retry', 'err'); }
     finally { S.cur.busy = false; paintCur(); paintFlow(); }
+  };
+  // ↻ on one card: only that card is swapped for a fresh idea of the same kind; its day and time stay, nothing else moves
+  const replaceOne = async (id) => {
+    const x = S.cur.items.find((y) => y.id === id); if (!x || S.cur.busy || S.cur.replacing.has(id) || S.cur.included.has(id)) return;
+    S.cur.replacing.add(id); paintCur();
+    try {
+      const r = await api('ideas', { kind: 'curate', count: 1, slotType: x.kind, excludeTitles: [...S.cur.items.map((y) => y.title), ...S.cur.dismissed].slice(-20), ...payload(), signals: S.signals, answers: answered().map((a) => ({ category: a.category, question: a.text, answer: a.answer })) }, { signal: m.signal });
+      const nx = (r.suggestions || [])[0], i = S.cur.items.findIndex((y) => y.id === id);
+      if (!nx || i < 0) { toast('No fresh alternative right now — try again shortly'); return; }
+      S.cur.dismissed.push(x.title); S.cur.items[i] = nx;
+      S.cur.day[nx.id] = S.cur.day[id]; if (S.cur.tEdited.has(id)) { S.cur.time[nx.id] = S.cur.time[id]; S.cur.tEdited.add(nx.id); }
+      delete S.cur.day[id]; delete S.cur.time[id]; S.cur.tEdited.delete(id);
+    } catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not replace it — please retry', 'err'); }
+    finally { S.cur.replacing.delete(id); paintCur(); }
   };
   const maybeCurate = () => { // automatically once at least two stages have captured answers
     if (S.cur.auto || S.cur.items.length) return;
@@ -715,6 +750,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
     if (GAMMA_API && t.closest('[data-deck]')) return genDeck();
+    const rp = t.closest('[data-replace]'); if (rp) return replaceOne(rp.dataset.replace);
     const cf = t.closest('[data-cf]'); if (cf) { S.cur.filter = cf.dataset.cf; return paintCur(); }
     const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); paintFlow(); return; }
     const cp = t.closest('[data-copy]');
@@ -734,10 +770,20 @@ export function openWellness(presetClient) {
     if (id === 'wl_client') { if (e.target.value) { $('#wl_guest').hidden = true; $('#wl-oneoff').setAttribute('aria-expanded', 'false'); } paintDossier(); hydrateAllergies(); schedule(); }
     else if (id === 'wl_from' || id === 'wl_to') { datesChanged(); dayOptions(); paintFlow(); trig(`Trip dates changed to ${arrival()} - ${departure()}`); schedule(); }
     else if (id === 'f-wl_arr_time' || id === 'f-wl_dep_time' || id === 'wl_early') { paintFlow(); schedule(); }
-    else if (e.target.dataset?.day) { S.cur.day[e.target.dataset.day] = e.target.value; paintFlow(); if (S.cur.included.has(e.target.dataset.day)) toast(`Moved to ${dateLabel(e.target.value)} ✓`); }
+    else if (e.target.dataset?.day) {
+      const cid = e.target.dataset.day, x = S.cur.items.find((y) => y.id === cid); S.cur.day[cid] = e.target.value;
+      if (x && !S.cur.tEdited.has(cid)) { S.cur.time[cid] = defTime(x, e.target.value); const ti = f.querySelector(`[data-ctime="${CSS.escape(cid)}"]`); if (ti) ti.value = S.cur.time[cid]; }
+      paintFlow(); if (S.cur.included.has(cid)) toast(`Moved to ${dateLabel(e.target.value)} · ${S.cur.time[cid]} ✓`);
+    } else if (e.target.dataset?.ctime) {
+      const cid = e.target.dataset.ctime, t2 = normTime(e.target.value);
+      if (!t2) { e.target.value = S.cur.time[cid] || ''; toast('Use a time like 11:30'); return; }
+      S.cur.time[cid] = t2; S.cur.tEdited.add(cid); e.target.value = t2; paintFlow();
+      if (S.cur.included.has(cid)) toast(`Set for ${dateLabel(S.cur.day[cid])} · ${t2} ✓`);
+    }
   });
   f.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && S.cal.open) { e.stopPropagation(); e.preventDefault(); S.cal.open = false; paintCal(); f.querySelector(`[data-pick="${S.cal.field}"]`)?.focus(); return; }
+    if (e.key === 'Enter' && e.target.dataset?.ctime) { e.preventDefault(); e.target.blur(); return; }
     if (e.key === 'Enter' && e.target.classList?.contains('wq-input')) { e.preventDefault(); answer(e.target.dataset.id, e.target.value); }
     else if (e.key === 'Enter' && (e.target.id === 'wl-ca' || e.target.id === 'wl-cq')) { e.preventDefault(); saveOwn(); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_a_act' || e.target.id === 'f-wl_a_time')) { e.preventDefault(); addAnchor(); }
