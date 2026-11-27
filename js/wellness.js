@@ -13,7 +13,7 @@ import { statusOf, firstKey } from './statuses.js';
 
 const DURATIONS = [2, 3, 4, 5, 7];
 const TAGS = ['Deep Rest', 'Slow Living', 'Detox', 'Active Recovery', 'Culinary'];
-const STAGES = ['Arrival & Check-In Bridge', 'Daily Pace & Rhythm', 'Spa, Body & Contraindications', 'Food, Drinks & Allergies', 'Transfers & Privacy'];
+const STAGES = [{ key: 'bridge', label: 'Arrival & Check-In Bridge', short: 'Bridge', n: 'Arrival' }, { key: 'pace', label: 'Goal & Daily Pace', short: 'Pace', n: 'Pace' }, { key: 'dining', label: 'Food, Drinks & Allergies', short: 'Dining', n: 'Dining' }, { key: 'wellness', label: 'Wellness, Spa & Family', short: 'Wellness', n: 'Wellness' }, { key: 'transfers', label: 'Transfers & Departure', short: 'Transfers', n: 'Transfers' }];
 const DEBOUNCE = 550;
 const T = {
   title: 'Wellness Itinerary', guest: 'Guest', oneoff: '+ New Guest', oneoffPh: 'Guest name', none: 'Select a guest', dest: 'Destination', destPh: 'City, region or country',
@@ -21,7 +21,7 @@ const T = {
   bridge: 'Pre-Check-In Bridge Needed (Arrival → 15:00 Check-In)', goal: 'Guest’s Goal & Mood', goalPh: 'In the guest’s own words…', stop: 'Allergies & Contraindications (Stop-List)', stopPh: 'Nuts, shellfish… press Enter to add',
   anch: 'Fixed Time Anchors', anchPh: 'Deep tissue massage, dinner…', add: '+ Add', anchHint: 'Locked in the itinerary at exactly this date and time. Everything else is built around them.', notes: 'Spontaneous Call Notes', notesPh: 'What the guest mentions spontaneously during the call…',
   intake: 'Call Intake & Guest Notes', flow: 'Live Trip Flow', flowEmpty: 'Add arrival and departure dates to see the day-by-day flow.', qh: 'Discovery Questions', refresh: '↻ Refresh questions',
-  empty: 'Start with the guest’s goal, destination or notes — Jarvis will suggest what to ask next.', tailoring: 'Jarvis is tailoring follow-ups…', gamma: '✦ Gamma Prompt', mail: '✉ Guest Email', live: '🔗 Live Link',
+  empty: 'Jarvis is preparing the next question…', tailoring: 'Jarvis is tailoring follow-ups…', gamma: '✦ Gamma Prompt', mail: '✉ Guest Email', live: '🔗 Live Link',
   copyP: 'Copy Gamma Master Prompt', copied: 'Copied ✓', open: 'Open Gamma ↗', copyM: 'Copy Guest Email', save: 'Save to Notes', captured: '✓ Captured', ans: 'Or type the guest’s answer…', outTitle: 'Gamma prompt & guest email',
 };
 const hm = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -49,7 +49,7 @@ const guessCategory = (t) => (/massage|spa|sauna|hammam|thermal|facial|wellness|
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { cal: { open: false, field: 'from', month: '' }, trigger: '', filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { q: null, state: 'new', answer: '' }])), active: '', edit: '', cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -85,8 +85,9 @@ export function openWellness(presetClient) {
     <div class="wl-right">
       <section class="wl-flow" aria-label="${T.flow}"><div class="wl-fh"><h3>${T.flow}</h3><span class="wl-range tnum" id="wl-range"></span></div><div id="wl-flow"></div></section>
       <div class="wl-qh"><h3>${T.qh}</h3><span class="wl-sync" id="wl-sync" role="status" aria-live="polite"><i aria-hidden="true"></i><span></span></span><button type="button" class="wl-pill" id="wl-refresh">${T.refresh}</button></div>
-      <div class="wl-filters" id="wl-filters" role="group" aria-label="Filter questions"></div>
+      <div class="wl-stepper" id="wl-stepper" role="group" aria-label="Discovery stages"></div>
       <div class="wl-qs" id="wl-qs"></div>
+      <section class="wl-capt" id="wl-capt" aria-label="Captured brief"></section>
       <div class="wl-build"><button type="button" class="wl-go" id="wl-go-gamma">${T.gamma}</button><button type="button" class="wl-go alt" id="wl-go-mail">${T.mail}</button><button type="button" class="wl-go live" id="wl-go-live">${T.live}</button></div>
       <div class="wl-livebar" id="wl-livebar" hidden></div>
     </div>
@@ -109,7 +110,12 @@ export function openWellness(presetClient) {
   const bridge = () => !!arrT() && !early() && mins(arrT()) < 14 * 60;
   const gate = () => [['Destination', !!val('wl_dest')], ['Arrival time', !!arrT()], ['Departure time', !!depT()], ['Guest’s goal', !!(val('wl_goal') || S.tags.size)]];
   const hasBrief = () => gate().every(([, ok]) => ok);
-  const answered = () => S.questions.filter((q) => q.state === 'done');
+  const stageOf = (k) => STAGES.find((x) => x.key === k);
+  const applicable = () => STAGES.filter((x) => x.key !== 'bridge' || bridge());
+  const answered = () => applicable().filter((x) => S.steps[x.key].state === 'done' && S.steps[x.key].q).map((x) => ({ stage: x.key, category: x.label, text: S.steps[x.key].q.text, answer: S.steps[x.key].answer }));
+  const nextStage = () => applicable().find((x) => S.steps[x.key].state === 'new')?.key || '';
+  // активный этап — всегда первый неотвеченный по порядку, пока консьерж сам не перешёл к другому
+  const ensureActive = () => { const ok = applicable().some((x) => x.key === S.active && S.steps[x.key].state === 'new'); if (!ok || !S.manual) S.active = nextStage(); };
   const party = () => ({ adults: S.adults, kids: S.kids, kidsAges: S.kids ? val('wl_ages') : '' });
   const partyText = () => `${S.adults} adult${S.adults === 1 ? '' : 's'}${S.kids ? `, ${S.kids} kid${S.kids === 1 ? '' : 's'}${val('wl_ages') ? ` (${val('wl_ages')})` : ''}` : ''}`;
 
@@ -255,82 +261,94 @@ export function openWellness(presetClient) {
   };
   const setStatus = (st, text) => { S.status = st; const el = $('#wl-sync'); el.dataset.s = st; el.querySelector('span').textContent = text || ''; };
 
-  // ---------- questions: open list + Captured tab ----------
-  const card = (q) => {
-    const open = S.openId === q.id;
-    return `<article class="wq${open ? ' open' : ''}${q.isNew ? ' is-new' : ''}" data-id="${esc(q.id)}" data-state="${esc(q.state || 'new')}">
-      <button type="button" class="wq-head" data-q="${esc(q.id)}" aria-expanded="${open}">${q.contextTag || q.isNew ? `<span class="wq-ctx">${q.contextTag ? `<span class="wq-tag tnum">${esc(q.contextTag)}</span>` : ''}${q.isNew ? '<span class="wq-new">NEW</span>' : ''}</span>` : ''}<span class="wq-text">${esc(q.text)}</span>${q.state === 'done' ? `<span class="wq-st">${T.captured}</span>` : ''}${q.state === 'done' && !open ? `<span class="wq-a">${esc(q.answer)}</span>` : ''}</button>
-      <div class="wq-body"><div class="wq-in"><div class="wq-chips">${(q.chips || []).slice(0, 3).map((c) => `<button type="button" class="wq-c" data-a="${esc(c)}" data-q="${esc(q.id)}">${esc(c)}</button>`).join('')}</div>
-        <div class="wq-row"><input type="text" class="wq-input" data-q="${esc(q.id)}" value="${esc(q.answer || '')}" placeholder="${esc(T.ans)}" autocomplete="off" aria-label="Guest answer"><button type="button" class="wq-save" data-save="${esc(q.id)}">${T.save}</button></div></div></div></article>`;
-  };
-  const visible = (q) => (S.filter === 'done' ? q.state === 'done' : q.state !== 'done' && (S.filter === 'all' || q.dayDate === S.filter));
-  const paintFilters = (pulse) => {
-    const open = S.questions.filter((q) => q.state !== 'done'), nDone = answered().length;
-    const ds = tripDays().filter((d) => open.some((q) => q.dayDate === d.date));
-    const one = (k, label, cls = '') => `<button type="button" class="wl-f${cls}" data-filter="${esc(k)}" aria-pressed="${S.filter === k}">${esc(label)}</button>`;
-    $('#wl-filters').innerHTML = S.questions.length ? one('all', 'All') + ds.map((d) => one(d.date, shortDate(d.date))).join('') + one('done', `Captured (${nDone})`, pulse ? ' pulse' : '') : '';
-  };
-  const paintQs = (pulse) => {
-    const box = $('#wl-qs');
-    paintFilters(pulse);
-    if (!S.questions.length) {
-      if (!hasBrief()) { box.innerHTML = `<div class="wl-guide"><p>${esc(T.guideMsg)}</p><ul>${gate().map(([l, ok]) => `<li class="${ok ? 'ok' : 'no'}"><i aria-hidden="true">${ok ? '✓' : '○'}</i>${esc(l)}</li>`).join('')}</ul></div>`; return; }
-      box.innerHTML = `<p class="wl-empty">${esc(S.status === 'loading' || S.status === 'wait' ? T.tailoring : T.empty)}</p>`; return;
-    }
-    const html = STAGES.map((st, i) => {
-      const qs = S.questions.filter((q) => q.category === st && visible(q));
-      return qs.length ? `<div class="wq-stage"><div class="wq-sh">${i + 1} · ${esc(st.toUpperCase())}</div>${qs.map(card).join('')}</div>` : '';
-    }).join('');
-    box.innerHTML = html || `<p class="wl-empty">${S.filter === 'done' ? 'Nothing captured yet.' : 'No open questions here.'}</p>`;
-  };
-  const box$ = (id) => $(`.wq[data-id="${CSS.escape(id)}"] .wq-input`);
-  const commit = (id, answer) => {
-    const q = S.questions.find((x) => x.id === id); if (!q) return;
-    const wasDone = q.state === 'done', ans = String(answer || '').trim().slice(0, 300);
-    const el = f.querySelector(`.wq[data-id="${CSS.escape(id)}"]`);
-    const finish = () => {
-      q.answer = ans; q.state = ans ? 'done' : 'new'; S.openId = null;
-      paintQs(!wasDone && !!ans); paintFlow();
-      if (!wasDone && ans && S.filter !== 'done') { const next = S.questions.find((x) => x.state !== 'done' && visible(x)); if (next) { S.openId = next.id; paintQs(); box$(next.id)?.focus(); } }
-      if (!wasDone && ans) setTimeout(() => $('#wl-filters .pulse')?.classList.remove('pulse'), 900);
-    };
-    if (!wasDone && ans && el && !matchMedia('(prefers-reduced-motion: reduce)').matches) { el.style.height = el.offsetHeight + 'px'; void el.offsetHeight; el.classList.add('leaving'); setTimeout(finish, 320); } else finish();
-  };
+  // ---------- 5-stage discovery stepper: one active question + captured shelf ----------
   const trig = (x) => { if (!S.trigger.includes(x)) S.trigger = [S.trigger, x].filter(Boolean).join('; ').slice(-400); };
   const payload = () => ({
     client_id: clientId(), guestName: val('wl_guest'), destination: val('wl_dest'), durationDays: days(), dateRange: { from: arrival(), to: departure() },
     arrivalTime: arrT(), departureTime: depT(), earlyCheckInConfirmed: early(), goalText: val('wl_goal'), wellnessGoals: [...S.tags], party: party(),
     allergies: allergies(), currentNotes: val('wl_notes'), liveNotes: val('wl_notes'), fixedAnchors: S.anchors,
   });
-  const load = async () => {
+  const paintStepper = () => {
+    const ap = applicable();
+    $('#wl-stepper').innerHTML = hasBrief() ? STAGES.map((x, i) => {
+      const st = S.steps[x.key], off = !ap.includes(x), cls = off ? 'off' : st.state === 'done' ? 'done' : st.state === 'skipped' ? 'skip' : x.key === S.active ? 'on' : '';
+      return `<button type="button" class="wl-st ${cls}" data-stage="${x.key}"${off ? ' disabled' : ''}${x.key === S.active ? ' aria-current="step"' : ''}><i aria-hidden="true">${st.state === 'done' && !off ? '✓' : i + 1}</i><span>${x.short}</span></button>`;
+    }).join('') : '';
+  };
+  const activeCard = () => {
+    const x = stageOf(S.active);
+    if (!x) return `<div class="wl-doneall"><b>All stages covered ✓</b><span>Everything below is captured. Build the Gamma prompt or the Live Link when you are ready.</span></div>`;
+    const q = S.steps[x.key].q;
+    const idx = STAGES.indexOf(x) + 1;
+    if (!q) return `<article class="wl-act loading" data-stage="${x.key}"><div class="wl-ah"><span class="wq-sh">${idx} · ${esc(x.label.toUpperCase())}</span></div><p class="wl-empty">${esc(S.status === 'error' ? 'Could not load this question — tap Refresh.' : T.empty)}</p></article>`;
+    return `<article class="wl-act" data-stage="${x.key}"><div class="wl-ah"><span class="wq-sh">${idx} · ${esc(x.label.toUpperCase())}</span>${q.contextTag ? `<span class="wq-tag tnum">${esc(q.contextTag)}</span>` : ''}</div>
+      <h4 class="wl-aq">${esc(q.text)}</h4>
+      <div class="wq-chips">${(q.chips || []).slice(0, 3).map((c) => `<button type="button" class="wq-c" data-ans="${esc(c)}" data-stage="${x.key}">${esc(c)}</button>`).join('')}</div>
+      <div class="wq-row"><input type="text" class="wq-input" data-stage="${x.key}" placeholder="${esc(T.ans)}" autocomplete="off" aria-label="Guest answer"><button type="button" class="wq-save" data-sv="${x.key}">${T.save}</button></div>
+      <button type="button" class="wl-skip" data-skip="${x.key}">Skip →</button></article>`;
+  };
+  const captured = () => {
+    const done = applicable().filter((x) => S.steps[x.key].state === 'done' && S.steps[x.key].q);
+    if (!done.length) return `<div class="wl-ch2"><b>Captured Brief</b><span class="tnum">0</span></div><p class="wl-empty small">Answers you capture appear here, grouped by stage.</p>`;
+    return `<div class="wl-ch2"><b>Captured Brief</b><span class="tnum">${done.length}</span></div>${done.map((x) => {
+      const st = S.steps[x.key], editing = S.edit === x.key;
+      return `<div class="wl-ci" data-stage="${x.key}"><span class="wq-sh">${esc(x.n.toUpperCase())}</span><div class="wl-cq">${esc(st.q.text)}</div>
+        ${editing ? `<div class="wq-chips">${(st.q.chips || []).slice(0, 3).map((c) => `<button type="button" class="wq-c" data-ans="${esc(c)}" data-stage="${x.key}">${esc(c)}</button>`).join('')}</div><div class="wq-row"><input type="text" class="wq-input" data-stage="${x.key}" value="${esc(st.answer)}" autocomplete="off" aria-label="Edit answer"><button type="button" class="wq-save" data-sv="${x.key}">${T.save}</button></div>`
+        : `<div class="wl-ca"><span>${esc(st.answer)}</span><button type="button" class="wl-edit" data-edit="${x.key}">Edit</button></div>`}</div>`;
+    }).join('')}`;
+  };
+  const paintQs = (fresh) => {
+    ensureActive();
+    const box = $('#wl-qs');
+    paintStepper();
+    if (!hasBrief()) { box.innerHTML = `<div class="wl-guide"><p>${esc(T.guideMsg)}</p><ul>${gate().map(([l, ok]) => `<li class="${ok ? 'ok' : 'no'}"><i aria-hidden="true">${ok ? '✓' : '○'}</i>${esc(l)}</li>`).join('')}</ul></div>`; $('#wl-capt').innerHTML = ''; return; }
+    box.innerHTML = activeCard();
+    if (fresh) box.firstElementChild?.classList.add('enter');
+    $('#wl-capt').innerHTML = captured();
+  };
+  const commit = (key, answer, skip) => {
+    const st = S.steps[key]; if (!st) return;
+    const ans = String(answer || '').trim().slice(0, 300), wasEdit = st.state === 'done' && S.edit === key;
+    const el = f.querySelector(`#wl-qs .wl-act[data-stage="${key}"]`);
+    const finish = () => {
+      if (skip) st.state = 'skipped'; else { if (!ans) return; st.answer = ans; st.state = 'done'; }
+      S.edit = ''; S.manual = false; S.active = nextStage();
+      paintQs(true); paintFlow();
+      if (!wasEdit) { trig(skip ? `Stage skipped: ${stageOf(key).label}` : `Answered ${stageOf(key).label}: ${ans}`); schedule(0); }
+      else { trig(`Answer edited: ${stageOf(key).label}`); schedule(); }
+      f.querySelector('#wl-qs .wq-input')?.focus({ preventScroll: true });
+    };
+    if (!ans && !skip) return;
+    if (el && !wasEdit && !matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('leaving'); setTimeout(finish, 260); } else finish();
+  };
+  const load = async (focus) => {
     if (!hasBrief()) { setStatus('idle', 'Waiting for the call brief'); paintQs(); return; }
     S.ctrl?.abort(); const ctrl = (S.ctrl = new AbortController());
-    setStatus('loading', T.tailoring); paintQs();
+    setStatus('loading', T.tailoring);
     try {
       const sent = S.trigger;
-      const r = await api('discovery-questions', { kind: 'discovery', trigger: sent, ...payload(), answered: answered().map((q) => ({ question: q.text, answer: q.answer })), open: S.questions.filter((q) => q.state !== 'done').map((q) => q.text), openTopics: S.questions.map((q) => q.topic).filter(Boolean), asked: [...S.asked] }, { signal: ctrl.signal });
+      const r = await api('discovery-questions', { kind: 'discovery', trigger: sent, focusStage: focus || S.active, ...payload(),
+        answered: answered().map((x) => ({ stage: x.stage, question: x.text, answer: x.answer })), skippedStages: STAGES.filter((x) => S.steps[x.key].state === 'skipped').map((x) => x.key) }, { signal: ctrl.signal });
       if (ctrl !== S.ctrl) return;
       if (S.trigger === sent) S.trigger = '';
       if (r.signals) { S.signals = r.signals; paintSignals(); }
-      const done = S.questions.filter((q) => q.state === 'done');
-      const editing = S.openId && S.questions.find((q) => q.id === S.openId && q.state !== 'done' && String(f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"] .wq-input`)?.value || '').trim());
-      const keepOpen = S.questions.filter((q) => q.state !== 'done');
-      const fresh = (r.questions || []).filter((q) => !done.some((k) => k.text.toLowerCase() === q.text.toLowerCase()))
-        .map((q) => { const same = keepOpen.find((k) => k.text.toLowerCase() === q.text.toLowerCase()); return same || { ...q, isNew: true }; });
-      if (editing && !fresh.includes(editing)) fresh.unshift(editing); // never drop a card the concierge is typing into
-      fresh.filter((q) => q.isNew).forEach((q) => { S.asked.add(q.text); setTimeout(() => { q.isNew = false; const el = f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"]`); el?.classList.remove('is-new'); el?.querySelector('.wq-new')?.remove(); }, 5000); });
-      const added = fresh.filter((q) => q.isNew).length;
-      S.questions = [...done, ...fresh]; setStatus('ready', added ? `${added} new · ${hm()}` : `Up to date · ${hm()}`); paintQs();
+      const typing = String(f.querySelector('#wl-qs .wq-input')?.value || '').trim();
+      for (const q of (r.questions || [])) {
+        const st = S.steps[q.stage]; if (!st || st.state !== 'new') continue;
+        if (q.stage === S.active && typing && st.q) continue; // never swap the question under the concierge's hands
+        st.q = { id: `${q.stage}-${Date.now()}`, text: q.text, chips: q.chips, contextTag: q.contextTag };
+      }
+      setStatus('ready', r.complete ? `All stages covered · ${hm()}` : `Updated · ${hm()}`); paintQs();
     } catch (e) {
       if (e.name === 'AbortError') return;
       setStatus('error', e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not update — tap Refresh'); paintQs();
     }
   };
-  const schedule = () => {
+  const schedule = (wait = DEBOUNCE) => {
     clearTimeout(S.timer);
-    if (!hasBrief()) { setStatus('idle', 'Waiting for the call brief'); return; }
+    if (!hasBrief()) { setStatus('idle', 'Waiting for the call brief'); paintQs(); return; }
     setStatus('wait', T.tailoring);
-    S.timer = setTimeout(load, DEBOUNCE);
+    S.timer = setTimeout(() => load(), wait);
   };
 
   // ---------- Gamma prompt / guest email ----------
@@ -436,7 +454,15 @@ export function openWellness(presetClient) {
     if (t.closest('#wl-a-add')) return addAnchor();
     const st = t.closest('.wl-step [data-d]');
     if (st) { const k = st.closest('.wl-step').dataset.step, min = +st.closest('.wl-step').dataset.min; S[k] = Math.min(20, Math.max(min, S[k] + +st.dataset.d)); paintParty(); paintFlow(); if (k === 'kids' && S.kids) setTimeout(() => $('#wl_ages').focus({ preventScroll: true }), 450); trig(`Party changed: ${partyText()}`); return schedule(); }
-    const fl = t.closest('[data-filter]'); if (fl) { S.filter = fl.dataset.filter; paintQs(); return; }
+    const stp = t.closest('.wl-st');
+    if (stp && !stp.disabled) {
+      const k = stp.dataset.stage, st = S.steps[k];
+      if (st.state === 'done') { S.edit = k; paintQs(); f.querySelector('#wl-capt .wq-input')?.focus(); return; }
+      if (st.state === 'skipped') st.state = 'new';
+      S.active = k; S.manual = true; S.edit = ''; paintQs();
+      if (!st.q) { clearTimeout(S.timer); load(k); }
+      return;
+    }
     const ax = t.closest('[data-ax]'); if (ax) { const gone = S.anchors.splice(+ax.dataset.ax, 1)[0]; paintAnchors(); paintFlow(); trig(`Anchor removed: ${gone.activity}`); return schedule(); }
     const dur = t.closest('[data-dur]'); if (dur) { pickDuration(+dur.dataset.dur); dayOptions(); paintFlow(); return schedule(); }
     const tag = t.closest('[data-tag]'); if (tag) { const k = tag.dataset.tag; S.tags.has(k) ? S.tags.delete(k) : S.tags.add(k); tag.setAttribute('aria-pressed', String(S.tags.has(k))); paintFlow(); return schedule(); }
@@ -445,13 +471,14 @@ export function openWellness(presetClient) {
       if (on) { f.elements.wl_client.value = ''; paintDossier(); hydrateAllergies(); inp.focus(); }
       return;
     }
-    if (t.closest('#wl-refresh')) { clearTimeout(S.timer); return load(); }
+    if (t.closest('#wl-refresh')) { clearTimeout(S.timer); return load(S.active); }
     if (t.closest('#wl-go-gamma')) return buildOut('gamma');
     if (t.closest('#wl-go-mail')) return buildOut('mail');
     if (t.closest('#wl-go-live')) return liveLink();
-    const head = t.closest('.wq-head'); if (head) { S.openId = S.openId === head.dataset.q ? null : head.dataset.q; paintQs(); if (S.openId) box$(S.openId)?.focus(); return; }
-    const ans = t.closest('[data-a]'); if (ans) return commit(ans.dataset.q, ans.dataset.a);
-    const sv = t.closest('[data-save]'); if (sv) return commit(sv.dataset.save, box$(sv.dataset.save)?.value || '');
+    const ans = t.closest('[data-ans]'); if (ans) return commit(ans.dataset.stage, ans.dataset.ans);
+    const sv = t.closest('[data-sv]'); if (sv) return commit(sv.dataset.sv, f.querySelector(`.wq-input[data-stage="${sv.dataset.sv}"]`)?.value || '');
+    const sk = t.closest('[data-skip]'); if (sk) return commit(sk.dataset.skip, '', true);
+    const ed = t.closest('[data-edit]'); if (ed) { S.edit = ed.dataset.edit; paintQs(); f.querySelector('#wl-capt .wq-input')?.focus(); return; }
     const cp = t.closest('[data-copy]');
     if (cp && S.out) {
       const text = cp.dataset.copy === 'prompt' ? S.out.gammaPrompt : emailText(), label = cp.textContent;
@@ -472,7 +499,7 @@ export function openWellness(presetClient) {
   });
   f.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && S.cal.open) { e.stopPropagation(); e.preventDefault(); S.cal.open = false; paintCal(); f.querySelector(`[data-pick="${S.cal.field}"]`)?.focus(); return; }
-    if (e.key === 'Enter' && e.target.classList?.contains('wq-input')) { e.preventDefault(); commit(e.target.dataset.q, e.target.value); }
+    if (e.key === 'Enter' && e.target.classList?.contains('wq-input')) { e.preventDefault(); commit(e.target.dataset.stage, e.target.value); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_a_act' || e.target.id === 'f-wl_a_time')) { e.preventDefault(); addAnchor(); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_dest' || e.target.id === 'wl_goal' || e.target.id === 'wl_ages')) e.preventDefault();
   });

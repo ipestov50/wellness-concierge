@@ -3716,3 +3716,42 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .wl-guide li i { font-style: normal; }
 @media (max-width: 479px) { .wl-rbar { flex-direction: column; } .wl-arrow { display: none; } .wl-cd span { width: 34px; height: 34px; } .wl-cal { padding: 10px; } }
 @media (prefers-reduced-motion: reduce) { .wl-cal-fold { transition: none; } }
+
+/* Wellness: 5-stage stepper, single active question, always-visible captured brief */
+.wl-stepper { display: flex; gap: 4px; margin-bottom: 12px; }
+.wl-stepper:empty { display: none; }
+.wl-st { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; padding: 6px 2px; border: 0; border-radius: 14px; background: var(--tp-card); color: var(--tp-mut); font: 600 11.5px/1.1 var(--f-body); cursor: pointer; transition: background .3s var(--tp-out), color .2s, transform .15s; }
+.wl-st i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--tp-well); font: 700 12px/1 var(--f-body); font-style: normal; font-variant-numeric: tabular-nums; }
+.wl-st span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-st:hover:not(:disabled) { color: var(--tp-ink); }
+.wl-st.on { background: var(--tp-acc); color: var(--tp-acc-ink); } .wl-st.on i { background: rgba(255,255,255,.2); }
+.wl-st.done { color: var(--tp-acc); } .wl-st.done i { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-st.skip { opacity: .6; } .wl-st.off { opacity: .35; cursor: default; }
+.wl-st:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-act { padding: 20px 20px 16px; transition: opacity .26s var(--tp-out), transform .26s var(--tp-out); }
+.wl-act.enter { animation: wlIn .42s var(--tp-out) both; }
+.wl-act.leaving { opacity: 0; transform: translateY(-10px) scale(.985); }
+@keyframes wlIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.wl-ah { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.wl-ah .wq-sh { padding: 0; }
+.wl-aq { margin: 0 0 14px; font: 500 20px/1.3 var(--tp-serif); letter-spacing: -.005em; color: var(--tp-ink); }
+.wl-skip { margin-top: 10px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--tp-mut); font: 500 13px/1 var(--f-body); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; cursor: pointer; transition: color .2s, text-decoration-color .2s; }
+.wl-skip:hover { color: var(--tp-ink); text-decoration-color: currentColor; }
+.wl-skip:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-act .wq-chips { margin-bottom: 10px; }
+.wl-doneall { display: grid; gap: 4px; padding: 20px; } .wl-doneall b { color: var(--tp-acc); font-size: 15px; } .wl-doneall span { color: var(--tp-mut); font-size: 13.5px; }
+.wl-empty.small { padding: 4px 4px 0; font-size: 13px; }
+.wl-capt { margin-top: 16px; }
+.wl-ch2 { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; padding: 0 4px; }
+.wl-ch2 b { font: 500 19px/1.1 var(--tp-serif); color: var(--tp-ink); } .wl-ch2 span { font-size: 12.5px; color: var(--tp-mut); font-variant-numeric: tabular-nums; }
+.wl-ci { padding: 12px 16px; background: var(--tp-card); animation: tpFade .35s var(--tp-out) both; }
+.wl-ci:first-of-type { border-radius: 16px 16px 0 0; } .wl-ci:last-child { border-radius: 0 0 16px 16px; } .wl-ci:only-of-type { border-radius: 16px; }
+.wl-ci + .wl-ci { border-top: 1px solid var(--tp-hair); }
+.wl-ci .wq-sh { padding: 0 0 4px; display: block; }
+.wl-cq { font-size: 12.5px; color: var(--tp-mut); margin-bottom: 4px; }
+.wl-ca { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-size: 14.5px; color: var(--tp-ink); }
+.wl-ca span { min-width: 0; overflow-wrap: anywhere; }
+.wl-edit { flex: none; min-height: 44px; margin: -10px -6px -10px 0; padding: 0 10px; border: 0; background: transparent; color: var(--tp-acc); font: 600 12.5px/1 var(--f-body); cursor: pointer; }
+.wl-edit:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+@media (max-width: 479px) { .wl-st { min-height: 52px; font-size: 10.5px; } .wl-aq { font-size: 18px; } }
+@media (prefers-reduced-motion: reduce) { .wl-act, .wl-act.enter, .wl-ci { animation: none; transition: none; } }
