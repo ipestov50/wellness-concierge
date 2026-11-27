@@ -12,11 +12,12 @@ import { statusOf, firstKey } from './statuses.js';
 
 const DURATIONS = [2, 3, 4, 5, 7];
 const TAGS = ['Deep Rest', 'Slow Living', 'Detox', 'Active Recovery', 'Culinary'];
-const STAGES = [{ key: 'bridge', label: 'Welcome & Arrival', short: 'Welcome' }, { key: 'pace', label: 'Pace & Rhythm', short: 'Pace' }, { key: 'dining', label: 'Dining & Stop-List', short: 'Dining' }, { key: 'wellness', label: 'Wellness & Family', short: 'Wellness' }, { key: 'transfers', label: 'Departure', short: 'Departure' }];
+// city rhythm first, then the spa (never clashing with early-arrival choices); every stage carries the earlier answers forward
+const STAGES = [{ key: 'bridge', label: 'Arrival & First Hours', short: 'Arrival' }, { key: 'culture', label: 'City & Cultural Discovery', short: 'City' }, { key: 'wellness', label: 'Body, Spa & Recovery', short: 'Spa' }, { key: 'dining', label: 'Dining & Stop-List', short: 'Dining' }, { key: 'transfers', label: 'Departure & Seamless Exit', short: 'Departure' }];
 const DEBOUNCE = 550;
 const T = {
   title: 'Wellness Itinerary', guest: 'Guest', oneoff: '+ New Guest', oneoffPh: 'Guest name', none: 'Select a guest', dest: 'Destination', destPh: 'City, region or country',
-  dates: 'Trip Dates', arr: 'Arrival', dep: 'Departure', guideMsg: 'Enter Destination, Arrival/Departure times & Guest’s Goal to unlock tailored Jarvis questions…', dur: 'Duration', adults: 'Adults', kids: 'Kids', ages: 'Kids’ Ages', agesPh: 'e.g. 4 & 9 y.o.', arrT: 'Arrival Time', depT: 'Departure Time', early: 'Early Check-In Confirmed', earlyNote: 'Standard hotel check-in is 15:00–16:00.',
+  dates: 'Trip Dates', arr: 'Arrival', dep: 'Departure', guideMsg: 'Enter Destination, Trip Dates & Guest’s Goal to unlock tailored Jarvis questions. Flight times can follow later in the call.', dur: 'Duration', adults: 'Adults', kids: 'Kids', ages: 'Kids’ Ages', agesPh: 'e.g. 4 & 9 y.o.', arrT: 'Arrival Time', depT: 'Departure Time', early: 'Early Check-In Confirmed', earlyNote: 'Standard hotel check-in is 15:00–16:00.',
   bridge: 'Pre-Check-In Bridge Needed (Arrival → 15:00 Check-In)', goal: 'Guest’s Goal & Mood', goalPh: 'In the guest’s own words…', stop: 'Allergies & Contraindications (Stop-List)', stopPh: 'Nuts, shellfish… press Enter to add',
   anch: 'Fixed Time Anchors', anchPh: 'Deep tissue massage, dinner…', add: '+ Add', anchHint: 'Locked in the itinerary at exactly this date and time. Everything else is built around them.', notes: 'Spontaneous Call Notes', notesPh: 'What the guest mentions spontaneously during the call…',
   intake: 'Call Intake & Guest Notes', flow: 'Live Trip Flow', flowEmpty: 'Add arrival and departure dates to see the day-by-day flow.', qh: 'Discovery Questions', refresh: '↻ Refresh questions',
@@ -57,7 +58,7 @@ async function lookupEn(name) {
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set() }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { rtab: 'disc', outTab: 'prompt', sigNotes: '', manual: false, steps: Object.fromEntries(STAGES.map((x) => [x.key, { state: 'open', qs: [], q3Locked: false, q3Busy: false }])), active: '', edit: '', customOpen: false, cur: { items: [], busy: false, auto: false, included: new Set(), day: {}, filter: 'all' }, cal: { open: false, field: 'from', month: '' }, trigger: '', anchors: [], tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -125,7 +126,7 @@ export function openWellness(presetClient) {
   const early = () => !!f.elements.wl_early.checked;
   const days = () => (arrival() && departure() && departure() >= arrival() ? diff(arrival(), departure()) + 1 : S.dur);
   const bridge = () => !!arrT() && !early() && mins(arrT()) < 14 * 60;
-  const gate = () => [['Destination', !!val('wl_dest')], ['Arrival time', !!arrT()], ['Departure time', !!depT()], ['Guest’s goal', !!(val('wl_goal') || S.tags.size)]];
+  const gate = () => [['Destination', !!val('wl_dest')], ['Trip dates', !!(arrival() && departure())], ['Guest’s goal', !!(val('wl_goal') || S.tags.size)]]; // flight times are optional: questions adapt when they are blank
   const hasBrief = () => gate().every(([, ok]) => ok);
   const stageOf = (k) => STAGES.find((x) => x.key === k);
   const entries = (k) => S.steps[k].qs;
@@ -234,23 +235,24 @@ export function openWellness(presetClient) {
     const free = (d, m) => taken.every((x) => x.d !== d || Math.abs(x.m - m) >= 90);
     const ds = tripDays().map((x) => x.date), first = ds[0], lastD = ds[ds.length - 1], arrM = arrT() ? mins(arrT()) : null, depM = depT() ? mins(depT()) : null;
     if (!first) return out;
-    const slot = (kind) => {
-      if (kind === 'bridge' || kind === 'touch') {
+    const SLOTS = { dining: [1170, 1230, 780], wellness: [990, 660, 1080], culture: [660, 900, 990, 600] };
+    const slot = (kind, want) => {
+      const pick = ds.includes(want) ? want : '';
+      if ((kind === 'bridge' || kind === 'touch') && (!pick || pick === first)) {
         let m = kind === 'bridge' ? Math.min(Math.max((arrM ?? 540) + 30, 540), 810) : (arrM !== null && (arrM >= 900 || early()) ? arrM + 45 : 900);
         for (let k = 0; k < 5 && !free(first, m); k++) m += 60;
         return [first, m];
       }
-      const slots = [990, 1170, 660, 840];
-      for (const d of ds.slice(first === lastD ? 0 : 1).concat(first === lastD ? [] : [first])) for (const m of slots) {
-        if (d === first && arrM !== null && m < arrM + 60) continue;
-        if (d === lastD && depM !== null && m > depM - 240) continue;
-        if (free(d, m)) return [d, m];
-      }
+      const slots = SLOTS[kind] || [990, 1170, 660, 840];
+      const ok = (d, m) => !(d === first && arrM !== null && m < arrM + 60) && !(d === lastD && depM !== null && m > depM - 240) && free(d, m);
+      const order = pick ? [pick] : ds.slice(first === lastD ? 0 : 1).concat(first === lastD ? [] : [first]);
+      for (const d of order) for (const m of slots) if (ok(d, m)) return [d, m];
+      if (pick) { for (let m = 540; m <= 1260; m += 30) if (ok(pick, m)) return [pick, m]; return [pick, slots[0]]; }
       return [first, 1020];
     };
     for (const x of S.cur.items.filter((y) => S.cur.included.has(y.id))) {
       if (hasCyr(`${x.title}${x.why}${x.venueName}`)) continue;
-      const [d, m] = slot(x.kind); taken.push({ d, m }); out.push({ x, date: d, time: fmtT(m) });
+      const [d, m] = slot(x.kind, S.cur.day[x.id]); taken.push({ d, m }); out.push({ x, date: d, time: fmtT(m) });
     }
     return out;
   };
@@ -264,8 +266,8 @@ export function openWellness(presetClient) {
       items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { kind: 'anchor', date: a.date, time: a.time, title: en || (hasCyr(a.activity) && useOut && S.out ? fallbackTitle(cat) : a.activity), category: cat, venueName: '', address: '', guestNotes: '', role: roleOf(cat) });
     }
     for (const p of placeIncluded([...items.values()])) {
-      const x = p.x, cat = x.kind === 'touch' ? 'Other' : guessCategory(`${x.title} ${x.venueName}`);
-      items.set(`inc:${x.id}`, { kind: 'included', id: x.id, date: p.date, time: p.time, title: x.title, category: cat === 'Other' && x.kind !== 'touch' ? 'Activities' : cat, venueName: x.venueName || '', address: x.address || '', guestNotes: x.why, why: x.why, suggestionKind: x.kind, role: x.kind === 'bridge' ? 'bridge' : x.kind === 'touch' ? 'checkin' : roleOf(cat) });
+      const x = p.x, g = guessCategory(`${x.title} ${x.venueName}`), cat = ({ touch: 'Other', wellness: 'Spa & Wellness', dining: 'Dining', culture: 'Activities' })[x.kind] || (g === 'Other' ? 'Activities' : g);
+      items.set(`inc:${x.id}`, { kind: 'included', id: x.id, date: p.date, time: p.time, title: x.title, category: cat, venueName: x.venueName || '', address: x.address || '', guestNotes: x.why, why: x.why, suggestionKind: x.kind, role: x.kind === 'bridge' ? 'bridge' : x.kind === 'touch' ? 'checkin' : roleOf(cat) });
     }
     return items;
   };
@@ -280,7 +282,7 @@ export function openWellness(presetClient) {
     else if (role === 'checkin') parts.push(early() ? 'Early check-in confirmed' : 'Standard check-in 15:00–16:00', ...A('bridge', [3, 0]));
     else if (role === 'dining') parts.push(...A('dining', [1]), ...generic(A('dining', [2])), ...A('dining', [3, 0]), stop.length ? `Stop-list: ${stop.join(', ')}` : '');
     else if (role === 'spa') parts.push(...A('wellness', [1]), ...(S.kids > 0 ? A('wellness', [2]) : generic(A('wellness', [2]))), ...A('wellness', [3, 0]));
-    else if (role === 'activity') parts.push(...A('pace'), sg.repeatVisit ? 'Repeat visitor: insider favourites' : '', sg.weather && WEATHER[sg.weather] ? WEATHER[sg.weather][1] : '');
+    else if (role === 'activity') parts.push(...A('culture'), sg.repeatVisit ? 'Repeat visitor: insider favourites' : '', sg.weather && WEATHER[sg.weather] ? WEATHER[sg.weather][1] : '');
     else if (role === 'depart') parts.push(...generic(A('transfers', [1, 3, 0])));
     else if (role === 'transfer') parts.push(...A('bridge', [1]), ...generic(A('transfers', [2])));
     return parts.map((x) => String(x || '').trim()).filter(Boolean).join(' · ').slice(0, 170);
@@ -299,6 +301,7 @@ export function openWellness(presetClient) {
       }
       for (const p of plan.filter((x) => x.date === d.date)) it.push([p.time, p.title + (p.venueName ? ` · ${p.venueName}` : ''), p.kind === 'included' ? 'inc' : 'anchor', p.role]);
       if (last && depT()) { it.push([fmtT(mins(depT()) - 180), 'Airport transfer', 'fixed', 'transfer']); it.push([depT(), 'Departure', 'fixed', 'depart']); }
+      else if (last) it.push(['—', 'Departure · time to confirm', 'fixed', 'depart']);
       it.sort((a, c) => String(a[0]).localeCompare(String(c[0])));
       rows.push({ title: `${dateLabel(d.date)}${suffix}`, it });
     });
@@ -348,29 +351,33 @@ export function openWellness(presetClient) {
     allergies: allergies(), currentNotes: val('wl_notes'), liveNotes: val('wl_notes'), fixedAnchors: S.anchors,
   });
   // Q1 and Q2 of every stage are fixed and local: 0 ms, never replaced by a network response
+  const ansOf = (k, tier) => entries(k).find((en) => en.tier === tier && !en.custom && en.done)?.answer || '';
   const coreQs = (k) => {
-    const kids = S.kids > 0, dep = depT();
+    const kids = S.kids > 0, dep = depT(), depDay = departure() ? dateLabel(departure()) : 'your departure day';
+    const thermal = /thermal/i.test(ansOf('bridge', 2)); // Stage 1 bridge choice shapes the Stage 3 spa question
     return ({
       bridge: [
         ['Would you like a private chauffeur waiting at arrivals, and which vehicle class?', ['Mercedes S/V-Class', 'Luxury SUV', 'No transfer needed']],
-        bridge() ? [`Since you land at ${arrT()} before 15:00 check-in, how should we spend your morning?`, ['Scenic chauffeur tour', 'Spa lounge & breakfast', 'Request early check-in']]
+        bridge() ? [`Since you land at ${arrT()} before 15:00 check-in, how would you like to ease into the city?`, ['Thermal lounge & breakfast', 'Scenic chauffeur orientation', 'Request early check-in']]
           : ['Would you like to head straight to the hotel to unwind, or stop first?', ['Straight to hotel', 'Light café stop', 'Direct to dinner']],
       ],
-      pace: [
-        ['How many planned experiences per day feel ideal for your energy?', ['1 anchor/day (slow)', '2 balanced/day', 'Full curated days']],
-        ['Do you prefer starting mornings slowly in-suite, or heading out early?', ['Slow mornings (10:30+)', 'Early start (08:30–09:00)', 'Flexible by day']],
+      culture: [
+        ['How many curated experiences per day feel ideal for your energy?', ['1 unhurried highlight/day', '2 balanced/day', 'Flexible & spontaneous']],
+        [`Beyond relaxation, what draws you most to ${val('wl_dest') || 'the city'}?`, ['Private art & museums', 'Architecture & hidden quarters', 'Boutique shopping / ateliers', 'Pure rest — skip sightseeing']],
+      ],
+      wellness: [
+        thermal ? ['Building on your arrival thermal lounge, would you like to add a targeted treatment during your stay?', ['Deep-tissue / jet-lag recovery', 'Facial / holistic ritual', 'Thermal lounge is plenty']]
+          : ['Which wellness focus would restore you most during this stay?', ['Deep-tissue / massage', 'Thermal & hydrotherapy', 'Light / skip spa']],
+        kids ? ['During your spa or dinner time, how should we care for the children?', ['Vetted in-suite nanny', 'Supervised kids’ workshop', 'Staggered parent times']]
+          : ['Would you prefer restorative treatments in the morning or post-sightseeing before dinner?', ['Pre-dinner recovery', 'Morning ritual', 'Flexible']],
       ],
       dining: [
         ['What dining atmosphere suits your evenings best on this trip?', ['Intimate Michelin', 'Authentic local bistro', 'Light in-suite dining']],
         ['Any allergies, dietary restrictions, or favorite drinks we should prepare ahead?', ['No restrictions', 'See stop-list', 'Wine / sommelier focus']],
       ],
-      wellness: [
-        ['Which wellness focus would restore you most during this stay?', ['Deep-tissue / massage', 'Thermal & hydrotherapy', 'Light / skip spa']],
-        kids ? ['During your spa or dinner time, how should we care for the children?', ['Vetted in-suite nanny', 'Supervised kids’ workshop', 'Staggered parent times']]
-          : ['Any preferred treatment timing (morning vs. pre-dinner) or therapist notes?', ['Late afternoon', 'Morning ritual', 'No preference']],
-      ],
       transfers: [
-        [`For your ${dep || 'departure'} flight, should we request a late check-out?`, ['Request late check-out', 'Standard check-out + lounge', 'Not needed']],
+        dep ? [`For your ${dep} flight, should we request a late check-out?`, ['Request late check-out', 'Standard check-out + lounge', 'Not needed']]
+          : [`Do you have a preferred departure window on ${depDay}, and should we request a late check-out?`, ['Request late check-out', 'Afternoon flight', 'Evening flight']],
         ['Shall we arrange your private airport transfer, plus Fast Track or VIP lounge?', ['Chauffeur + Fast Track', 'Chauffeur only', 'No transfer needed']],
       ],
     })[k];
@@ -384,6 +391,7 @@ export function openWellness(presetClient) {
   };
   const std = (k) => { ensureCore(k); return entries(k).filter((en) => !en.custom).sort((a, b) => a.tier - b.tier); };
   const q3Of = (k) => entries(k).find((en) => en.tier === 3 && !en.custom);
+  const coreDone = (k) => [1, 2].every((n) => std(k).some((en) => en.tier === n && en.done)); // Q3 fires only when BOTH Q1 and Q2 are answered
   const paintStepper = () => {
     $('#wl-stepper').innerHTML = hasBrief() ? STAGES.map((x, i) => {
       const st = S.steps[x.key], cls = st.state === 'done' ? 'done' : st.state === 'skipped' ? 'skip' : x.key === S.active ? 'on' : '';
@@ -392,13 +400,13 @@ export function openWellness(presetClient) {
   };
   const subq = (en, k) => `<div class="wl-sq${en.done ? ' done' : ''}${en.fresh ? ' fresh' : ''}${en.tier === 3 ? ' deep' : ''}" data-id="${esc(en.id)}"><div class="wl-sqh"><span class="wl-sqn">${en.tier}</span><span class="wl-sqt">${en.tier === 3 ? '<em class="wl-dd">✦ Jarvis Deep-Dive</em>' : ''}${esc(en.text)}</span>${en.done ? '<span class="wq-st">✓</span>' : en.tier === 3 ? `<button type="button" class="wl-rf" data-refresh-q3="${k}" aria-label="Refresh this deep-dive question" title="Refresh"${S.steps[k].q3Busy ? ' disabled' : ''}>↻</button>` : ''}</div>
       ${en.contextTag ? `<span class="wq-tag tnum">${esc(en.contextTag)}</span>` : ''}
-      <div class="wq-chips">${(en.chips || []).slice(0, 3).map((c) => `<button type="button" class="wq-c" data-ans="${esc(c)}" data-id="${esc(en.id)}" aria-pressed="${en.answer === c}">${esc(c)}</button>`).join('')}</div>
+      <div class="wq-chips">${(en.chips || []).slice(0, 4).map((c) => `<button type="button" class="wq-c" data-ans="${esc(c)}" data-id="${esc(en.id)}" aria-pressed="${en.answer === c}">${esc(c)}</button>`).join('')}</div>
       <input type="text" class="wq-input" data-id="${esc(en.id)}" value="${esc(en.answer && !(en.chips || []).includes(en.answer) ? en.answer : '')}" placeholder="Or note the guest’s exact words…" autocomplete="off" enterkeyhint="done" aria-label="Guest answer"></div>`;
   const q3Slot = (k) => {
     const q3 = q3Of(k), st = S.steps[k];
     if (q3) return subq(q3, k);
-    const core = std(k).filter((en) => !en.custom && en.tier < 3), unlocked = core.some((en) => en.done);
-    return `<div class="wl-sq deep slot" data-slot="${k}"><div class="wl-sqh"><span class="wl-sqn">3</span><span class="wl-sqt"><em class="wl-dd">✦ Jarvis Deep-Dive</em>${st.q3Busy ? 'Jarvis is writing a personal follow-up…' : unlocked ? 'Preparing your personal follow-up…' : 'Answer question 1 or 2 to unlock a personal follow-up.'}</span>${unlocked && !st.q3Busy ? '<button type="button" class="wl-rf" data-refresh-q3="' + k + '" aria-label="Generate deep-dive question" title="Generate">↻</button>' : ''}</div></div>`;
+    const unlocked = coreDone(k);
+    return `<div class="wl-sq deep slot" data-slot="${k}"><div class="wl-sqh"><span class="wl-sqn">3</span><span class="wl-sqt"><em class="wl-dd">✦ Jarvis Deep-Dive</em>${st.q3Busy ? 'Jarvis is writing a personal follow-up…' : unlocked ? 'Preparing your personal follow-up…' : 'Answer questions 1 and 2 to unlock a personal follow-up.'}</span>${unlocked && !st.q3Busy ? '<button type="button" class="wl-rf" data-refresh-q3="' + k + '" aria-label="Generate deep-dive question" title="Generate">↻</button>' : ''}</div></div>`;
   };
   const activeCard = () => {
     const x = stageOf(S.active);
@@ -440,7 +448,7 @@ export function openWellness(presetClient) {
     paintQs(); paintFlow();
     const list = std(x.key);
     if (!wasDone && list.length >= 3 && list.every((e) => e.done) && S.steps[x.key].state === 'open') { setTimeout(() => closeStage(x.key, 'done'), 380); return; }
-    if (en.tier < 3 && !q3Of(x.key)) fetchQ3(x.key); // Q3 only after Q1 or Q2 was answered
+    if (en.tier < 3 && !q3Of(x.key) && coreDone(x.key)) fetchQ3(x.key); // Q3 only once Q1 AND Q2 are answered
   };
   const saveOwn = () => {
     const x = stageOf(S.active); if (!x) return;
@@ -451,12 +459,13 @@ export function openWellness(presetClient) {
   };
   // Q3 deep-dive: one personalised question per stage, only after Q1/Q2; once shown it is LOCKED until the concierge taps ↻
   const fetchQ3 = async (k, force) => {
-    const st = S.steps[k]; if (st.q3Busy || (q3Of(k) && !force) || !hasBrief()) return;
-    if (!force && !std(k).some((en) => en.tier < 3 && en.done)) return;
+    const st = S.steps[k]; if (st.q3Busy || (q3Of(k) && !force) || !hasBrief() || !coreDone(k)) return;
     if (force && q3Of(k)?.done) return;
     st.q3Busy = true; setStatus('loading', T.tailoring); paintQs();
     try {
-      const r = await api('discovery-questions', { kind: 'discovery', focusStage: k, ...payload(), answered: answered().map((a) => ({ stage: a.stage, tier: a.tier, question: a.text, answer: a.answer })) }, { signal: m.signal });
+      const idx = STAGES.findIndex((x) => x.key === k), all = answered();
+      const priorStagesCaptured = STAGES.slice(0, idx).map((x) => ({ stage: x.key, label: x.label, answers: all.filter((a) => a.stage === x.key).map((a) => ({ question: a.text, answer: a.answer })) })).filter((g) => g.answers.length);
+      const r = await api('discovery-questions', { kind: 'discovery', stageId: k, focusStage: k, stageQ1Answer: ansOf(k, 1), stageQ2Answer: ansOf(k, 2), priorStagesCaptured, ...payload(), answered: all.map((a) => ({ stage: a.stage, tier: a.tier, question: a.text, answer: a.answer })) }, { signal: m.signal });
       if (r.signals) { S.signals = r.signals; paintSignals(); }
       const q = (r.questions || [])[0];
       if (q) { st.qs = st.qs.filter((en) => en.tier !== 3 || en.custom); st.qs.push({ id: `${k}-q3`, tier: 3, text: q.text, chips: q.chips, contextTag: q.contextTag, answer: '', done: false, fresh: true }); st.q3Locked = true; }
@@ -477,22 +486,54 @@ export function openWellness(presetClient) {
   const schedule = (wait = DEBOUNCE) => { paintQs(); clearTimeout(S.timer); S.timer = setTimeout(loadSignals, wait); }; // core questions re-interpolate locally; notes feed the signal pills
 
   // ---------- ✦ Curated Suggestions (before the Gamma export) ----------
-  const KIND = { bridge: 'Morning bridge', venue: 'Signature venue', touch: 'Service touch' };
+  const KIND = { bridge: 'Morning bridge', culture: 'City & culture', wellness: 'Signature wellness', dining: 'Culinary gem', touch: 'Service touch', venue: 'Signature venue' };
+  const FILTERS = [['all', 'All'], ['culture', 'Culture & City'], ['wellness', 'Wellness'], ['dining', 'Dining'], ['touch', 'Touches']];
+  const groupOf = (kind) => (kind === 'bridge' ? 'touch' : kind === 'venue' ? 'culture' : kind); // the morning bridge is an arrival touch
+  // smartest open day: arrival touches on Day 1; everything else on the least-booked middle day so no day stays blank
+  const assignDays = (list) => {
+    const ds = tripDays().map((x) => x.date); if (!ds.length) return;
+    const mid = ds.length > 2 ? ds.slice(1, -1) : ds.length === 2 ? [ds[1]] : ds;
+    const load = Object.fromEntries(ds.map((d) => [d, 0]));
+    S.anchors.forEach((a) => { if (a.date in load) load[a.date]++; });
+    S.cur.items.forEach((x) => { const d = S.cur.day[x.id]; if (d in load && !list.includes(x)) load[d]++; });
+    for (const x of list) {
+      if (S.cur.day[x.id] in load) continue;
+      const d = x.kind === 'bridge' || x.kind === 'touch' ? ds[0] : [...mid].sort((p, q) => load[p] - load[q] || ds.indexOf(p) - ds.indexOf(q))[0];
+      S.cur.day[x.id] = d; load[d]++;
+    }
+  };
+  const daySel = (x) => {
+    const ds = tripDays(); if (!ds.length) return '';
+    if (!ds.some((d) => d.date === S.cur.day[x.id])) assignDays([x]);
+    return `<label class="wl-daysel"><span class="sr-only">Day for ${esc(x.title)}</span><select data-day="${esc(x.id)}">${ds.map((d, i) => `<option value="${esc(d.date)}"${d.date === S.cur.day[x.id] ? ' selected' : ''}>Day ${i + 1} · ${esc(dateLabel(d.date))}</option>`).join('')}</select></label>`;
+  };
   const paintCur = () => {
     const box = $('#wl-cur'), c = S.cur;
     if (!hasBrief()) { box.innerHTML = ''; return; }
     paintTabs();
-    box.innerHTML = `<div class="wl-curh"><b>✦ Curated Suggestions</b><button type="button" class="wl-pill" data-curate ${c.busy ? 'disabled' : ''}>${c.busy ? 'Jarvis is curating…' : c.items.length ? '↻ Re-curate' : '✦ Suggest Venues &amp; Service Touches'}</button></div>
-      ${c.items.length ? `<div class="wl-curl">${c.items.map((x) => { const inc = c.included.has(x.id); return `<article class="wl-cc${inc ? ' inc' : ''}"><div class="wl-cck"><span class="wq-tag">${esc(KIND[x.kind] || 'Idea')}</span></div><h5>${esc(x.title)}</h5>${x.venueName ? `<div class="wl-cv">${esc(x.venueName)}</div>` : ''}<p>${esc(x.why)}</p><button type="button" class="wl-inc" data-inc="${esc(x.id)}" aria-pressed="${inc}">${inc ? '✓ Included' : '+ Add to Proposal'}</button></article>`; }).join('')}</div>` : '<p class="wl-empty small">Approve what you like — only included ideas go into the Gamma proposal.</p>'}`;
+    const shown = c.items.filter((x) => c.filter === 'all' || groupOf(x.kind) === c.filter), fl = FILTERS.find(([k]) => k === c.filter)?.[1] || 'All';
+    const label = c.busy ? 'Jarvis is curating…' : !c.items.length ? '✦ Curate the Full Trip' : c.filter === 'all' ? '↻ Re-curate' : `↻ Re-curate ${fl}`;
+    box.innerHTML = `<div class="wl-curh"><b>✦ Curated Suggestions</b><button type="button" class="wl-pill" data-curate ${c.busy ? 'disabled' : ''}>${esc(label)}</button></div>
+      ${c.items.length ? `<div class="wl-curf" role="group" aria-label="Filter suggestions">${FILTERS.map(([k, l]) => { const n = k === 'all' ? c.items.length : c.items.filter((x) => groupOf(x.kind) === k).length; return `<button type="button" class="wl-cfp" data-cf="${k}" aria-pressed="${c.filter === k}">${esc(l)}${n ? ` <span class="tnum">${n}</span>` : ''}</button>`; }).join('')}</div>` : ''}
+      ${shown.length ? `<div class="wl-curl">${shown.map((x) => { const inc = c.included.has(x.id); return `<article class="wl-cc${inc ? ' inc' : ''}"><div class="wl-cck"><span class="wq-tag">${esc(KIND[x.kind] || 'Idea')}</span>${daySel(x)}</div><h5>${esc(x.title)}</h5>${x.venueName ? `<div class="wl-cv">${esc(x.venueName)}</div>` : ''}<p>${esc(x.why)}</p><button type="button" class="wl-inc" data-inc="${esc(x.id)}" aria-pressed="${inc}">${inc ? '✓ Included' : '+ Add to Proposal'}</button></article>`; }).join('')}</div>`
+        : c.items.length ? `<p class="wl-empty small">Nothing in ${esc(fl)} yet. Re-curate to explore.</p>` : '<p class="wl-empty small">City, wellness, dining and service ideas for the whole trip. Approve what you like — only included ideas go into the Gamma proposal.</p>'}`;
   };
   const curate = async () => {
     if (S.cur.busy || !val('wl_dest')) return;
+    const focus = S.cur.filter === 'all' || !S.cur.items.length ? '' : S.cur.filter;
     S.cur.busy = true; S.cur.auto = true; paintCur();
     try {
-      const r = await api('ideas', { kind: 'curate', ...payload(), signals: S.signals, answers: answered().map((a) => ({ category: a.category, question: a.text, answer: a.answer })) }, { signal: m.signal });
-      S.cur.items = r.suggestions || []; S.cur.included = new Set([...S.cur.included].filter((id) => S.cur.items.some((x) => x.id === id)));
+      const r = await api('ideas', { kind: 'curate', focusCategory: focus, exclude: S.cur.items.map((x) => x.title), ...payload(), signals: S.signals, answers: answered().map((a) => ({ category: a.category, question: a.text, answer: a.answer })) }, { signal: m.signal });
+      const fresh = r.suggestions || [];
+      // a category re-curate replaces only that category's not-yet-included ideas; everything approved stays
+      S.cur.items = focus ? [...S.cur.items.filter((x) => groupOf(x.kind) !== focus || S.cur.included.has(x.id)), ...fresh.filter((x) => groupOf(x.kind) === focus)] : [...S.cur.items.filter((x) => S.cur.included.has(x.id)), ...fresh];
+      const ids = new Set(S.cur.items.map((x) => x.id));
+      S.cur.included = new Set([...S.cur.included].filter((id) => ids.has(id)));
+      S.cur.day = Object.fromEntries(Object.entries(S.cur.day).filter(([id]) => ids.has(id)));
+      assignDays(S.cur.items);
+      if (focus && !fresh.length) toast('No fresh ideas in this category — try again shortly');
     } catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not curate suggestions — please retry', 'err'); }
-    finally { S.cur.busy = false; paintCur(); }
+    finally { S.cur.busy = false; paintCur(); paintFlow(); }
   };
   const maybeCurate = () => { // automatically once at least two stages have captured answers
     if (S.cur.auto || S.cur.items.length) return;
@@ -616,7 +657,7 @@ export function openWellness(presetClient) {
       const k = stp.dataset.stage, st = S.steps[k];
       if (st.state !== 'open') st.state = 'open'; // reopen a finished or skipped stage
       S.active = k; S.manual = true; stageCleanup(); paintQs();
-      if (!q3Of(k) && std(k).some((en) => en.tier < 3 && en.done)) fetchQ3(k);
+      if (!q3Of(k) && coreDone(k)) fetchQ3(k);
       return;
     }
     const ax = t.closest('[data-ax]'); if (ax) { const gone = S.anchors.splice(+ax.dataset.ax, 1)[0]; paintAnchors(); paintFlow(); trig(`Anchor removed: ${gone.activity}`); return schedule(); }
@@ -639,6 +680,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-skip-stage]')) return closeStage(S.active, 'skipped');
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
+    const cf = t.closest('[data-cf]'); if (cf) { S.cur.filter = cf.dataset.cf; return paintCur(); }
     const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); paintFlow(); return; }
     const cp = t.closest('[data-copy]');
     if (cp && S.out) {
@@ -657,6 +699,7 @@ export function openWellness(presetClient) {
     if (id === 'wl_client') { if (e.target.value) { $('#wl_guest').hidden = true; $('#wl-oneoff').setAttribute('aria-expanded', 'false'); } paintDossier(); hydrateAllergies(); schedule(); }
     else if (id === 'wl_from' || id === 'wl_to') { datesChanged(); dayOptions(); paintFlow(); trig(`Trip dates changed to ${arrival()} - ${departure()}`); schedule(); }
     else if (id === 'f-wl_arr_time' || id === 'f-wl_dep_time' || id === 'wl_early') { paintFlow(); schedule(); }
+    else if (e.target.dataset?.day) { S.cur.day[e.target.dataset.day] = e.target.value; paintFlow(); if (S.cur.included.has(e.target.dataset.day)) toast(`Moved to ${dateLabel(e.target.value)} ✓`); }
   });
   f.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && S.cal.open) { e.stopPropagation(); e.preventDefault(); S.cal.open = false; paintCal(); f.querySelector(`[data-pick="${S.cal.field}"]`)?.focus(); return; }
