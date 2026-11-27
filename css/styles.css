@@ -3678,3 +3678,41 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 @keyframes wlBadge { 0% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--tp-acc) 50%, transparent); } 40% { transform: scale(1.08); } 100% { transform: scale(1); box-shadow: 0 0 0 12px transparent; } }
 @media (max-width: 767px) { .wl-build .wl-go { flex: 1 1 100%; } .wl-lm { margin-left: 0; } }
 @media (prefers-reduced-motion: reduce) { .wl-fold, .wq.leaving, .wl-f.pulse, .wl-sg, .wl-livebar { transition: none; animation: none; } }
+
+/* Wellness: Warm Editorial range calendar + guided checklist */
+.wl-rbar { display: flex; align-items: stretch; gap: 8px; }
+.wl-dp { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; min-height: 58px; padding: 8px 16px; border: 1px solid transparent; border-radius: 16px; background: var(--tp-well); color: var(--tp-mut); font: 500 12px/1.2 var(--f-body); text-align: left; cursor: pointer; transition: background .3s var(--tp-out), border-color .3s var(--tp-out); }
+.wl-dp b { font: 600 15px/1.2 var(--f-body); color: var(--tp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wl-dp.on, .wl-dp:hover { background: var(--tp-card); }
+.wl-dp.on { border-color: var(--tp-acc); }
+.wl-dp:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-arrow { align-self: center; color: var(--tp-mut); }
+.wl-cal-fold { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .45s var(--tp-out), opacity .3s; }
+.wl-cal-fold > div { overflow: hidden; min-height: 0; }
+.wl-cal-fold.open { grid-template-rows: 1fr; opacity: 1; }
+.wl-cal { margin-top: 10px; padding: 14px; border-radius: 18px; background: var(--tp-card); box-shadow: 0 10px 30px -14px rgba(44,37,32,.28); }
+.wl-ch { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.wl-ch b { font: 500 19px/1 var(--tp-serif); letter-spacing: -.01em; color: var(--tp-ink); }
+.wl-cn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--tp-well); color: var(--tp-acc); font-size: 20px; line-height: 1; cursor: pointer; }
+.wl-cn:hover { background: color-mix(in srgb, var(--tp-acc) 14%, var(--tp-well)); }
+.wl-cw, .wl-cg { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.wl-cw span { padding: 4px 0 6px; text-align: center; font: 600 10px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--tp-mut); }
+.wl-cd { position: relative; height: 44px; border: 0; background: transparent; color: var(--tp-ink); font: 500 14.5px/1 var(--f-body); cursor: pointer; }
+.wl-cd span { position: relative; z-index: 1; display: grid; place-items: center; width: 38px; height: 38px; margin: auto; border-radius: 50%; font-variant-numeric: tabular-nums; transition: background .2s, color .2s; }
+.wl-cd:hover span { background: var(--tp-well); }
+.wl-cd.today span { box-shadow: inset 0 0 0 1.5px var(--tp-acc); }
+.wl-cd.mid { background: color-mix(in srgb, var(--tp-acc) 11%, transparent); }
+.wl-cd.from, .wl-cd.to { background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--tp-acc) 11%, transparent) 50%); }
+.wl-cd.to { background: linear-gradient(90deg, color-mix(in srgb, var(--tp-acc) 11%, transparent) 50%, transparent 50%); }
+.wl-cd.from.to { background: none; }
+.wl-cd.from span, .wl-cd.to span { background: var(--tp-acc); color: var(--tp-acc-ink); font-weight: 700; box-shadow: none; }
+.wl-cd:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: -2px; border-radius: 12px; }
+.wl-cf { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--tp-hair); font-size: 12.5px; color: var(--tp-mut); }
+.wl-guide { padding: 20px 20px 18px; }
+.wl-guide p { margin: 0 0 14px; color: var(--tp-ink); font-size: 15px; line-height: 1.5; }
+.wl-guide ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wl-guide li { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--tp-well); color: var(--tp-mut); font: 600 12.5px/1 var(--f-body); }
+.wl-guide li.ok { background: color-mix(in srgb, var(--tp-acc) 13%, transparent); color: var(--tp-acc); }
+.wl-guide li i { font-style: normal; }
+@media (max-width: 479px) { .wl-rbar { flex-direction: column; } .wl-arrow { display: none; } .wl-cd span { width: 34px; height: 34px; } .wl-cal { padding: 10px; } }
+@media (prefers-reduced-motion: reduce) { .wl-cal-fold { transition: none; } }

@@ -17,7 +17,7 @@ const STAGES = ['Arrival & Check-In Bridge', 'Daily Pace & Rhythm', 'Spa, Body &
 const DEBOUNCE = 550;
 const T = {
   title: 'Wellness Itinerary', guest: 'Guest', oneoff: '+ New Guest', oneoffPh: 'Guest name', none: 'Select a guest', dest: 'Destination', destPh: 'City, region or country',
-  arr: 'Arrival Date', dep: 'Departure Date', dur: 'Duration', adults: 'Adults', kids: 'Kids', ages: 'Kids’ Ages', agesPh: 'e.g. 4 & 9 y.o.', arrT: 'Arrival Time', depT: 'Departure Time', early: 'Early Check-In Confirmed', earlyNote: 'Standard hotel check-in is 15:00–16:00.',
+  dates: 'Trip Dates', arr: 'Arrival', dep: 'Departure', guideMsg: 'Enter Destination, Arrival/Departure times & Guest’s Goal to unlock tailored Jarvis questions…', dur: 'Duration', adults: 'Adults', kids: 'Kids', ages: 'Kids’ Ages', agesPh: 'e.g. 4 & 9 y.o.', arrT: 'Arrival Time', depT: 'Departure Time', early: 'Early Check-In Confirmed', earlyNote: 'Standard hotel check-in is 15:00–16:00.',
   bridge: 'Pre-Check-In Bridge Needed (Arrival → 15:00 Check-In)', goal: 'Guest’s Goal & Mood', goalPh: 'In the guest’s own words…', stop: 'Allergies & Contraindications (Stop-List)', stopPh: 'Nuts, shellfish… press Enter to add',
   anch: 'Fixed Time Anchors', anchPh: 'Deep tissue massage, dinner…', add: '+ Add', anchHint: 'Locked in the itinerary at exactly this date and time. Everything else is built around them.', notes: 'Spontaneous Call Notes', notesPh: 'What the guest mentions spontaneously during the call…',
   intake: 'Call Intake & Guest Notes', flow: 'Live Trip Flow', flowEmpty: 'Add arrival and departure dates to see the day-by-day flow.', qh: 'Discovery Questions', refresh: '↻ Refresh questions',
@@ -45,10 +45,11 @@ function zonedIso(date, time, tz) {
     return new Date(guess - (asUtc - guess)).toISOString();
   } catch { return new Date(guess).toISOString(); }
 }
+const guessCategory = (t) => (/massage|spa|sauna|hammam|thermal|facial|wellness|treatment|yoga|ritual/i.test(t) ? 'Spa & Wellness' : /dinner|lunch|breakfast|brunch|restaurant|tasting|tea|coffee/i.test(t) ? 'Dining' : /pick ?up|transfer|airport|chauffeur|driver|drive|arriv|depart/i.test(t) ? 'Transport' : /check.?in|hotel|room/i.test(t) ? 'Accommodation' : /doctor|clinic|physio|gym|fitness|trainer/i.test(t) ? 'Health & Fitness' : 'Other');
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { trigger: '', filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { cal: { open: false, field: 'from', month: '' }, trigger: '', filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -61,7 +62,10 @@ export function openWellness(presetClient) {
         <input type="text" id="wl_guest" name="wl_guest" class="wl-oneoff-in" placeholder="${esc(T.oneoffPh)}" autocomplete="off" hidden>
         <div class="wl-dossier" id="wl-dossier" aria-live="polite"></div></div>
       <div class="f"><label for="wl_dest">${T.dest}</label><input type="text" id="wl_dest" name="wl_dest" placeholder="${esc(T.destPh)}" autocomplete="off"></div>
-      <div class="f2 wl-dates"><div class="f"><label for="wl_from">${T.arr}</label><input type="date" id="wl_from" name="wl_from"></div><div class="f"><label for="wl_to">${T.dep}</label><input type="date" id="wl_to" name="wl_to"></div></div>
+      <div class="f wl-range-f" id="wl-range-f"><label id="wl-rg-l">${T.dates}</label>
+        <div class="wl-rbar" role="group" aria-labelledby="wl-rg-l"><button type="button" class="wl-dp" data-pick="from" aria-expanded="false" aria-controls="wl-cal"><span>${T.arr}:</span> <b id="wl-dp-from">Select date</b></button><span class="wl-arrow" aria-hidden="true">→</span><button type="button" class="wl-dp" data-pick="to" aria-expanded="false" aria-controls="wl-cal"><span>${T.dep}:</span> <b id="wl-dp-to">Select date</b></button></div>
+        <input type="hidden" id="wl_from" name="wl_from"><input type="hidden" id="wl_to" name="wl_to">
+        <div class="wl-cal-fold" id="wl-cal-fold" inert><div><div class="wl-cal" id="wl-cal" role="dialog" aria-label="Choose trip dates"></div></div></div></div>
       <div class="f"><label id="wl-dur-l">${T.dur}</label><div class="wl-chips" role="group" aria-labelledby="wl-dur-l">${DURATIONS.map((n) => `<button type="button" class="wl-chip" data-dur="${n}" aria-pressed="false">${n} Days</button>`).join('')}</div><small class="wl-dursum tnum" id="wl-dursum" aria-live="polite"></small></div>
       <div class="wl-party">${step('adults', T.adults, 1)}${step('kids', T.kids, 0)}</div>
       <div class="wl-fold" id="wl-ages-fold" inert><div><div class="f"><label for="wl_ages">${T.ages}</label><input type="text" id="wl_ages" name="wl_ages" placeholder="${esc(T.agesPh)}" autocomplete="off" maxlength="60"></div></div></div>
@@ -103,13 +107,53 @@ export function openWellness(presetClient) {
   const early = () => !!f.elements.wl_early.checked;
   const days = () => (arrival() && departure() && departure() >= arrival() ? diff(arrival(), departure()) + 1 : S.dur);
   const bridge = () => !!arrT() && !early() && mins(arrT()) < 14 * 60;
-  const hasBrief = () => !!(val('wl_goal') || S.tags.size || val('wl_dest') || val('wl_notes'));
+  const gate = () => [['Destination', !!val('wl_dest')], ['Arrival time', !!arrT()], ['Departure time', !!depT()], ['Guest’s goal', !!(val('wl_goal') || S.tags.size)]];
+  const hasBrief = () => gate().every(([, ok]) => ok);
   const answered = () => S.questions.filter((q) => q.state === 'done');
   const party = () => ({ adults: S.adults, kids: S.kids, kidsAges: S.kids ? val('wl_ages') : '' });
   const partyText = () => `${S.adults} adult${S.adults === 1 ? '' : 's'}${S.kids ? `, ${S.kids} kid${S.kids === 1 ? '' : 's'}${val('wl_ages') ? ` (${val('wl_ages')})` : ''}` : ''}`;
 
+  // ---------- custom range calendar (Warm Editorial) ----------
+  const fmtFull = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const monthName = (ym) => new Date(ym + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const paintCal = () => {
+    const fold = $('#wl-cal-fold'), open = S.cal.open;
+    fold.classList.toggle('open', open); fold.inert = !open;
+    f.querySelectorAll('[data-pick]').forEach((b) => { b.setAttribute('aria-expanded', String(open && b.dataset.pick === S.cal.field)); b.classList.toggle('on', open && b.dataset.pick === S.cal.field); });
+    if (!open) return;
+    const ym = S.cal.month || (arrival() || ymd(new Date())).slice(0, 7), [y, mo] = ym.split('-').map(Number);
+    const first = new Date(Date.UTC(y, mo - 1, 1)), lead = (first.getUTCDay() + 6) % 7, dim = new Date(Date.UTC(y, mo, 0)).getUTCDate(), today = ymd(new Date());
+    let cells = '<span></span>'.repeat(lead);
+    for (let d = 1; d <= dim; d++) {
+      const date = `${ym}-${String(d).padStart(2, '0')}`, a = arrival(), b = departure();
+      const cls = [date === a && 'from', date === b && 'to', a && b && date > a && date < b && 'mid', date === today && 'today'].filter(Boolean).join(' ');
+      cells += `<button type="button" class="wl-cd ${cls}" data-cd="${date}" aria-label="${esc(fmtFull(date))}"${date === a || date === b ? ' aria-pressed="true"' : ''}><span class="tnum">${d}</span></button>`;
+    }
+    $('#wl-cal').innerHTML = `<div class="wl-ch"><button type="button" class="wl-cn" data-cn="-1" aria-label="Previous month">‹</button><b>${esc(monthName(ym))}</b><button type="button" class="wl-cn" data-cn="1" aria-label="Next month">›</button></div>
+      <div class="wl-cw">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => `<span>${w}</span>`).join('')}</div><div class="wl-cg">${cells}</div>
+      <div class="wl-cf"><span>${S.cal.field === 'from' ? 'Choose the arrival date' : 'Now choose the departure date'}</span></div>`;
+  };
+  const paintRange = () => {
+    $('#wl-dp-from').textContent = arrival() ? fmtFull(arrival()) : 'Select date';
+    $('#wl-dp-to').textContent = departure() ? fmtFull(departure()) : 'Select date';
+    paintCal();
+  };
+  const setRange = (from, to) => {
+    f.elements.wl_from.value = from || ''; f.elements.wl_to.value = to || '';
+    f.elements.wl_to.dispatchEvent(new Event('change', { bubbles: true })); // runs the same sync as any date change
+  };
+  const pickDay = (date) => {
+    const a = arrival(), b = departure();
+    if (S.cal.field === 'from') { setRange(date, b && b >= date ? b : ''); S.cal.field = 'to'; S.cal.month = date.slice(0, 7); }
+    else if (!a || date < a) { setRange(date, ''); S.cal.field = 'to'; S.cal.month = date.slice(0, 7); }
+    else { setRange(a, date); S.cal.open = false; }
+    paintCal();
+  };
+  const openCal = (field) => { S.cal.field = field; S.cal.open = !(S.cal.open && S.cal.field === field && f.querySelector(`[data-pick="${field}"].on`)); S.cal.month = (field === 'to' ? departure() || arrival() : arrival() || departure() || ymd(new Date())).slice(0, 7); paintCal(); };
+
   // ---------- dates ⇄ duration (two-way) ----------
   const paintDur = () => {
+    paintRange();
     const n = days();
     f.querySelectorAll('[data-dur]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.dur === n)));
     $('#wl-dursum').textContent = n ? `${n} ${n === 1 ? 'Day' : 'Days'} · ${n - 1} ${n - 1 === 1 ? 'Night' : 'Nights'}` : '';
@@ -148,7 +192,7 @@ export function openWellness(presetClient) {
   };
   const addAnchor = () => {
     const act = val('wl_a_act').replace(/^\s*\d{1,2}[:.]\d{2}\s*[-–—]?\s*/, '').slice(0, 120), t = normTime(val('wl_a_time')), date = $('#wl_a_day').value;
-    if (!date) { toast('Set arrival and departure dates first'); $('#wl_from').focus(); return; }
+    if (!date) { toast('Set arrival and departure dates first'); $('[data-pick="from"]').focus(); return; }
     if (!act) { $('#wl_a_act').focus(); return; }
     if (!t) { toast('Add a time, e.g. 11:00'); $('#f-wl_a_time').focus(); return; }
     S.anchors.push({ date, time: t, activity: act });
@@ -229,7 +273,10 @@ export function openWellness(presetClient) {
   const paintQs = (pulse) => {
     const box = $('#wl-qs');
     paintFilters(pulse);
-    if (!S.questions.length) { box.innerHTML = `<p class="wl-empty">${esc(S.status === 'loading' || S.status === 'wait' ? T.tailoring : T.empty)}</p>`; return; }
+    if (!S.questions.length) {
+      if (!hasBrief()) { box.innerHTML = `<div class="wl-guide"><p>${esc(T.guideMsg)}</p><ul>${gate().map(([l, ok]) => `<li class="${ok ? 'ok' : 'no'}"><i aria-hidden="true">${ok ? '✓' : '○'}</i>${esc(l)}</li>`).join('')}</ul></div>`; return; }
+      box.innerHTML = `<p class="wl-empty">${esc(S.status === 'loading' || S.status === 'wait' ? T.tailoring : T.empty)}</p>`; return;
+    }
     const html = STAGES.map((st, i) => {
       const qs = S.questions.filter((q) => q.category === st && visible(q));
       return qs.length ? `<div class="wq-stage"><div class="wq-sh">${i + 1} · ${esc(st.toUpperCase())}</div>${qs.map(card).join('')}</div>` : '';
@@ -256,7 +303,7 @@ export function openWellness(presetClient) {
     allergies: allergies(), currentNotes: val('wl_notes'), liveNotes: val('wl_notes'), fixedAnchors: S.anchors,
   });
   const load = async () => {
-    if (!hasBrief()) { setStatus('idle', 'Waiting for the brief'); paintQs(); return; }
+    if (!hasBrief()) { setStatus('idle', 'Waiting for the call brief'); paintQs(); return; }
     S.ctrl?.abort(); const ctrl = (S.ctrl = new AbortController());
     setStatus('loading', T.tailoring); paintQs();
     try {
@@ -265,9 +312,15 @@ export function openWellness(presetClient) {
       if (ctrl !== S.ctrl) return;
       if (S.trigger === sent) S.trigger = '';
       if (r.signals) { S.signals = r.signals; paintSignals(); }
-      const fresh = (r.questions || []).filter((q) => !S.questions.some((k) => k.text.toLowerCase() === q.text.toLowerCase())).map((q) => ({ ...q, isNew: true }));
-      fresh.forEach((q) => { S.asked.add(q.text); setTimeout(() => { q.isNew = false; const el = f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"]`); el?.classList.remove('is-new'); el?.querySelector('.wq-new')?.remove(); }, 5000); });
-      S.questions = [...S.questions, ...fresh]; setStatus('ready', fresh.length ? `${fresh.length} new · ${hm()}` : `Up to date · ${hm()}`); paintQs();
+      const done = S.questions.filter((q) => q.state === 'done');
+      const editing = S.openId && S.questions.find((q) => q.id === S.openId && q.state !== 'done' && String(f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"] .wq-input`)?.value || '').trim());
+      const keepOpen = S.questions.filter((q) => q.state !== 'done');
+      const fresh = (r.questions || []).filter((q) => !done.some((k) => k.text.toLowerCase() === q.text.toLowerCase()))
+        .map((q) => { const same = keepOpen.find((k) => k.text.toLowerCase() === q.text.toLowerCase()); return same || { ...q, isNew: true }; });
+      if (editing && !fresh.includes(editing)) fresh.unshift(editing); // never drop a card the concierge is typing into
+      fresh.filter((q) => q.isNew).forEach((q) => { S.asked.add(q.text); setTimeout(() => { q.isNew = false; const el = f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"]`); el?.classList.remove('is-new'); el?.querySelector('.wq-new')?.remove(); }, 5000); });
+      const added = fresh.filter((q) => q.isNew).length;
+      S.questions = [...done, ...fresh]; setStatus('ready', added ? `${added} new · ${hm()}` : `Up to date · ${hm()}`); paintQs();
     } catch (e) {
       if (e.name === 'AbortError') return;
       setStatus('error', e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not update — tap Refresh'); paintQs();
@@ -275,7 +328,7 @@ export function openWellness(presetClient) {
   };
   const schedule = () => {
     clearTimeout(S.timer);
-    if (!hasBrief()) { setStatus('idle', 'Waiting for the brief'); return; }
+    if (!hasBrief()) { setStatus('idle', 'Waiting for the call brief'); return; }
     setStatus('wait', T.tailoring);
     S.timer = setTimeout(load, DEBOUNCE);
   };
@@ -316,7 +369,7 @@ export function openWellness(presetClient) {
   const liveLink = async () => {
     if (S.busy) return;
     if (!val('wl_dest')) { toast('Add a destination first'); $('#wl_dest').focus(); return; }
-    if (!(arrival() && departure())) { toast('Set arrival and departure dates first'); $('#wl_from').focus(); return; }
+    if (!(arrival() && departure())) { toast('Set arrival and departure dates first'); $('[data-pick="from"]').focus(); return; }
     if (!clientId() && !val('wl_guest')) { toast('Choose a guest or add a new one'); $('#wl_client').focus(); return; }
     if (!(await buildOut('live')) || !S.out) return;
     const btn = $('#wl-go-live'), label = btn.textContent; S.busy = true; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = true)); btn.textContent = 'Creating live itinerary…';
@@ -338,7 +391,8 @@ export function openWellness(presetClient) {
       // 2) trip
       const place = await lookupPlace(val('wl_dest')), tz = place?.tz || client?.home_tz || 'Europe/Paris';
       const tripRow = await save('trips', S.ids.trip, {
-        client_id: cid, city: val('wl_dest'), country: place?.country || null, country_code: place?.cc || null, start_date: arrival(), end_date: departure(), tz, lat: place?.lat ?? null, lon: place?.lon ?? null,
+        client_id: cid, city: val('wl_dest'), country: place?.country || null, country_code: place?.cc || null, start_date: arrival(), end_date: departure(), tz,
+        flight_in_at: arrT() ? zonedIso(arrival(), arrT(), tz) : null, flight_out_at: depT() ? zonedIso(departure(), depT(), tz) : null, lat: place?.lat ?? null, lon: place?.lon ?? null,
         companions: partyText(), notes: val('wl_notes') || null,
       });
       S.ids.trip = tripRow.id;
@@ -348,10 +402,11 @@ export function openWellness(presetClient) {
       if (!token) throw new Error('no portal link');
       // 4) requests: every anchor and itinerary item
       const status = confirmedKey(), items = new Map();
-      for (const i of (S.out.itineraryItems || [])) items.set(`${i.date}|${i.time}|${i.title.toLowerCase()}`, { date: i.date, time: i.time, title: i.title, category: i.category, venueName: i.venueName, address: i.address, guestNotes: i.guestNotes });
-      for (const a of S.anchors) { // anchors are authoritative: replace a model item at the same slot
+      // ONLY what the concierge confirmed with the guest: fixed anchors + bookings the model found stated in the notes/answers. Creative suggestions stay in the Gamma proposal.
+      for (const i of (S.out.confirmedBookings || [])) items.set(`${i.date}|${i.time}|${i.title.toLowerCase()}`, { date: i.date, time: i.time, title: i.title, category: i.category, venueName: i.venueName, address: i.address, guestNotes: i.guestNotes });
+      for (const a of S.anchors) { // anchors are authoritative: replace a booking at the same slot
         for (const [k, v] of items) if (v.date === a.date && v.time === a.time) items.delete(k);
-        items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { date: a.date, time: a.time, title: a.activity, category: 'Other', venueName: '', address: '', guestNotes: '' });
+        items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { date: a.date, time: a.time, title: a.activity, category: guessCategory(a.activity), venueName: '', address: '', guestNotes: '' });
       }
       let n = 0;
       for (const [k, it] of items) {
@@ -363,9 +418,9 @@ export function openWellness(presetClient) {
       S.liveUrl = `${location.origin}/t/${token}`;
       let ok = true; try { await navigator.clipboard.writeText(S.liveUrl); } catch { ok = false; }
       $('#wl-livebar').hidden = false;
-      $('#wl-livebar').innerHTML = `<span class="wl-ok">${ok ? 'Live Link Copied ✓' : 'Live Link ready'}</span><a class="wl-pill" href="${esc(S.liveUrl)}" target="_blank" rel="noopener noreferrer">Open Portal ↗</a><span class="wl-lm tnum">${n} item${n === 1 ? '' : 's'} on the Board, Calendar and portal</span>`;
+      $('#wl-livebar').innerHTML = `<span class="wl-ok">${ok ? 'Live Link Copied ✓' : 'Live Link ready'}</span><a class="wl-pill" href="${esc(S.liveUrl)}" target="_blank" rel="noopener noreferrer">Open Portal ↗</a><span class="wl-lm tnum">${n} confirmed item${n === 1 ? '' : 's'} on the Board, Calendar and portal</span>`;
       paintOut('live');
-      toast(`Live itinerary created · ${n} items`);
+      toast(n ? `Live itinerary created · ${n} confirmed item${n === 1 ? '' : 's'}` : 'Live link ready · no confirmed items yet (add Fixed Time Anchors)');
     } catch (e) {
       toast('Could not create the live link: ' + (e.message || e), 'err');
     } finally { S.busy = false; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = false)); btn.textContent = label; }
@@ -374,6 +429,10 @@ export function openWellness(presetClient) {
   // ---------- events (delegated on the form) ----------
   f.addEventListener('click', async (e) => {
     const t = e.target;
+    const pk = t.closest('[data-pick]'); if (pk) return openCal(pk.dataset.pick);
+    const cd = t.closest('[data-cd]'); if (cd) return pickDay(cd.dataset.cd);
+    const cn = t.closest('[data-cn]'); if (cn) { const [y, mo] = (S.cal.month || ymd(new Date()).slice(0, 7)).split('-').map(Number); S.cal.month = new Date(Date.UTC(y, mo - 1 + +cn.dataset.cn, 1)).toISOString().slice(0, 7); return paintCal(); }
+    if (S.cal.open && !t.closest('.wl-range-f')) { S.cal.open = false; paintCal(); }
     if (t.closest('#wl-a-add')) return addAnchor();
     const st = t.closest('.wl-step [data-d]');
     if (st) { const k = st.closest('.wl-step').dataset.step, min = +st.closest('.wl-step').dataset.min; S[k] = Math.min(20, Math.max(min, S[k] + +st.dataset.d)); paintParty(); paintFlow(); if (k === 'kids' && S.kids) setTimeout(() => $('#wl_ages').focus({ preventScroll: true }), 450); trig(`Party changed: ${partyText()}`); return schedule(); }
@@ -412,10 +471,11 @@ export function openWellness(presetClient) {
     else if (id === 'f-wl_arr_time' || id === 'f-wl_dep_time' || id === 'wl_early') { paintFlow(); schedule(); }
   });
   f.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && S.cal.open) { e.stopPropagation(); e.preventDefault(); S.cal.open = false; paintCal(); f.querySelector(`[data-pick="${S.cal.field}"]`)?.focus(); return; }
     if (e.key === 'Enter' && e.target.classList?.contains('wq-input')) { e.preventDefault(); commit(e.target.dataset.q, e.target.value); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_a_act' || e.target.id === 'f-wl_a_time')) { e.preventDefault(); addAnchor(); }
     else if (e.key === 'Enter' && (e.target.id === 'wl_dest' || e.target.id === 'wl_goal' || e.target.id === 'wl_ages')) e.preventDefault();
   });
-  paintDossier(); dayOptions(); paintAnchors(); paintDur(); paintParty(); paintFlow(); setStatus('idle', 'Waiting for the brief'); paintQs();
+  paintDossier(); dayOptions(); paintAnchors(); paintDur(); paintParty(); paintFlow(); setStatus('idle', 'Waiting for the call brief'); paintQs();
   m.signal.addEventListener?.('abort', () => { clearTimeout(S.timer); S.ctrl?.abort(); });
 }
