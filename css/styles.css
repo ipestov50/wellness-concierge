@@ -3570,3 +3570,63 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .wl-ax:hover { opacity: 1; background: color-mix(in srgb, var(--tp-acc) 14%, transparent); }
 .wl-ahint { display: block; margin-top: 8px; font-size: 12px; color: var(--tp-mut); }
 @media (prefers-reduced-motion: reduce) { .wl-ach { animation: none; } }
+
+/* ════════ Wellness Itinerary (English cockpit): intake, live flow, ordered questions ════════ */
+.wl-h { margin: 0 0 18px; font: 500 22px/1.1 var(--tp-serif); letter-spacing: -.01em; color: var(--tp-ink); }
+.ov.wl .wl-dates, .ov.wl .wl-times { gap: 12px; }
+.ov.wl .wl-dates .f, .ov.wl .wl-times .f { min-width: 0; margin-bottom: 20px; }
+.ov.wl .wl-dates input[type=date] { width: 100%; min-width: 0; min-height: 52px; }
+.wl-times .tf { min-width: 120px; gap: 0; }
+.wl-times .tf-pill { width: 100%; min-width: 120px; min-height: 52px; box-sizing: border-box; justify-content: center; }
+.wl-dursum { display: block; margin-top: 8px; min-height: 1em; font-size: 12.5px; color: var(--tp-mut); font-variant-numeric: tabular-nums; }
+.wl-toggle { position: relative; display: inline-flex; margin: 0; cursor: pointer; }
+.wl-toggle input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.wl-toggle span { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--tp-well); color: var(--tp-mut); font: 600 13.5px/1 var(--f-body); transition: background .3s var(--tp-out), color .2s; }
+.wl-toggle input:checked + span { background: var(--tp-acc); color: var(--tp-acc-ink); }
+.wl-toggle input:checked + span::before { content: "✓"; }
+.wl-toggle input:focus-visible + span { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+.wl-note { display: block; margin: 8px 0 0; font-size: 12px; color: var(--tp-mut); }
+.wl-bridge { margin: 12px 0 20px; padding: 11px 16px; border-left: 2px solid var(--tp-gold); border-radius: 0 12px 12px 0; background: color-mix(in srgb, var(--tp-gold) 13%, transparent); color: #8A6A32; font: 600 13px/1.4 var(--f-body); animation: tpFade .3s var(--tp-out) both; }
+.wl-bridge[hidden] { display: none; }
+.wl-note + .f, .wl-toggle { margin-top: 0; }
+.wl-goal { margin-top: 20px; }
+.ov.wl .wl-goal input[type=text] { min-height: 58px; font-size: 17px; }
+.wl-tags { margin-top: 10px; gap: 6px; }
+.wl-tag { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; box-shadow: inset 0 0 0 1px var(--tp-hair); color: var(--tp-mut); font: 500 13px/1 var(--f-body); cursor: pointer; transition: background .25s var(--tp-out), color .2s, box-shadow .2s; }
+.wl-tag:hover { color: var(--tp-ink); }
+.wl-tag[aria-pressed="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); box-shadow: none; }
+.wl-tag:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
+
+/* live trip flow */
+.wl-flow { margin-bottom: 22px; }
+.wl-fh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.wl-fh h3 { margin: 0 auto 0 0; font: 500 22px/1.1 var(--tp-serif); letter-spacing: -.01em; color: var(--tp-ink); }
+.wl-range { font-size: 12.5px; color: var(--tp-mut); font-variant-numeric: tabular-nums; }
+.wl-days { list-style: none; margin: 0; padding: 0; background: var(--tp-card); border-radius: 18px; overflow: hidden; }
+.wl-day { padding: 13px 18px; animation: tpFade .3s var(--tp-out) both; }
+.wl-day + .wl-day { border-top: 1px solid var(--tp-hair); }
+.wl-dt { display: block; margin-bottom: 6px; font: 600 13px/1.2 var(--f-body); color: var(--tp-ink); }
+.wl-day ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.wl-day li { display: flex; gap: 12px; font-size: 13.5px; line-height: 1.35; color: var(--tp-mut); }
+.wl-day li .tnum { flex: none; min-width: 44px; font-weight: 700; color: var(--tp-ink); font-variant-numeric: tabular-nums; }
+.wl-day li.k-bridge { color: #8A6A32; } .wl-day li.k-bridge .tnum { color: #8A6A32; }
+.wl-day li.k-anchor { color: var(--tp-acc); font-weight: 600; } .wl-day li.k-anchor .tnum { color: var(--tp-acc); }
+.wl-fxs { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.wl-fx { display: flex; gap: 10px; padding: 8px 4px 0; font-size: 13px; color: var(--tp-ink); }
+.wl-fx b { flex: none; min-width: 64px; font: 600 10px/1.8 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--tp-mut); }
+.wl-fx span { min-width: 0; overflow-wrap: anywhere; }
+.wl-flow .wl-empty { margin: 0; padding: 18px; background: var(--tp-card); border-radius: 18px; }
+
+/* questions by stage */
+.wq-stage + .wq-stage { border-top: 1px solid var(--tp-hair); }
+.wq-sh { padding: 14px 18px 2px; font: 600 10px/1 var(--f-body); letter-spacing: .12em; color: var(--tp-gold); }
+.wq-stage .wq { border-top: 0; }
+.wq-stage .wq + .wq { border-top: 1px solid var(--tp-hair); }
+.wq-head { grid-template-columns: 1fr auto; }
+.wq-text { grid-column: 1; grid-row: 1; }
+.wq-st { grid-column: 2; grid-row: 1; }
+@media (max-width: 767px) { .wl-tag { min-height: 44px; } .wl-fx b { min-width: 56px; } }
+.ov.cl .tf-pill input[type=text] { width: 5.6ch; min-width: 5.6ch; min-height: 0; height: 46px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: center; }
+.ov.cl .tf-pill input[type=text]:focus { background: transparent; border: 0; }
+.ov.wl .wl-times, .ov.wl .wl-dates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 420px) { .ov.wl .wl-times .tf-pill { min-width: 0; padding: 0 8px; } .ov.wl .wl-dates input[type=date] { padding: 0 10px; font-size: 15px; } }

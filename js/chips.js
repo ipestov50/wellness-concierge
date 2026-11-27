@@ -2,10 +2,10 @@
 // поэтому старые записи (строки через запятую или перенос) открываются метками и сохраняются как раньше.
 import { esc, toList } from './ui.js';
 
-const chip = (v) => `<span class="chip" data-v="${esc(v)}"><span class="chip-t">${esc(v)}</span><button type="button" class="chip-x" tabindex="-1" aria-label="Убрать «${esc(v)}»">×</button></span>`;
-export function chipField(name, items, { tone = 'soft', placeholder = '', label = '' } = {}) {
+const chip = (v, rl = 'Убрать') => `<span class="chip" data-v="${esc(v)}"><span class="chip-t">${esc(v)}</span><button type="button" class="chip-x" tabindex="-1" aria-label="${esc(rl)} «${esc(v)}»">×</button></span>`;
+export function chipField(name, items, { tone = 'soft', placeholder = '', label = '', remove = 'Убрать' } = {}) {
   const list = toList((items || []).join('\n'));
-  return `<div class="chips tone-${tone}" data-chips><div class="chip-box">${list.map(chip).join('')}<input class="chip-in" id="f-${name}-in" type="text" enterkeyhint="done" autocomplete="off" aria-label="${esc(label)}" placeholder="${esc(placeholder)}"></div><input type="hidden" id="f-${name}" name="${name}" value="${esc(list.join('\n'))}"></div>`;
+  return `<div class="chips tone-${tone}" data-chips data-rl="${esc(remove)}"><div class="chip-box">${list.map((v) => chip(v, remove)).join('')}<input class="chip-in" id="f-${name}-in" type="text" enterkeyhint="done" autocomplete="off" aria-label="${esc(label)}" placeholder="${esc(placeholder)}"></div><input type="hidden" id="f-${name}" name="${name}" value="${esc(list.join('\n'))}"></div>`;
 }
 
 export function bindChips(root) {
@@ -22,7 +22,7 @@ export function bindChips(root) {
     let added = false;
     for (const v of toList(text)) {
       if (have.has(v.toLowerCase())) continue;
-      have.add(v.toLowerCase()); input.insertAdjacentHTML('beforebegin', chip(v)); added = true;
+      have.add(v.toLowerCase()); input.insertAdjacentHTML('beforebegin', chip(v, box.dataset.rl || 'Убрать')); added = true;
     }
     input.value = '';
     if (added) sync(box);

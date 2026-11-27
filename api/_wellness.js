@@ -13,7 +13,9 @@ export function parseTrip(b) {
   return {
     destination: str(b.destination, 120), durationDays: Number.isInteger(dur) && dur >= 1 && dur <= 60 ? dur : null,
     from: ymd(b.dateRange?.from), to: ymd(b.dateRange?.to),
-    goals: list(b.wellnessGoals, 8, 60), notes: str(b.currentNotes, 1500),
+    goals: list(b.wellnessGoals, 8, 60), goalText: str(b.goalText, 300), notes: str(b.currentNotes, 1500),
+    arrivalTime: /^\d{2}:\d{2}$/.test(b.arrivalTime || '') ? b.arrivalTime : '', departureTime: /^\d{2}:\d{2}$/.test(b.departureTime || '') ? b.departureTime : '',
+    earlyCheckIn: b.earlyCheckInConfirmed === true,
   };
 }
 
@@ -35,3 +37,6 @@ export function parseAnchors(x) {
   return (Array.isArray(x) ? x : []).slice(0, 20).map((a) => ({ day: str(a?.day, 24), time: /^\d{2}:\d{2}$/.test(a?.time || '') ? a.time : '', activity: str(a?.activity, 120) }))
     .filter((a) => a.day && a.time && a.activity && /^(Arrival|Departure|Day \d{1,2})$/.test(a.day));
 }
+
+// Нужен ли «мост до заселения»: прилёт раньше 14:00 без подтверждённого раннего заселения (стандартное заселение 15:00–16:00)
+export const bridgeNeeded = (t) => !!t.arrivalTime && !t.earlyCheckIn && Number(t.arrivalTime.slice(0, 2)) * 60 + Number(t.arrivalTime.slice(3)) < 14 * 60;

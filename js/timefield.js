@@ -19,7 +19,7 @@ export function bindTimeFields(root) {
     const inp = w.querySelector('input');
     const sync = () => w.querySelectorAll('[data-q]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.q === inp.value)));
     inp.addEventListener('input', sync);
-    inp.addEventListener('blur', () => { const t = normTime(inp.value); inp.value = t === null ? '' : t; sync(); });
+    inp.addEventListener('blur', () => { const before = inp.value, t = normTime(inp.value); inp.value = t === null ? '' : t; sync(); if (inp.value !== before || true) inp.dispatchEvent(new Event('change', { bubbles: true })); });
     w.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { inp.value = b.dataset.q === inp.value ? '' : b.dataset.q; sync(); }));
   });
 }
