@@ -3798,3 +3798,13 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 .wl-inc[aria-pressed="true"] { background: var(--tp-acc); color: var(--tp-acc-ink); }
 .wl-inc:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
 @media (max-width: 479px) { .wl-sqt { font-size: 16px; } .wl-sq .wq-chips, .wl-sq .wq-tag { margin-left: 0; } .wl-sq .wq-input { width: 100%; margin-left: 0; } }
+
+/* Wellness: ✦ Jarvis Deep-Dive (Q3) slot */
+.wl-sq.deep { border-left: 2px solid var(--tp-gold); padding-left: 12px; margin-left: -2px; }
+.wl-dd { display: block; margin-bottom: 3px; font: 700 10px/1 var(--f-body); font-style: normal; letter-spacing: .12em; text-transform: uppercase; color: #8A6A32; }
+.wl-sq.slot { opacity: .85; }
+.wl-sq.slot .wl-sqt { font-size: 14.5px; font-family: var(--f-body); color: var(--tp-mut); }
+.wl-rf { flex: none; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 50%; background: transparent; color: var(--tp-acc); font-size: 18px; line-height: 1; cursor: pointer; transition: background .25s var(--tp-out), transform .3s var(--tp-out); }
+.wl-rf:hover:not(:disabled) { background: var(--tp-well); transform: rotate(90deg); }
+.wl-rf:disabled { opacity: .4; cursor: default; }
+.wl-rf:focus-visible { outline: 2px solid var(--tp-acc); outline-offset: 2px; }
