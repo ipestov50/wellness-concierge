@@ -29,3 +29,9 @@ export async function dossier(auth, clientId, extraAllergies = []) {
     profile: c ? { язык: c.language, vip: c.vip, диета: c.diet, здоровье: c.health, любит: c.likes, избегает: c.dislikes, еда: c.pref_food, музыка_атмосфера: c.pref_music, спа: c.pref_spa, транспорт: c.pref_transport, отели: c.pref_hotels, в_пути: c.travel_habits } : null,
   };
 }
+
+// Фиксированное время: якоря маршрута «день · ЧЧ:ММ · что». Всё проверяется и обрезается.
+export function parseAnchors(x) {
+  return (Array.isArray(x) ? x : []).slice(0, 20).map((a) => ({ day: str(a?.day, 24), time: /^\d{2}:\d{2}$/.test(a?.time || '') ? a.time : '', activity: str(a?.activity, 120) }))
+    .filter((a) => a.day && a.time && a.activity && /^(Arrival|Departure|Day \d{1,2})$/.test(a.day));
+}

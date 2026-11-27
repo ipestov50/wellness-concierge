@@ -4,18 +4,19 @@ import { api } from './api.js';
 import { esc, toast, openModal } from './ui.js';
 import { state, byId } from './data.js';
 import { chipField, bindChips } from './chips.js';
+import { timeField, bindTimeFields, normTime } from './timefield.js';
 import { deadlinePicker, bindDeadlinePicker } from './datepicker.js';
 
 const DURATIONS = [[1, '1 день'], [2, '2 дня'], [3, '3 дня'], [5, '5 дней'], [7, '7 дней']];
 const GOALS = ['Deep Rest & Sleep', 'Thermal & Detox', 'Active Recovery', 'Mindful Reset', 'Nature & Sea', 'Culinary & Slow Living'];
 const QUICK = ['Да', 'Нет'];
-const T = { guest: 'Гость', oneoff: '＋ Разовый / новый гость', oneoffPh: 'Имя гостя', none: '— выберите гостя —', dest: 'Место путешествия', destPh: 'Город, регион или страна', dur: 'Длительность', dates: 'Даты (необязательно)', goals: 'Цель и настроение', stop: 'Аллергии и противопоказания · стоп-лист', stopPh: 'Орехи, моллюски… Enter — добавить', notes: 'Живые заметки со звонка', notesPh: 'Что гость говорит прямо сейчас — как есть, без редактуры', qh: 'Вопросы для персонализации', refresh: '↻ Обновить вопросы', empty: 'Укажите место и срок или цель — Jarvis предложит вопросы для звонка.', build: '✦ Собрать промпт для Gamma', copyP: 'Копировать промпт для Gamma', copied: 'Скопировано ✓', open: 'Открыть Gamma ↗', copyM: 'Копировать письмо гостю', later: 'Уточнить позже', ok: '✓ Учтено', ans: 'Ответ гостя', done: 'Готово' };
+const T = { guest: 'Гость', oneoff: '＋ Разовый / новый гость', oneoffPh: 'Имя гостя', none: '— выберите гостя —', dest: 'Место путешествия', destPh: 'Город, регион или страна', dur: 'Длительность', dates: 'Даты (необязательно)', goals: 'Цель и настроение', stop: 'Аллергии и противопоказания · стоп-лист', stopPh: 'Орехи, моллюски… Enter — добавить', notes: 'Живые заметки со звонка', notesPh: 'Что гость говорит прямо сейчас — как есть, без редактуры', qh: 'Вопросы для персонализации', refresh: '↻ Обновить вопросы', empty: 'Укажите место и срок или цель — Jarvis предложит вопросы для звонка.', build: '✦ Собрать промпт для Gamma', copyP: 'Копировать промпт для Gamma', copied: 'Скопировано ✓', open: 'Открыть Gamma ↗', copyM: 'Копировать письмо гостю', later: 'Уточнить позже', anch: 'Фиксированное время', anchPh: 'Глубокий массаж, встреча в аэропорту, ужин…', anchHint: 'Эти точки Jarvis не сдвинет: всё остальное выстроит вокруг. Время можно и просто вписать в заметки.', ok: '✓ Учтено', ans: 'Ответ гостя', done: 'Готово' };
 
 const firstName = (n) => String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/)[0] || '';
 const hm = () => new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
 export function openWellness(presetClient) {
-  const S = { questions: [], asked: new Set(), goals: new Set(), dur: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null };
+  const S = { anchors: [], questions: [], asked: new Set(), goals: new Set(), dur: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -30,6 +31,9 @@ export function openWellness(presetClient) {
       <div class="f wl-dates"><label>${T.dates}</label><div class="f2">${deadlinePicker(null, 'wl_from', { dateOnly: true, empty: 'С даты', quick: false })}${deadlinePicker(null, 'wl_to', { dateOnly: true, empty: 'По дату', quick: false })}</div></div>
       <div class="f"><label id="wl-goal-l">${T.goals}</label><div class="wl-chips" role="group" aria-labelledby="wl-goal-l">${GOALS.map((g) => `<button type="button" class="wl-chip" data-goal="${esc(g)}" aria-pressed="false">${esc(g)}</button>`).join('')}</div></div>
       <div class="f"><label for="wl_allergies-in">${T.stop}</label>${chipField('wl_allergies', c0?.allergies || [], { tone: 'risk', placeholder: T.stopPh, label: 'Аллергии' })}</div>
+      <div class="f wl-anch"><label for="wl_a_act">${T.anch}</label>
+        <div class="wl-arow"><select id="wl_a_day" name="wl_a_day" aria-label="День"></select>${timeField('wl_a_time', '', { chips: false })}<input type="text" id="wl_a_act" name="wl_a_act" placeholder="${esc(T.anchPh)}" autocomplete="off" maxlength="120" enterkeyhint="done"><button type="button" class="wl-add" id="wl-a-add" aria-label="Добавить якорь">＋</button></div>
+        <div class="wl-achips" id="wl-achips" aria-live="polite"></div><small class="wl-ahint">${T.anchHint}</small></div>
       <div class="f"><label for="wl_notes">${T.notes}</label><textarea id="wl_notes" name="wl_notes" rows="4" placeholder="${esc(T.notesPh)}"></textarea></div>
     </div>
     <div class="wl-right">
@@ -42,7 +46,7 @@ export function openWellness(presetClient) {
   const m = openModal({ title: 'Wellness-маршрут', saveLabel: 'Закрыть', body, cls: 'tp cl wl', onSave: async () => {} });
   const f = m.form;
   f.querySelector('.foot').hidden = true;
-  bindChips(f); bindDeadlinePicker(f);
+  bindChips(f); bindDeadlinePicker(f); bindTimeFields(f);
 
   const $ = (s) => f.querySelector(s);
   const val = (n) => (f.elements[n]?.value || '').trim();
@@ -51,6 +55,28 @@ export function openWellness(presetClient) {
   const range = () => ({ from: val('wl_from').slice(0, 10), to: val('wl_to').slice(0, 10) });
   const days = () => { const r = range(); if (r.from && r.to && r.to >= r.from) return Math.round((Date.parse(r.to) - Date.parse(r.from)) / 864e5) + 1; return S.dur; };
   const answered = () => S.questions.filter((q) => q.state === 'done');
+
+  // ---------- фиксированное время: якоря, которые маршрут не двигает ----------
+  const dayOptions = () => {
+    const n = Math.min(days() || 3, 14), cur = $('#wl_a_day').value;
+    const o = [['Arrival', 'Прилёт'], ...Array.from({ length: n }, (_, i) => [`Day ${i + 1}`, `День ${i + 1}`]), ['Departure', 'Вылет']];
+    $('#wl_a_day').innerHTML = o.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+    $('#wl_a_day').value = o.some(([v]) => v === cur) ? cur : (o[1] || o[0])[0];
+  };
+  const dayRu = (d) => (d === 'Arrival' ? 'Прилёт' : d === 'Departure' ? 'Вылет' : d.replace(/^Day /, 'День '));
+  const dayKey = (d) => (d === 'Arrival' ? 0 : d === 'Departure' ? 999 : +d.replace(/\D/g, '') || 1);
+  const paintAnchors = () => {
+    $('#wl-achips').innerHTML = S.anchors.map((a, i) => `<span class="wl-ach"><span class="tnum">${esc(dayRu(a.day))} · ${esc(a.time)}</span> — ${esc(a.activity)}<button type="button" class="wl-ax" data-ax="${i}" aria-label="Убрать: ${esc(a.activity)}">×</button></span>`).join('');
+  };
+  const addAnchor = () => {
+    const act = val('wl_a_act').slice(0, 120), t = normTime(val('wl_a_time'));
+    if (!act) { $('#wl_a_act').focus(); return; }
+    if (!t) { toast('Укажите время, например 11:00'); $('#f-wl_a_time').focus(); return; }
+    S.anchors.push({ day: $('#wl_a_day').value, time: t, activity: act });
+    S.anchors.sort((a, b) => dayKey(a.day) - dayKey(b.day) || a.time.localeCompare(b.time));
+    f.elements.wl_a_act.value = ''; f.elements.wl_a_time.value = '';
+    paintAnchors(); $('#wl_a_act').focus();
+  };
 
   // ---------- состояние синхронизации ----------
   const setStatus = (st, text) => { S.status = st; const el = $('#wl-sync'); el.dataset.s = st; el.querySelector('span').textContent = text || ''; };
@@ -119,7 +145,7 @@ export function openWellness(presetClient) {
     }
   };
   const schedule = () => {
-    clearTimeout(S.timer);
+    clearTimeout(S.timer); dayOptions();
     if (!val('wl_dest') || (!days() && !S.goals.size)) { setStatus('idle', idleText()); return; }
     setStatus('wait', 'Обновим через мгновение…');
     S.timer = setTimeout(() => load('auto'), 700);
@@ -132,7 +158,7 @@ export function openWellness(presetClient) {
     try {
       const r = await api('gamma-prompt', {
         client_id: clientId(), guestName: val('wl_guest'), destination: val('wl_dest'), durationDays: days(), dateRange: range(), wellnessGoals: [...S.goals],
-        allergies: allergies(), currentNotes: val('wl_notes'), answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })),
+        allergies: allergies(), currentNotes: val('wl_notes'), liveNotes: val('wl_notes'), fixedAnchors: S.anchors, answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })),
       }, { signal: m.signal });
       S.out = r; paintOut();
     } catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Лимит Gemini — попробуйте чуть позже' : 'Не удалось собрать — попробуйте ещё раз', 'err'); }
@@ -155,6 +181,8 @@ export function openWellness(presetClient) {
   let seenDates = '';
   f.addEventListener('click', async (e) => {
     const t = e.target;
+    if (t.closest('#wl-a-add')) return addAnchor();
+    const ax = t.closest('[data-ax]'); if (ax) { S.anchors.splice(+ax.dataset.ax, 1); paintAnchors(); return; }
     const dur = t.closest('[data-dur]');
     if (dur) { const n = +dur.dataset.dur; S.dur = S.dur === n ? null : n; f.querySelectorAll('[data-dur]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.dur === S.dur))); return schedule(); }
     const g = t.closest('[data-goal]');
@@ -188,9 +216,10 @@ export function openWellness(presetClient) {
   });
   f.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.classList?.contains('wq-input')) { e.preventDefault(); commit(e.target.dataset.q, e.target.value); }
+    else if (e.key === 'Enter' && (e.target.id === 'wl_a_act' || e.target.id === 'f-wl_a_time')) { e.preventDefault(); addAnchor(); }
     else if (e.key === 'Enter' && e.target.id === 'wl_dest') e.preventDefault();
   });
-  paintDossier(); setStatus('idle', idleText()); paintQs();
+  paintDossier(); dayOptions(); paintAnchors(); setStatus('idle', idleText()); paintQs();
   m.signal.addEventListener?.('abort', () => { clearTimeout(S.timer); S.ctrl?.abort(); });
   void firstName;
 }
