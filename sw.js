@@ -1,6 +1,6 @@
 // Офлайн-оболочка приложения. Данные гостей сюда НЕ попадают: /api и база не кэшируются,
 // снимок «на сегодня» хранится отдельно в IndexedDB (js/offline.js) и стирается при выходе.
-const V = 'wc-shell-v49';
+const V = 'wc-shell-v50';
 const SHELL = ['/', '/css/styles.css', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/favicon.png', '/js/theme-init.js', '/js/app.js'];
 // библиотека базы нужна и без сети; шрифты берёт обычный кэш браузера (без сети — системный шрифт)
 const CDN = ['cdn.jsdelivr.net'];

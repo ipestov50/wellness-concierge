@@ -16,6 +16,7 @@ export function parseTrip(b) {
     goals: list(b.wellnessGoals, 8, 60), goalText: str(b.goalText, 300), notes: str(b.currentNotes, 1500),
     arrivalTime: /^\d{2}:\d{2}$/.test(b.arrivalTime || '') ? b.arrivalTime : '', departureTime: /^\d{2}:\d{2}$/.test(b.departureTime || '') ? b.departureTime : '',
     earlyCheckIn: b.earlyCheckInConfirmed === true,
+    party: { adults: Math.max(1, Math.min(20, parseInt(b.party?.adults, 10) || 1)), kids: Math.max(0, Math.min(20, parseInt(b.party?.kids, 10) || 0)), kidsAges: str(b.party?.kidsAges, 60) },
   };
 }
 
@@ -53,3 +54,13 @@ export function tripDates(t) {
 
 // Нужен ли «мост до заселения»: прилёт раньше 14:00 без подтверждённого раннего заселения (стандартное заселение 15:00–16:00)
 export const bridgeNeeded = (t) => !!t.arrivalTime && !t.earlyCheckIn && Number(t.arrivalTime.slice(0, 2)) * 60 + Number(t.arrivalTime.slice(3)) < 14 * 60;
+
+// Сигналы из свободных заметок (их извлекает модель на любом языке): погода, повторный визит, вкусы
+export function cleanSignals(x) {
+  const o = x && typeof x === 'object' ? x : {};
+  return {
+    weather: ['rain', 'cold', 'heat', 'snow'].includes(o.weather) ? o.weather : null,
+    repeatVisit: o.repeatVisit === true,
+    music: list(o.music, 6, 40), dishes: list(o.dishes, 6, 60), drinks: list(o.drinks, 6, 60),
+  };
+}

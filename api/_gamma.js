@@ -2,8 +2,9 @@
 // Имя гостя в ИИ не отправляется: в тексте стоит {{GUEST}}, имя подставляется здесь уже после ответа модели.
 import { gfetch, FLASH, LITE } from './_cache.js';
 import { owner, askJSON, norm } from './_owner.js';
-import { parseTrip, dossier, list, str, firstName, parseAnchors, bridgeNeeded } from './_wellness.js';
+import { parseTrip, dossier, list, str, firstName, parseAnchors, bridgeNeeded, tripDates, cleanSignals } from './_wellness.js';
 
+const ITEM_CATS = ['Spa & Wellness', 'Dining', 'Transport', 'Activities', 'Health & Fitness', 'Accommodation', 'Gifts & Events', 'Other'];
 const SECTIONS = ['A personalised wellness experience', 'Your personalised itinerary', 'Selected experiences', 'A few final details'];
 const SCHEMA = {
   type: 'OBJECT',
@@ -11,8 +12,13 @@ const SCHEMA = {
     gammaPrompt: { type: 'STRING', description: 'Slide-structured master prompt for Gamma.app, slides separated by a line with ---' },
     emailSubject: { type: 'STRING', description: 'Warm, short email subject line in English' },
     emailBody: { type: 'STRING', description: 'Ready-to-send guest email in refined hospitality English' },
+    itineraryItems: { type: 'ARRAY', description: 'Every scheduled item of the itinerary, including every fixed anchor exactly as given', items: { type: 'OBJECT', properties: {
+      date: { type: 'STRING', description: 'YYYY-MM-DD from tripDates' }, time: { type: 'STRING', description: 'HH:MM 24h' }, title: { type: 'STRING', description: 'Guest-facing title in English, up to 70 characters' },
+      category: { type: 'STRING', enum: ITEM_CATS }, venueName: { type: 'STRING', nullable: true, description: 'Real venue name, only if you are confident it exists, else null' },
+      address: { type: 'STRING', nullable: true, description: 'Real street address with city, only if confident, else null' }, guestNotes: { type: 'STRING', nullable: true, description: 'One warm sentence for the guest' },
+    }, required: ['date', 'time', 'title', 'category'] } },
   },
-  required: ['gammaPrompt', 'emailSubject', 'emailBody'],
+  required: ['gammaPrompt', 'emailSubject', 'emailBody', 'itineraryItems'],
 };
 const missing = (p) => SECTIONS.filter((s) => !p.toLowerCase().includes(s.toLowerCase()));
 const lostAnchors = (p, anchors) => anchors.filter((a) => !p.includes(a.time)).map((a) => `${a.day} ${a.time}`);
@@ -29,6 +35,7 @@ export default async function handler(req, res) {
     const anchors = parseAnchors(b.fixedAnchors, { from: t.from, to: t.to }), liveNotes = str(b.liveNotes, 1500) || t.notes;
     const first = firstName(d.client?.name || str(b.guestName, 80));
     const ctx = {
+      party: t.party, signalsFromNotes: b.signals && typeof b.signals === 'object' ? cleanSignals(b.signals) : null, tripDates: tripDates(t),
       destination: t.destination, durationDays: t.durationDays, nights: t.durationDays ? t.durationDays - 1 : null, arrivalTime: t.arrivalTime || null, departureTime: t.departureTime || null, earlyCheckInConfirmed: t.earlyCheckIn, preCheckInBridgeNeeded: bridgeNeeded(t), guestGoalInTheirWords: t.goalText || null, dates: t.from ? `${t.from}${t.to ? ' to ' + t.to : ''}` : null, wellnessGoals: t.goals,
       stopList_mustNeverAppearAsRecommendation: d.stop, guestProfile: d.profile, liveNotes, fixedAnchors: anchors, discoveryAnswers: answers,
     };
@@ -39,6 +46,9 @@ Return three things:
 SCHEDULE LOCK (non-negotiable): every item in fixedAnchors AND every explicit day or time the guest or concierge mentions in liveNotes is a HARD SCHEDULE ANCHOR. It MUST appear in the slide titled "Your personalised itinerary" on exactly that calendar date (anchors carry date and day) and at exactly that HH:MM, written like "11:00 — <activity>", without moving, merging or renaming the commitment. Build everything else (spa rituals, meals, transfers with realistic buffers before and after each anchor, rest) around the anchors, and never schedule two things at the same time. Days are numbered from Day 1 of the trip; Arrival and Departure are the first and last day.
 QUALITY RULES (strict):
 - ARRIVAL AND DEPARTURE TIMES. arrivalTime and departureTime (when given) are fixed: nothing may happen before arrivalTime on Day 1 and nothing after the airport transfer on the last day. Standard hotel check-in is 15:00-16:00. If preCheckInBridgeNeeded is true, build a "pre-check-in bridge" from arrival until about 15:00 that suits the guest's goal (for example a scenic private chauffeur drive, a quiet private gallery visit, or thermal lounge access) and keep it light; if earlyCheckInConfirmed is true, go straight to the room.
+- PARTY. party gives adults, kids and kidsAges: plan family-aware touches only when kids > 0 (supervised kids' programme or in-suite nanny during parents' treatments, ISOFIX/booster seats in transfers, early family dinners) and never otherwise.
+- NOTES SIGNALS. Read liveNotes (any language) and signalsFromNotes: if rain, cold, heat or snow is mentioned, swap outdoor plans for indoor thermal, gallery or spa alternatives and say so; if the guest has visited before, skip tourist clichés and choose insider hidden gems; weave in favourite music, dishes and drinks (for example the chauffeur's playlist, a favourite dish at dinner) in "Selected experiences" and the transfer details.
+- itineraryItems. Return every scheduled item of the itinerary as structured data: all fixedAnchors EXACTLY (same date, same HH:MM, activity in natural English), plus the key meals, rituals and transfers you scheduled (at most 24). Dates must come from tripDates. Real venueName and address only when you are confident they exist; otherwise null (never invent an address).
 - LESS IS MORE. Never invent busy excursions the guest did not ask for (food markets, private chefs, Michelin tours, galleries, sightseeing). For Deep Rest, Slow Living or any restorative goal keep every day spacious: at most 2-3 intentional touchpoints per day (one core wellness ritual, one restorative meal, unhurried quiet time), each tied to the stated goals, discoveryAnswers or anchors.
 - CAUSAL CHRONOLOGY. Translate anchor labels into natural hospitality English (e.g. an arrival becomes "Arrival at the airport", a massage becomes "Restorative full-body massage"). If an Arrival time is anchored, NOTHING (airport pickup, check-in, activities) may be scheduled before it: private chauffeur pickup at that time, check-in about 45 minutes later, then a light in-suite dinner roughly 90 minutes after pickup. If a Departure time is anchored, schedule the airport transfer 2.5-3 hours before that flight, with nothing after it.
 - PURE ENGLISH. gammaPrompt and emailBody must contain zero Cyrillic characters: translate every Russian note, answer, goal and stop-list item into English yourself, and treat the English equivalents of stopList items as forbidden too.
@@ -56,10 +66,16 @@ const problems = (o) => [...(lostTimes(o.gammaPrompt || '', t).length ? [`missin
     // имя на кириллице в английском тексте — латиницей
     const RU = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
     const latin = (n) => String(n || '').split('').map((ch) => { const l = RU[ch.toLowerCase()]; return l === undefined ? ch : ch === ch.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); }).join('');
+    const dset = new Set(tripDates(t).map((x) => x.date)), seenI = new Set();
+    const items = (Array.isArray(out.itineraryItems) ? out.itineraryItems : []).map((i) => ({
+      date: str(i?.date, 10), time: /^\d{2}:\d{2}$/.test(i?.time || '') ? i.time : '', title: str(i?.title, 90), category: ITEM_CATS.includes(i?.category) ? i.category : 'Other',
+      venueName: str(i?.venueName, 120), address: str(i?.address, 200), guestNotes: str(i?.guestNotes, 240),
+    })).filter((i) => i.title && i.time && dset.has(i.date) && !/[А-Яа-яЁё]/.test(`${i.title}${i.guestNotes}${i.venueName}`) && !seenI.has(i.date + i.time + i.title.toLowerCase()) && seenI.add(i.date + i.time + i.title.toLowerCase())).slice(0, 30)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
     const fill = (s) => String(s || '').replace(/\{\{\s*GUEST\s*\}\}/gi, latin(first) || 'there');
     return res.status(200).json({
       gammaPrompt: fill(out.gammaPrompt).slice(0, 12000), emailSubject: fill(out.emailSubject).slice(0, 200), emailBody: fill(out.emailBody).slice(0, 5000),
-      warnings: bad,
+      itineraryItems: items, warnings: bad,
     });
   } catch (e) {
     return res.status(e.message === 'rate_limited' ? 502 : 500).json({ error: String(e.message || e), tried: e.tried });
