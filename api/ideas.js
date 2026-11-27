@@ -33,7 +33,8 @@ const firstWord = (n) => String(n || '').replace(/\s*\(.*?\)/g, '').trim().split
 
 export default async function handler(req, res) {
   // Vercel Hobby: не больше 12 функций, поэтому «вопросы для звонка» и «промпт для Gamma» живут за этим же адресом (см. rewrites в vercel.json)
-  const kind = req.query?.kind;
+  // тип запроса берём из адреса, из тела и из исходного пути: rewrite на Vercel может не донести ?kind
+  const kind = req.query?.kind || req.body?.kind || (/discovery-questions/.test(req.url || '') ? 'discovery' : /gamma-prompt/.test(req.url || '') ? 'gamma' : '');
   if (kind === 'discovery') return discovery(req, res);
   if (kind === 'gamma') return gamma(req, res);
   const auth = await owner(req, res); if (!auth) return;

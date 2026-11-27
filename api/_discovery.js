@@ -5,7 +5,7 @@ import { owner, askJSON, norm } from './_owner.js';
 import { parseTrip, parseAnchors, tripDates, bridgeNeeded, dossier, list, str, cleanSignals } from './_wellness.js';
 
 export const STAGES = ['Arrival & Check-In Bridge', 'Daily Pace & Rhythm', 'Spa, Body & Contraindications', 'Food, Drinks & Allergies', 'Transfers & Privacy'];
-const MAX_OPEN = 7;
+const MAX_OPEN = 14; // всего открытых на экране; за один раз добавляем немного, чтобы список не разрастался
 const SCHEMA = {
   type: 'OBJECT',
   properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
@@ -18,7 +18,7 @@ const SCHEMA = {
   }, required: ['category', 'text', 'chips', 'topic', 'contextTag'] } } },
   required: ['questions'],
 };
-const SIGNALS = { type: 'OBJECT', properties: { weather: { type: 'STRING', nullable: true, enum: ['rain', 'cold', 'heat', 'snow'] }, repeatVisit: { type: 'BOOLEAN' }, music: { type: 'ARRAY', items: { type: 'STRING' } }, dishes: { type: 'ARRAY', items: { type: 'STRING' } }, drinks: { type: 'ARRAY', items: { type: 'STRING' } } } };
+const SIGNALS = { type: 'OBJECT', properties: { weather: { type: 'STRING', description: 'One of rain, cold, heat, snow, or an empty string' }, repeatVisit: { type: 'BOOLEAN' }, music: { type: 'ARRAY', items: { type: 'STRING' } }, dishes: { type: 'ARRAY', items: { type: 'STRING' } }, drinks: { type: 'ARRAY', items: { type: 'STRING' } } } };
 SCHEMA.properties.signals = SIGNALS;
 const words = (s) => String(s).trim().split(/\s+/).length;
 const stems = (s) => new Set(norm(s).split(' ').filter((w) => w.length > 3).map((w) => w.slice(0, 5)));
@@ -33,19 +33,20 @@ export default async function handler(req, res) {
     const d = await dossier(auth, b.client_id, list(b.allergies, 20));
     const answered = (Array.isArray(b.answered) ? b.answered : []).slice(0, 20).map((x) => ({ question: str(x?.question, 160), answer: str(x?.answer, 200) })).filter((x) => x.question && x.answer);
     const open = list(b.open, 20, 160), asked = [...new Set([...list(b.asked, 40, 160), ...open])];
-    const room = MAX_OPEN - open.length;
+    const room = Math.min(MAX_OPEN - open.length, open.length ? 4 : 7), trigger = str(b.trigger, 200);
     if (room <= 0) return res.status(200).json({ questions: [], bridge: bridgeNeeded(t), signals: null });
     const bridge = bridgeNeeded(t), dates = tripDates(t);
     const ctx = {
       destination: t.destination || null, nights: t.durationDays ? t.durationDays - 1 : null, tripDates: dates,
       arrivalTime: t.arrivalTime || null, departureTime: t.departureTime || null, earlyCheckInConfirmed: t.earlyCheckIn, preCheckInBridgeNeeded: bridge,
       guestGoalInTheirWords: t.goalText || null, goalTags: t.goals, fixedAnchors: parseAnchors(b.fixedAnchors, { from: t.from, to: t.to }),
-      party: t.party, stopListNeverMention: d.stop, guestProfile: d.profile, spontaneousCallNotes: t.notes, alreadyAnswered: answered, questionsAlreadyOnScreen: asked, howManyToWrite: Math.min(room, open.length ? 3 : 7),
+      party: t.party, stopListNeverMention: d.stop, guestProfile: d.profile, spontaneousCallNotes: t.notes, alreadyAnswered: answered, questionsAlreadyOnScreen: asked, whatJustChanged: trigger || null, howManyToWrite: room,
     };
     const out = await askJSON(gfetch, auth, [FLASH, LITE],
       `You are a senior Les Clefs d'Or concierge on a LIVE English call with a guest planning a wellness trip. Write the NEXT questions the concierge can say out loud (howManyToWrite at most; fewer if nothing important is left).
 Rules:
 - Conversation order by category: 1 Arrival & Check-In Bridge, 2 Daily Pace & Rhythm, 3 Spa, Body & Contraindications, 4 Food, Drinks & Allergies, 5 Transfers & Privacy.
+- If whatJustChanged is set (for example a new fixed anchor, a change of party, dates or notes), write 1 to 3 NEW questions that react to exactly that change and tag them "RE: <that change>" - unless the topic is already on screen.
 - NEVER repeat or rephrase anything in questionsAlreadyOnScreen or alreadyAnswered, and never ask about the same topic twice (for example only one question about pre-spa drinks). Each question must add a genuinely new, high-impact angle. Fewer, sharper questions beat more.
 - If preCheckInBridgeNeeded is true and nothing about the early arrival is on screen yet, include a question about what the guest would enjoy until the room is ready (standard check-in is 15:00-16:00).
 - Natural spoken English, 10 to 13 words each, one idea per question, no jargon, no "and/or" chains. Exactly 3 short, different quick answers.

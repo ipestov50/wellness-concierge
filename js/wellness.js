@@ -48,7 +48,7 @@ function zonedIso(date, time, tz) {
 const mergeCsv = (cur, add) => { const have = String(cur || '').toLowerCase(); const extra = (add || []).filter((x) => x && !have.includes(String(x).toLowerCase())); return extra.length ? [String(cur || '').trim(), ...extra].filter(Boolean).join(', ') : cur || null; };
 
 export function openWellness(presetClient) {
-  const S = { filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
+  const S = { trigger: '', filter: 'all', anchors: [], questions: [], asked: new Set(), tags: new Set(), dur: null, adults: 1, kids: 0, signals: null, timer: 0, ctrl: null, busy: false, status: 'idle', openId: null, out: null, outKey: '', ids: { client: null, trip: null, items: new Map() }, liveUrl: '' };
   const clients = [...state.clients].sort((a, b) => a.name.localeCompare(b.name));
   const opts = `<option value="">${esc(T.none)}</option>${clients.map((c) => `<option value="${esc(c.id)}"${c.id === presetClient ? ' selected' : ''}>${c.vip ? '★ ' : ''}${esc(c.name)}</option>`).join('')}`;
   const c0 = byId('clients', presetClient);
@@ -154,7 +154,7 @@ export function openWellness(presetClient) {
     S.anchors.push({ date, time: t, activity: act });
     S.anchors.sort((x, y) => x.date.localeCompare(y.date) || x.time.localeCompare(y.time));
     f.elements.wl_a_act.value = ''; f.elements.wl_a_time.value = '';
-    paintAnchors(); paintFlow(); $('#wl_a_act').focus(); schedule();
+    paintAnchors(); paintFlow(); $('#wl_a_act').focus(); trig(`New fixed anchor on ${dateLabel(date)} at ${t}: ${act}`); schedule();
   };
 
   // ---------- live trip flow (instant, no network) ----------
@@ -249,6 +249,7 @@ export function openWellness(presetClient) {
     };
     if (!wasDone && ans && el && !matchMedia('(prefers-reduced-motion: reduce)').matches) { el.style.height = el.offsetHeight + 'px'; void el.offsetHeight; el.classList.add('leaving'); setTimeout(finish, 320); } else finish();
   };
+  const trig = (x) => { if (!S.trigger.includes(x)) S.trigger = [S.trigger, x].filter(Boolean).join('; ').slice(-400); };
   const payload = () => ({
     client_id: clientId(), guestName: val('wl_guest'), destination: val('wl_dest'), durationDays: days(), dateRange: { from: arrival(), to: departure() },
     arrivalTime: arrT(), departureTime: depT(), earlyCheckInConfirmed: early(), goalText: val('wl_goal'), wellnessGoals: [...S.tags], party: party(),
@@ -259,12 +260,14 @@ export function openWellness(presetClient) {
     S.ctrl?.abort(); const ctrl = (S.ctrl = new AbortController());
     setStatus('loading', T.tailoring); paintQs();
     try {
-      const r = await api('discovery-questions', { ...payload(), answered: answered().map((q) => ({ question: q.text, answer: q.answer })), open: S.questions.filter((q) => q.state !== 'done').map((q) => q.text), openTopics: S.questions.map((q) => q.topic).filter(Boolean), asked: [...S.asked] }, { signal: ctrl.signal });
+      const sent = S.trigger;
+      const r = await api('discovery-questions', { kind: 'discovery', trigger: sent, ...payload(), answered: answered().map((q) => ({ question: q.text, answer: q.answer })), open: S.questions.filter((q) => q.state !== 'done').map((q) => q.text), openTopics: S.questions.map((q) => q.topic).filter(Boolean), asked: [...S.asked] }, { signal: ctrl.signal });
       if (ctrl !== S.ctrl) return;
+      if (S.trigger === sent) S.trigger = '';
       if (r.signals) { S.signals = r.signals; paintSignals(); }
       const fresh = (r.questions || []).filter((q) => !S.questions.some((k) => k.text.toLowerCase() === q.text.toLowerCase())).map((q) => ({ ...q, isNew: true }));
       fresh.forEach((q) => { S.asked.add(q.text); setTimeout(() => { q.isNew = false; const el = f.querySelector(`.wq[data-id="${CSS.escape(q.id)}"]`); el?.classList.remove('is-new'); el?.querySelector('.wq-new')?.remove(); }, 5000); });
-      S.questions = [...S.questions, ...fresh]; setStatus('ready', `Updated · ${hm()}`); paintQs();
+      S.questions = [...S.questions, ...fresh]; setStatus('ready', fresh.length ? `${fresh.length} new · ${hm()}` : `Up to date · ${hm()}`); paintQs();
     } catch (e) {
       if (e.name === 'AbortError') return;
       setStatus('error', e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not update — tap Refresh'); paintQs();
@@ -291,7 +294,7 @@ export function openWellness(presetClient) {
     if (S.out && S.outKey === key) { paintOut(focus); return true; }
     S.busy = true; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = true));
     const labels = ['gamma', 'mail', 'live'].map((k) => { const b = $(`#wl-go-${k}`); const l = b.textContent; if (k === focus || (k === 'live' && focus === 'live')) b.textContent = 'Jarvis is writing…'; return l; });
-    try { S.out = await api('gamma-prompt', { ...payload(), signals: S.signals, answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })) }, { signal: m.signal }); S.outKey = key; paintOut(focus); return true; }
+    try { S.out = await api('gamma-prompt', { kind: 'gamma', ...payload(), signals: S.signals, answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })) }, { signal: m.signal }); S.outKey = key; paintOut(focus); return true; }
     catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not build it — please retry', 'err'); return false; }
     finally { S.busy = false; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = false)); ['gamma', 'mail', 'live'].forEach((k, i) => { $(`#wl-go-${k}`).textContent = labels[i]; }); }
   };
@@ -373,9 +376,9 @@ export function openWellness(presetClient) {
     const t = e.target;
     if (t.closest('#wl-a-add')) return addAnchor();
     const st = t.closest('.wl-step [data-d]');
-    if (st) { const k = st.closest('.wl-step').dataset.step, min = +st.closest('.wl-step').dataset.min; S[k] = Math.min(20, Math.max(min, S[k] + +st.dataset.d)); paintParty(); paintFlow(); if (k === 'kids' && S.kids) setTimeout(() => $('#wl_ages').focus({ preventScroll: true }), 450); return schedule(); }
+    if (st) { const k = st.closest('.wl-step').dataset.step, min = +st.closest('.wl-step').dataset.min; S[k] = Math.min(20, Math.max(min, S[k] + +st.dataset.d)); paintParty(); paintFlow(); if (k === 'kids' && S.kids) setTimeout(() => $('#wl_ages').focus({ preventScroll: true }), 450); trig(`Party changed: ${partyText()}`); return schedule(); }
     const fl = t.closest('[data-filter]'); if (fl) { S.filter = fl.dataset.filter; paintQs(); return; }
-    const ax = t.closest('[data-ax]'); if (ax) { S.anchors.splice(+ax.dataset.ax, 1); paintAnchors(); paintFlow(); return schedule(); }
+    const ax = t.closest('[data-ax]'); if (ax) { const gone = S.anchors.splice(+ax.dataset.ax, 1)[0]; paintAnchors(); paintFlow(); trig(`Anchor removed: ${gone.activity}`); return schedule(); }
     const dur = t.closest('[data-dur]'); if (dur) { pickDuration(+dur.dataset.dur); dayOptions(); paintFlow(); return schedule(); }
     const tag = t.closest('[data-tag]'); if (tag) { const k = tag.dataset.tag; S.tags.has(k) ? S.tags.delete(k) : S.tags.add(k); tag.setAttribute('aria-pressed', String(S.tags.has(k))); paintFlow(); return schedule(); }
     if (t.closest('#wl-oneoff')) {
@@ -400,12 +403,12 @@ export function openWellness(presetClient) {
   });
   f.addEventListener('input', (e) => {
     const id = e.target.id;
-    if (id === 'wl_goal' || id === 'wl_dest' || id === 'wl_notes' || id === 'wl_ages') { paintFlow(); schedule(); }
+    if (id === 'wl_goal' || id === 'wl_dest' || id === 'wl_notes' || id === 'wl_ages') { paintFlow(); trig(id === 'wl_notes' ? 'New spontaneous call notes' : id === 'wl_ages' ? 'Kids ages changed' : id === 'wl_goal' ? 'Goal changed' : 'Destination changed'); schedule(); }
   });
   f.addEventListener('change', (e) => {
     const id = e.target.id;
     if (id === 'wl_client') { if (e.target.value) { $('#wl_guest').hidden = true; $('#wl-oneoff').setAttribute('aria-expanded', 'false'); } paintDossier(); hydrateAllergies(); schedule(); }
-    else if (id === 'wl_from' || id === 'wl_to') { datesChanged(); dayOptions(); paintFlow(); schedule(); }
+    else if (id === 'wl_from' || id === 'wl_to') { datesChanged(); dayOptions(); paintFlow(); trig(`Trip dates changed to ${arrival()} - ${departure()}`); schedule(); }
     else if (id === 'f-wl_arr_time' || id === 'f-wl_dep_time' || id === 'wl_early') { paintFlow(); schedule(); }
   });
   f.addEventListener('keydown', (e) => {
