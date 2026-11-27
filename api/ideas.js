@@ -4,6 +4,7 @@ import { owner, rest, isId, askJSON, norm } from './_owner.js';
 import { stopList } from '../js/stoplist.js';
 import discovery from './_discovery.js';
 import gamma from './_gamma.js';
+import curate from './_curate.js';
 
 // Категории идеи (для гостя и фильтров) и категории запросов приложения (для заготовки запроса)
 const IDEA_CATS = ['Dining', 'Gifts & Events', 'Transport', 'Spa & Wellness', 'Activities', 'Trip Touch'];
@@ -37,6 +38,7 @@ export default async function handler(req, res) {
   const kind = req.query?.kind || req.body?.kind || (/discovery-questions/.test(req.url || '') ? 'discovery' : /gamma-prompt/.test(req.url || '') ? 'gamma' : '');
   if (kind === 'discovery') return discovery(req, res);
   if (kind === 'gamma') return gamma(req, res);
+  if (kind === 'curate') return curate(req, res);
   const auth = await owner(req, res); if (!auth) return;
   const id = String(req.body?.client_id || '');
   if (!isId(id)) return res.status(400).json({ error: 'bad_id' });
