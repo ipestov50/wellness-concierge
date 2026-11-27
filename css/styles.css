@@ -3842,3 +3842,10 @@ textarea.autogrow { resize: none; min-height: 64px; overflow-y: auto; box-sizing
 @media (max-width: 400px) { .wl-rtabs button span { font-size: 11.5px; } }
 @media (prefers-reduced-motion: reduce) { .wl-rind, .wl-rpane:not([hidden]) { transition: none; animation: none; } }
 @media (max-width: 767px) { .wl-build { flex-wrap: nowrap; gap: 6px; } .wl-build .wl-go { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 12.5px; white-space: nowrap; } }
+
+/* Wellness: read-back notes under Live Trip Flow items */
+.wl-fl { flex: 1; min-width: 0; display: block; }
+.wl-flt { display: block; overflow-wrap: anywhere; }
+.wl-flow-note { margin-top: 2px; font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--tp-mut); overflow-wrap: anywhere; }
+.wl-day li.k-anchor .wl-flow-note, .wl-day li.k-bridge .wl-flow-note { color: var(--tp-mut); }
+.wl-day li.k-inc { color: var(--tp-ink); } .wl-day li.k-inc .tnum { color: var(--tp-gold); }

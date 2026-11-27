@@ -44,7 +44,7 @@ function zonedIso(date, time, tz) {
     return new Date(guess - (asUtc - guess)).toISOString();
   } catch { return new Date(guess).toISOString(); }
 }
-const guessCategory = (t) => (/massage|spa|sauna|hammam|thermal|facial|wellness|treatment|yoga|ritual/i.test(t) ? 'Spa & Wellness' : /dinner|lunch|breakfast|brunch|restaurant|tasting|tea|coffee/i.test(t) ? 'Dining' : /pick ?up|transfer|airport|chauffeur|driver|drive|arriv|depart/i.test(t) ? 'Transport' : /check.?in|hotel|room/i.test(t) ? 'Accommodation' : /doctor|clinic|physio|gym|fitness|trainer/i.test(t) ? 'Health & Fitness' : 'Other');
+const guessCategory = (t) => (/massage|spa|sauna|hammam|thermal|facial|wellness|treatment|yoga|ritual|массаж|спа|сауна|хаммам|процедур/i.test(t) ? 'Spa & Wellness' : /dinner|lunch|breakfast|brunch|restaurant|tasting|tea|coffee|ужин|обед|завтрак|ресторан/i.test(t) ? 'Dining' : /pick ?up|transfer|airport|chauffeur|driver|drive|arriv|depart|трансфер|аэропорт|водител|встреч/i.test(t) ? 'Transport' : /check.?in|hotel|room/i.test(t) ? 'Accommodation' : /doctor|clinic|physio|gym|fitness|trainer/i.test(t) ? 'Health & Fitness' : 'Other');
 // the guest portal is in English, so the trip's place name comes from an English geocode
 async function lookupEn(name) {
   if (!name?.trim()) return null;
@@ -225,19 +225,80 @@ export function openWellness(presetClient) {
   };
 
   // ---------- live trip flow (instant, no network) ----------
+  // ---------- one plan for the flow, the Gamma proposal and the Live Link ----------
+  const hasCyr = (t) => /[А-Яа-яЁё]/.test(String(t || ''));
+  const fallbackTitle = (cat) => ({ 'Spa & Wellness': 'Spa treatment', Dining: 'Dining', Transport: 'Private transfer', Accommodation: 'Hotel service', 'Health & Fitness': 'Wellness session' })[cat] || 'Planned activity';
+  const roleOf = (cat) => (cat === 'Spa & Wellness' || cat === 'Health & Fitness' ? 'spa' : cat === 'Dining' ? 'dining' : cat === 'Transport' ? 'transfer' : cat === 'Accommodation' ? 'checkin' : 'activity');
+  const placeIncluded = (items) => {
+    const taken = items.map((v) => ({ d: v.date, m: mins(v.time) })), out = [];
+    const free = (d, m) => taken.every((x) => x.d !== d || Math.abs(x.m - m) >= 90);
+    const ds = tripDays().map((x) => x.date), first = ds[0], lastD = ds[ds.length - 1], arrM = arrT() ? mins(arrT()) : null, depM = depT() ? mins(depT()) : null;
+    if (!first) return out;
+    const slot = (kind) => {
+      if (kind === 'bridge' || kind === 'touch') {
+        let m = kind === 'bridge' ? Math.min(Math.max((arrM ?? 540) + 30, 540), 810) : (arrM !== null && (arrM >= 900 || early()) ? arrM + 45 : 900);
+        for (let k = 0; k < 5 && !free(first, m); k++) m += 60;
+        return [first, m];
+      }
+      const slots = [990, 1170, 660, 840];
+      for (const d of ds.slice(first === lastD ? 0 : 1).concat(first === lastD ? [] : [first])) for (const m of slots) {
+        if (d === first && arrM !== null && m < arrM + 60) continue;
+        if (d === lastD && depM !== null && m > depM - 240) continue;
+        if (free(d, m)) return [d, m];
+      }
+      return [first, 1020];
+    };
+    for (const x of S.cur.items.filter((y) => S.cur.included.has(y.id))) {
+      if (hasCyr(`${x.title}${x.why}${x.venueName}`)) continue;
+      const [d, m] = slot(x.kind); taken.push({ d, m }); out.push({ x, date: d, time: fmtT(m) });
+    }
+    return out;
+  };
+  // anchors + stated bookings + ✓ Included suggestions, each with a date, time and role (useOut adds what the Gamma call extracted)
+  const buildPlan = (useOut) => {
+    const items = new Map();
+    if (useOut && S.out) for (const i of (S.out.confirmedBookings || [])) items.set(`${i.date}|${i.time}|${i.title.toLowerCase()}`, { kind: 'booked', date: i.date, time: i.time, title: i.title, category: i.category, venueName: i.venueName, address: i.address, guestNotes: i.guestNotes, role: roleOf(i.category) });
+    for (const a of S.anchors) {
+      for (const [k, v] of items) if (v.date === a.date && v.time === a.time) items.delete(k);
+      const en = useOut && S.out ? (S.out.anchorsEnglish || []).find((x) => x.date === a.date && x.time === a.time)?.en : '', cat = guessCategory(`${en || ''} ${a.activity}`);
+      items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { kind: 'anchor', date: a.date, time: a.time, title: en || (hasCyr(a.activity) && useOut && S.out ? fallbackTitle(cat) : a.activity), category: cat, venueName: '', address: '', guestNotes: '', role: roleOf(cat) });
+    }
+    for (const p of placeIncluded([...items.values()])) {
+      const x = p.x, cat = x.kind === 'touch' ? 'Other' : guessCategory(`${x.title} ${x.venueName}`);
+      items.set(`inc:${x.id}`, { kind: 'included', id: x.id, date: p.date, time: p.time, title: x.title, category: cat === 'Other' && x.kind !== 'touch' ? 'Activities' : cat, venueName: x.venueName || '', address: x.address || '', guestNotes: x.why, why: x.why, suggestionKind: x.kind, role: x.kind === 'bridge' ? 'bridge' : x.kind === 'touch' ? 'checkin' : roleOf(cat) });
+    }
+    return items;
+  };
+  // read-back note under a scheduled item: what the guest said, matched to the item's role (English only: the guest sees it on the portal)
+  const noteFor = (role) => {
+    const A = (stage, tiers) => entries(stage).filter((en) => en.done && !hasCyr(en.answer) && (!tiers || tiers.includes(en.tier))).map((en) => String(en.answer).trim());
+    const generic = (arr) => arr.filter((x) => !/^(no restrictions|see stop-list|not needed|no preference|no transfer needed)$/i.test(x));
+    const stop = allergies().filter((x) => !hasCyr(x)), sg = S.signals || {};
+    const parts = [];
+    if (role === 'arrival') parts.push(...A('bridge', [1]), ...generic(A('transfers', [2])), S.kids || S.adults > 1 ? `Party: ${partyText()}` : '');
+    else if (role === 'bridge') parts.push(...A('bridge', [2]), early() ? 'Early check-in confirmed' : '');
+    else if (role === 'checkin') parts.push(early() ? 'Early check-in confirmed' : 'Standard check-in 15:00–16:00', ...A('bridge', [3, 0]));
+    else if (role === 'dining') parts.push(...A('dining', [1]), ...generic(A('dining', [2])), ...A('dining', [3, 0]), stop.length ? `Stop-list: ${stop.join(', ')}` : '');
+    else if (role === 'spa') parts.push(...A('wellness', [1]), ...(S.kids > 0 ? A('wellness', [2]) : generic(A('wellness', [2]))), ...A('wellness', [3, 0]));
+    else if (role === 'activity') parts.push(...A('pace'), sg.repeatVisit ? 'Repeat visitor: insider favourites' : '', sg.weather && WEATHER[sg.weather] ? WEATHER[sg.weather][1] : '');
+    else if (role === 'depart') parts.push(...generic(A('transfers', [1, 3, 0])));
+    else if (role === 'transfer') parts.push(...A('bridge', [1]), ...generic(A('transfers', [2])));
+    return parts.map((x) => String(x || '').trim()).filter(Boolean).join(' · ').slice(0, 170);
+  };
+  const buildTripFlowNotes = () => { const m = {}; for (const r of ['arrival', 'bridge', 'checkin', 'dining', 'spa', 'activity', 'depart', 'transfer']) m[r] = noteFor(r); return m; };
+
   const flowItems = () => {
-    const ds = tripDays(), rows = [];
-    const anchorsOf = (date) => S.anchors.filter((a) => a.date === date).map((a) => [a.time, a.activity, 'anchor']);
+    const ds = tripDays(), rows = [], plan = [...buildPlan(true).values()];
     ds.forEach((d, i) => {
       const first = i === 0, last = i === ds.length - 1 && ds.length > 1, it = [];
       const suffix = first && last ? '' : first ? (bridge() ? ' · Arrival & Bridge' : ' · Arrival') : last ? ' · Departure' : '';
       if (first) {
-        if (arrT()) it.push([arrT(), 'Arrival', 'fixed']);
-        if (bridge()) it.push([arrT(), 'Bridge → 15:00 check-in', 'bridge']);
-        else if (arrT()) it.push([early() ? arrT() : fmtT(Math.max(mins(arrT()), 15 * 60)), early() ? 'Early check-in' : 'Check-in', 'fixed']);
+        if (arrT()) it.push([arrT(), 'Arrival', 'fixed', 'arrival']);
+        if (bridge()) it.push([arrT(), 'Bridge → 15:00 check-in', 'bridge', 'bridge']);
+        else if (arrT()) it.push([early() ? arrT() : fmtT(Math.max(mins(arrT()), 15 * 60)), early() ? 'Early check-in' : 'Check-in', 'fixed', 'checkin']);
       }
-      it.push(...anchorsOf(d.date));
-      if (last && depT()) { it.push([fmtT(mins(depT()) - 180), 'Airport transfer', 'fixed']); it.push([depT(), 'Departure', 'fixed']); }
+      for (const p of plan.filter((x) => x.date === d.date)) it.push([p.time, p.title + (p.venueName ? ` · ${p.venueName}` : ''), p.kind === 'included' ? 'inc' : 'anchor', p.role]);
+      if (last && depT()) { it.push([fmtT(mins(depT()) - 180), 'Airport transfer', 'fixed', 'transfer']); it.push([depT(), 'Departure', 'fixed', 'depart']); }
       it.sort((a, c) => String(a[0]).localeCompare(String(c[0])));
       rows.push({ title: `${dateLabel(d.date)}${suffix}`, it });
     });
@@ -248,7 +309,8 @@ export function openWellness(presetClient) {
     $('#wl-range').textContent = arrival() && departure() ? `${longDate(arrival())} → ${longDate(departure())}` : '';
     const goal = [val('wl_goal'), ...S.tags].filter(Boolean).join(' · '), notes = val('wl_notes'), caps = answered().length;
     const extra = [`<li class="wl-fx"><b>Party</b><span>${esc(partyText())}</span></li>`, goal && `<li class="wl-fx"><b>Goal</b><span>${esc(goal.slice(0, 120))}</span></li>`, notes && `<li class="wl-fx"><b>Notes</b><span>${esc(notes.slice(0, 120))}${notes.length > 120 ? '…' : ''}</span></li>`, caps && `<li class="wl-fx"><b>Captured</b><span class="tnum">${caps} preference${caps === 1 ? '' : 's'}</span></li>`].filter(Boolean).join('');
-    box.innerHTML = rows.length ? `<ol class="wl-days">${rows.map((r) => `<li class="wl-day"><b class="wl-dt">${esc(r.title)}</b>${r.it.length ? `<ul>${r.it.map(([t, l, k]) => `<li class="k-${k}"><span class="tnum">${esc(t)}</span>${esc(l)}</li>`).join('')}</ul>` : ''}</li>`).join('')}</ol><ul class="wl-fxs">${extra}</ul>` : `<p class="wl-empty">${esc(T.flowEmpty)}</p><ul class="wl-fxs">${extra}</ul>`;
+    const notes2 = buildTripFlowNotes();
+    box.innerHTML = rows.length ? `<ol class="wl-days">${rows.map((r) => `<li class="wl-day"><b class="wl-dt">${esc(r.title)}</b>${r.it.length ? `<ul>${r.it.map(([t, l, k, role]) => `<li class="k-${k}"><span class="tnum">${esc(t)}</span><span class="wl-fl"><span class="wl-flt">${esc(l)}</span>${notes2[role] ? `<div class="wl-flow-note">↳ ${esc(notes2[role])}</div>` : ''}</span></li>`).join('')}</ul>` : ''}</li>`).join('')}</ol><ul class="wl-fxs">${extra}</ul>` : `<p class="wl-empty">${esc(T.flowEmpty)}</p><ul class="wl-fxs">${extra}</ul>`;
     $('#wl-bridge').hidden = !bridge();
   };
 
@@ -440,19 +502,20 @@ export function openWellness(presetClient) {
   // ---------- Gamma prompt / guest email ----------
   const emailText = () => {
     const r = S.out; if (!r) return '';
-    let body = r.emailBody;
-    if (S.liveUrl) { const line = `Your live itinerary: ${S.liveUrl}`; body = /Warm regards,?/i.test(body) ? body.replace(/(\n*)(Warm regards,?)/i, `\n\n${line}\n\n$2`) : `${body}\n\n${line}`; }
+    const link = S.liveUrl || '[your live itinerary link]';
+    let body = String(r.emailBody || '').replace(/\{\{\s*LIVE_LINK\s*\}\}/g, link);
+    if (!S.liveUrl && !/live itinerary link/i.test(body)) body = body.replace(/\n*(Warm regards,?)/i, '\n\n$1');
     return `Subject: ${r.emailSubject}\n\n${body}`;
   };
   const buildOut = async (focus) => {
     if (!val('wl_dest')) { toast('Add a destination first'); $('#wl_dest').focus(); return false; }
     if (S.busy) return false;
-    const approved = S.cur.items.filter((x) => S.cur.included.has(x.id)).map(({ kind, title, venueName, address, why }) => ({ kind, title, venueName, address, why }));
+    const approved = [...buildPlan(false).values()].filter((x) => x.kind === 'included').map((x) => ({ kind: x.suggestionKind, title: x.title, venueName: x.venueName, address: x.address, why: x.why, date: x.date, time: x.time }));
     const key = JSON.stringify([payload(), answered().map((q) => q.answer), S.signals, approved]);
     if (S.out && S.outKey === key) { paintOut(focus); return true; }
     S.busy = true; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = true));
     const labels = ['gamma', 'mail', 'live'].map((k) => { const b = $(`#wl-go-${k}`); const l = b.textContent; if (k === focus || (k === 'live' && focus === 'live')) b.textContent = 'Jarvis is writing…'; return l; });
-    try { S.out = await api('gamma-prompt', { kind: 'gamma', ...payload(), signals: S.signals, approvedSuggestions: approved, answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })) }, { signal: m.signal }); S.outKey = key; paintOut(focus); return true; }
+    try { S.out = await api('gamma-prompt', { kind: 'gamma', ...payload(), signals: S.signals, approvedSuggestions: approved, answers: answered().map((q) => ({ category: q.category, question: q.text, answer: q.answer })) }, { signal: m.signal }); S.outKey = key; paintFlow(); paintOut(focus); return true; }
     catch (e) { if (e.name !== 'AbortError') toast(e.message === 'rate_limited' ? 'Gemini limit — try again shortly' : 'Could not build it — please retry', 'err'); return false; }
     finally { S.busy = false; f.querySelectorAll('.wl-go').forEach((b) => (b.disabled = false)); ['gamma', 'mail', 'live'].forEach((k, i) => { $(`#wl-go-${k}`).textContent = labels[i]; }); }
   };
@@ -514,44 +577,14 @@ export function openWellness(presetClient) {
       let token = client?.portal_token;
       if (!token) { const { data, error } = await sb.rpc('client_portal_share', { p_client: cid, p_mode: 'on' }); if (error) throw error; token = data; patchLocal('clients', cid, { portal_token: token || null }); }
       if (!token) throw new Error('no portal link');
-      // 4) requests. ONLY confirmed facts reach the Board, Calendar and portal: fixed anchors, bookings stated in the notes/answers and the suggestions the concierge marked ✓ Included. Everything is stored in English.
-      const status = confirmedKey(), items = new Map();
-      const noCyr = (t) => !/[А-Яа-яЁё]/.test(String(t || ''));
-      const fallbackTitle = (cat) => ({ 'Spa & Wellness': 'Spa treatment', Dining: 'Dining', Transport: 'Private transfer', Accommodation: 'Hotel service', 'Health & Fitness': 'Wellness session' })[cat] || 'Planned activity';
-      for (const i of (S.out.confirmedBookings || [])) items.set(`${i.date}|${i.time}|${i.title.toLowerCase()}`, { date: i.date, time: i.time, title: i.title, category: i.category, venueName: i.venueName, address: i.address, guestNotes: i.guestNotes });
-      for (const a of S.anchors) { // anchors are authoritative: replace a booking at the same slot
-        for (const [k, v] of items) if (v.date === a.date && v.time === a.time) items.delete(k);
-        const en = (S.out.anchorsEnglish || []).find((x) => x.date === a.date && x.time === a.time)?.en, cat = guessCategory(`${en || ''} ${a.activity}`);
-        items.set(`${a.date}|${a.time}|${a.activity.toLowerCase()}`, { date: a.date, time: a.time, title: en || (noCyr(a.activity) ? a.activity : fallbackTitle(cat)), category: cat, venueName: '', address: '', guestNotes: '' });
-      }
-      // ✓ Included suggestions get a logical date and slot that never collides with anchors or each other
-      const taken = [...items.values()].map((v) => ({ d: v.date, m: mins(v.time) }));
-      const free = (d, m) => taken.every((x) => x.d !== d || Math.abs(x.m - m) >= 90);
-      const ds = tripDays().map((x) => x.date), first = ds[0], lastD = ds[ds.length - 1], arrM = arrT() ? mins(arrT()) : null, depM = depT() ? mins(depT()) : null;
-      const place1 = (kind) => {
-        if (kind === 'bridge' || kind === 'touch') {
-          let m = kind === 'bridge' ? Math.min(Math.max((arrM ?? 540) + 30, 540), 810) : (arrM !== null && (arrM >= 900 || early()) ? arrM + 45 : 900);
-          for (let k = 0; k < 5 && !free(first, m); k++) m += 60;
-          return [first, m];
-        }
-        const slots = [990, 1170, 660, 840];
-        for (const d of ds.slice(first === lastD ? 0 : 1).concat(first === lastD ? [] : [first])) for (const m of slots) {
-          if (d === first && arrM !== null && m < arrM + 60) continue;
-          if (d === lastD && depM !== null && m > depM - 240) continue;
-          if (free(d, m)) return [d, m];
-        }
-        return [first, 1020];
-      };
-      for (const x of S.cur.items.filter((y) => S.cur.included.has(y.id))) {
-        if (!noCyr(`${x.title}${x.why}${x.venueName}`)) continue;
-        const [d, m] = place1(x.kind); taken.push({ d, m });
-        const time = fmtT(m), cat = x.kind === 'touch' ? 'Other' : guessCategory(`${x.title} ${x.venueName}`);
-        items.set(`inc:${x.id}`, { date: d, time, title: x.title, category: cat === 'Other' && x.kind !== 'touch' ? 'Activities' : cat, venueName: x.venueName || '', address: x.address || '', guestNotes: x.why });
-      }
+      // 4) requests. ONLY confirmed facts reach the Board, Calendar and portal: fixed anchors, bookings stated in the notes/answers and ✓ Included suggestions. Everything is stored in English,
+      // and every request carries the same read-back note shown under it in Live Trip Flow.
+      const status = confirmedKey(), items = buildPlan(true), flowNotes = buildTripFlowNotes();
       let n = 0;
       for (const [k, it] of items) {
+        const guestNote = [it.guestNotes, flowNotes[it.role]].filter(Boolean).join(' ').slice(0, 580) || null;
         const data = { client_id: cid, trip_id: S.ids.trip, summary: it.title, category: it.category || 'Other', status, urgency: 'normal', deadline: zonedIso(it.date, it.time, tz), guest_visible: true,
-          venue: it.venueName ? { name: it.venueName, address: it.address || '' } : null, guest_note: it.guestNotes || null, original_message: 'Jarvis: Wellness itinerary' };
+          venue: it.venueName ? { name: it.venueName, address: it.address || '' } : null, guest_note: guestNote, original_message: 'Jarvis: Wellness itinerary' };
         const row = await save('requests', S.ids.items.get(k) || null, data); S.ids.items.set(k, row.id); n++;
       }
       // 5) link: clipboard + portal pill + into the guest email
@@ -606,7 +639,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-skip-stage]')) return closeStage(S.active, 'skipped');
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
-    const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); return; }
+    const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); paintFlow(); return; }
     const cp = t.closest('[data-copy]');
     if (cp && S.out) {
       const text = cp.dataset.copy === 'prompt' ? S.out.gammaPrompt : emailText(), label = cp.textContent;
