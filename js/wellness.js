@@ -15,6 +15,8 @@ const TAGS = ['Deep Rest', 'Slow Living', 'Detox', 'Active Recovery', 'Culinary'
 // city rhythm first, then the spa (never clashing with early-arrival choices); every stage carries the earlier answers forward
 const STAGES = [{ key: 'bridge', label: 'Arrival & First Hours', short: 'Arrival' }, { key: 'culture', label: 'City & Cultural Discovery', short: 'City' }, { key: 'wellness', label: 'Body, Spa & Recovery', short: 'Spa' }, { key: 'dining', label: 'Dining & Stop-List', short: 'Dining' }, { key: 'transfers', label: 'Departure & Seamless Exit', short: 'Departure' }];
 const DEBOUNCE = 550;
+// Gamma Generate API is switched off for now: decks built on gamma.app itself look better. Flip to true to bring back ✦ Generate Presentation.
+const GAMMA_API = false;
 const T = {
   title: 'Wellness Itinerary', guest: 'Guest', oneoff: '+ New Guest', oneoffPh: 'Guest name', none: 'Select a guest', dest: 'Destination', destPh: 'City, region or country',
   dates: 'Trip Dates', arr: 'Arrival', dep: 'Departure', guideMsg: 'Enter Destination, Trip Dates & Guest’s Goal to unlock tailored Jarvis questions. Flight times can follow later in the call.', dur: 'Duration', adults: 'Adults', kids: 'Kids', ages: 'Kids’ Ages', agesPh: 'e.g. 4 & 9 y.o.', arrT: 'Arrival Time', depT: 'Departure Time', early: 'Early Check-In Confirmed', earlyNote: 'Standard hotel check-in is 15:00–16:00.',
@@ -568,8 +570,8 @@ export function openWellness(presetClient) {
     o.innerHTML = `<div class="wl-oh"><h3>${T.outTitle}</h3>${(r.warnings || []).length ? `<p class="wl-warn">⚠ Please review manually: ${esc(r.warnings.join('; '))}</p>` : ''}</div>
       <div class="wl-vt" role="tablist" aria-label="Output"><button type="button" role="tab" data-otab="prompt" aria-selected="${!mail}">Gamma Master Prompt</button><button type="button" role="tab" data-otab="mail" aria-selected="${mail}">Guest Email</button></div>
       <pre class="wl-pre" id="wl-pre" tabindex="0"></pre>
-      <div class="wl-oa">${mail ? `<button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button>` : `<button type="button" class="wl-pill solid" data-deck${S.deck.status === 'pending' ? ' disabled' : ''}>${S.deck.status === 'pending' ? 'Gamma is designing…' : S.deck.url && S.deck.key === r.gammaPrompt ? '↻ Regenerate Presentation' : '✦ Generate Presentation'}</button><button type="button" class="wl-pill" data-copy="prompt">${T.copyP}</button>`}</div>
-      ${mail ? '' : `<div class="wl-deck" id="wl-deck" role="status" aria-live="polite">${deckHtml()}</div>`}`;
+      <div class="wl-oa">${mail ? `<button type="button" class="wl-pill solid" data-copy="mail">${T.copyM}</button>` : !GAMMA_API ? `<button type="button" class="wl-pill solid" data-copy="prompt">${T.copyP}</button><a class="wl-pill" href="https://gamma.app" target="_blank" rel="noopener noreferrer">${T.open}</a>` : `<button type="button" class="wl-pill solid" data-deck${S.deck.status === 'pending' ? ' disabled' : ''}>${S.deck.status === 'pending' ? 'Gamma is designing…' : S.deck.url && S.deck.key === r.gammaPrompt ? '↻ Regenerate Presentation' : '✦ Generate Presentation'}</button><button type="button" class="wl-pill" data-copy="prompt">${T.copyP}</button>`}</div>
+      ${mail || !GAMMA_API ? '' : `<div class="wl-deck" id="wl-deck" role="status" aria-live="polite">${deckHtml()}</div>`}`;
     o.querySelector('#wl-pre').textContent = mail ? emailText() : r.gammaPrompt;
     if (focus && focus !== 'live') { showTab('cur'); o.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   };
@@ -712,7 +714,7 @@ export function openWellness(presetClient) {
     if (t.closest('[data-skip-stage]')) return closeStage(S.active, 'skipped');
     if (t.closest('[data-next-stage]')) { const st = S.steps[S.active]; return closeStage(S.active, entries(S.active).some((en) => en.done) ? 'done' : 'skipped'); }
     if (t.closest('[data-curate]')) return curate();
-    if (t.closest('[data-deck]')) return genDeck();
+    if (GAMMA_API && t.closest('[data-deck]')) return genDeck();
     const cf = t.closest('[data-cf]'); if (cf) { S.cur.filter = cf.dataset.cf; return paintCur(); }
     const inc = t.closest('[data-inc]'); if (inc) { const id = inc.dataset.inc; S.cur.included.has(id) ? S.cur.included.delete(id) : S.cur.included.add(id); paintCur(); paintTabs(); paintFlow(); return; }
     const cp = t.closest('[data-copy]');
